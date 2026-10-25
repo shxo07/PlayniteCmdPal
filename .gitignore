@@ -1,0 +1,31 @@
+# Build outputs
+[Bb]in/
+[Oo]bj/
+[Dd]ebug/
+[Rr]elease/
+artifacts/
+
+# Visual Studio
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Rider / VS Code local state
+.idea/
+.vscode/
+
+# NuGet
+*.nupkg
+.nuget/
+
+# Local logs and environment
+*.log
+.env
+.env.*
+!.env.example
+
+# Local Playnite data and test dumps
+playnite-data/
+local-library.json
