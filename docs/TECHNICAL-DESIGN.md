@@ -20,14 +20,14 @@ Observed from checked-in project files:
 - `Microsoft.Windows.SDK.BuildTools.MSIX` 1.7.20250829.1.
 - Additional versions are pinned in `Directory.Packages.props`.
 
-Sources: [project](../testExtension/testExtension.csproj), [package versions](../Directory.Packages.props), [shared build properties](../Directory.Build.props). These values describe the checked-in template; they do not prove that a clean build or local deployment succeeds. WERD-57 owns that validation.
+Sources: [project](../testExtension/testExtension.csproj), [package versions](../Directory.Packages.props), [shared build properties](../Directory.Build.props). These values describe the checked-in template; they do not prove that a clean build or local deployment succeeds.
 
 ## Stack and framework
 
 - C# extension using the current official Microsoft Command Palette extension template.
 - `Microsoft.CommandPalette.Extensions` is referenced directly. Use the exact generated project pattern and consult the current Microsoft guide before implementing providers, pages, result actions, or navigation.
 - Keep the generated COM server/hosting, manifest, and MSIX packaging structure unless the official docs show a required change.
-- Add a Windows GitHub Actions build workflow in WERD-64 using the actual SDK/framework requirements established by WERD-57.
+- Keep the Windows GitHub Actions build workflow aligned with the actual SDK/framework requirements established by local validation.
 - Do not guess or casually upgrade template dependencies during MVP implementation.
 
 References:
@@ -41,7 +41,7 @@ References:
 1. **CmdPal presentation:** current-template command provider, search/results, actions, and clear unavailable/error states.
 2. **Core:** game model, query normalization, deterministic ranking, and interfaces. No CmdPal or Playnite SDK types.
 3. **Catalog adapter:** maps the selected read-only catalog transport into the core model.
-4. **Playnite bridge/transport:** decided by WERD-56. Use a documented external catalog contract if one exists; otherwise evaluate a small companion Playnite plugin exporting a normalized JSON snapshot.
+4. **Playnite bridge/transport:** use a documented external catalog contract if one exists; otherwise evaluate a small companion Playnite plugin exporting a normalized JSON snapshot.
 
 Playnite remains the source of truth for game identity, library metadata, and launch configuration. The extension must not independently recreate storefront launch logic.
 
@@ -67,7 +67,7 @@ Playnite's plugin SDK exposes `PlayniteApi.Database.Games` to an in-process plug
 - https://api.playnite.link/docs/api/Playnite.SDK.IGameDatabase.html
 - https://api.playnite.link/docs/tutorials/extensions/library.html
 
-WERD-56 owns the bounded transport decision. If no supported external catalog API is documented, evaluate a companion plugin that writes a normalized, read-only JSON snapshot atomically. Define stable IDs, schema version, snapshot path, refresh behavior, stale-data handling, and malformed/missing-file behavior. Do not add named pipes or another IPC protocol unless the snapshot design proves insufficient.
+The catalog transport decision remains open. If no supported external catalog API is documented, evaluate a companion plugin that writes a normalized, read-only JSON snapshot atomically. Define stable IDs, schema version, snapshot path, refresh behavior, stale-data handling, and malformed/missing-file behavior. Do not add named pipes or another IPC protocol unless the snapshot design proves insufficient.
 
 Rejected for production:
 - Direct database writes.
@@ -84,7 +84,7 @@ Keep the generated project intact while the core boundary is introduced. Propose
 - Unit/contract tests independent of Playnite.
 - Manual local smoke tests for the actual Playnite launch.
 
-Do not create a companion bridge project until WERD-56 establishes that it is needed.
+Do not create a companion bridge project until evidence establishes that it is needed.
 
 ## Security and reliability
 
@@ -110,7 +110,7 @@ See [DEVELOPER-SETUP.md](DEVELOPER-SETUP.md). Key loop:
 2. Run `dotnet restore .\testExtension.sln` and `dotnet build .\testExtension.sln -c Debug`.
 3. In Visual Studio use **Build > Deploy** to register the generated MSIX package.
 4. Reload Command Palette extensions and debug using the generated launch settings.
-5. Record the successful exact steps in WERD-57.
+5. Record the successful exact steps in this guide.
 
 ## Open decisions
 
