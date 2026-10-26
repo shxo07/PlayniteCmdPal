@@ -29,9 +29,9 @@ Validate demand through a working demo and community feedback; do not equate gal
 
 ## Remaining implementation checks
 
-- Build and deploy the checked-in template and record actual installed SDK/Visual Studio requirements (WERD-57).
+- Build and deploy the checked-in template and record actual installed SDK/Visual Studio requirements.
 - Test the documented Playnite launch URI with a real game ID.
-- Choose and implement the catalog transport (WERD-56).
+- Choose and implement the catalog transport.
 - Confirm provider refresh behavior from the current generated code and current Microsoft docs.
 - Check current packaging/gallery requirements before release.
 
