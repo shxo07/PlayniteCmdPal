@@ -3,6 +3,3 @@ contact_links:
   - name: Security vulnerability reporting
     url: https://github.com/werdscopez7347/PlayniteCmdPal/security
     about: Do not report exploitable vulnerabilities in public issues. Follow SECURITY.md and use private reporting where available.
-  - name: Project roadmap and feature planning
-    url: https://linear.app/werdscopez7347/project/playnite-for-command-palette-9103e0746de7
-    about: Check Linear for planned work, dependencies, and project decisions.
