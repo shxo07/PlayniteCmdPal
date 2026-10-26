@@ -1,75 +1,121 @@
 # Technical Design
 
-Status: Proposed; catalog transport remains a decision gate. Last reviewed: 2026-10-25.
+**Status:** Implementation plan; generated template committed, build/deploy and Playnite integration still to be verified.  
+**Last reviewed:** 2026-10-26.
 
-## Stack
-- C#.
-- Target framework and .NET SDK: use the current official Command Palette generated template and verify against installed stable PowerToys; do not guess versions.
-- Microsoft.CommandPalette.Extensions and Microsoft.CommandPalette.Extensions.Toolkit.
-- Visual Studio with workloads/components required by the generated template.
-- Unit tests: use the template/repository convention or choose xUnit after scaffolding.
-- GitHub Actions Windows runner for build/test.
-- Later package via WinGet or Microsoft Store and submit to CmdPal gallery.
+## Current generated-template baseline
+
+The current repository contains `testExtension.sln` and `testExtension/testExtension.csproj`. Do not regenerate the template.
+
+Observed from checked-in project files:
+- Target framework: `net10.0-windows10.0.26100.0`.
+- Minimum/supported Windows platform: `10.0.19041.0`.
+- Windows SDK package property: `10.0.26100.68-preview`.
+- Runtime identifiers: `win-x64;win-arm64`.
+- Build platforms: `x64;ARM64`.
+- Central package management is enabled.
+- `Microsoft.CommandPalette.Extensions` 0.9.260303001.
+- `Microsoft.Windows.CsWinRT` 2.2.0.
+- `Shmuelie.WinRTServer` 2.1.1.
+- `Microsoft.Windows.SDK.BuildTools.MSIX` 1.7.20250829.1.
+- Additional versions are pinned in `Directory.Packages.props`.
+
+Sources: [project](../testExtension/testExtension.csproj), [package versions](../Directory.Packages.props), [shared build properties](../Directory.Build.props). These values describe the checked-in template; they do not prove that a clean build or local deployment succeeds. WERD-57 owns that validation.
+
+## Stack and framework
+
+- C# extension using the current official Microsoft Command Palette extension template.
+- `Microsoft.CommandPalette.Extensions` is referenced directly. Use the exact generated project pattern and consult the current Microsoft guide before implementing providers, pages, result actions, or navigation.
+- Keep the generated COM server/hosting, manifest, and MSIX packaging structure unless the official docs show a required change.
+- Add a Windows GitHub Actions build workflow in WERD-64 using the actual SDK/framework requirements established by WERD-57.
+- Do not guess or casually upgrade template dependencies during MVP implementation.
 
 References:
 - https://learn.microsoft.com/en-us/windows/powertoys/command-palette/creating-an-extension
 - https://learn.microsoft.com/en-us/windows/powertoys/command-palette/extensibility-overview
-- https://learn.microsoft.com/en-us/windows/powertoys/command-palette/extension-development
+- https://learn.microsoft.com/en-us/windows/powertoys/command-palette/extension-gallery
 - https://github.com/microsoft/PowerToys/tree/main/src/modules/cmdpal
 
-## Layers
-1. CmdPal presentation: provider, result list, actions, unavailable state.
-2. Application core: search normalization/ranking, model mapping, cache policy.
-3. Playnite catalog adapter contract.
-4. Transport: documented external catalog API if available; otherwise companion Playnite plugin + local IPC.
+## Architecture and boundaries
 
-Core model: stable ID, display name, optional source, optional install state, optional icon reference. Do not leak CmdPal SDK or Playnite SDK types into the core search layer.
+1. **CmdPal presentation:** current-template command provider, search/results, actions, and clear unavailable/error states.
+2. **Core:** game model, query normalization, deterministic ranking, and interfaces. No CmdPal or Playnite SDK types.
+3. **Catalog adapter:** maps the selected read-only catalog transport into the core model.
+4. **Playnite bridge/transport:** decided by WERD-56. Use a documented external catalog contract if one exists; otherwise evaluate a small companion Playnite plugin exporting a normalized JSON snapshot.
 
-## Launch integration
-Official Playnite docs list --start <gameId> and playnite://playnite/start/<gameId>, with showgame and search URI commands. See https://api.playnite.link/docs/manual/advanced/cmdlineArguments.html. Verify these against the current stable version, including an already-running Playnite instance and portable installs. Use a URI or CLI launch request after validation; do not implement custom launch IPC unless testing proves it necessary.
+Playnite remains the source of truth for game identity, library metadata, and launch configuration. The extension must not independently recreate storefront launch logic.
 
-## Catalog integration decision gate
-Prove whether a supported external contract enumerates the current library. If none exists, prototype a companion Playnite plugin using SDK database access to expose read-only normalized records over a local named pipe with user/session ACLs. Verify plugin lifecycle, refresh/reconnect, Playnite closed/running, portable/custom paths, multiple profiles, and failure behavior.
+## Search and model
 
-Playnite's SDK IPlayniteAPI.Database and StartGame(Guid) are plugin-context APIs; they do not by themselves prove external-process access: https://api.playnite.link/docs/api/Playnite.SDK.IPlayniteAPI.html
+- Preserve Playnite's stable game ID; never use the display title as identity.
+- Match case-insensitively.
+- Deterministic rank order: exact match, prefix match, word-prefix match, substring match; define stable tie-breaks.
+- Handle duplicate display names and empty query/catalog explicitly.
+- Keep search logic independently unit-testable.
 
-Preferred order:
-1. Documented external catalog API if found.
-2. Companion plugin + local IPC for catalog; documented URI/CLI for launch.
-3. Read-only database parsing only for temporary experiments, never production.
-4. UI automation rejected.
+## Playnite launch integration
 
-## Proposed structure
-- src/PlayniteCmdPal.Extension — CmdPal provider, results, actions.
-- src/PlayniteCmdPal.Core — game model, search/ranking, interfaces.
-- src/PlayniteCmdPal.PlayniteBridge — only if spike requires a companion plugin.
-- tests/PlayniteCmdPal.Core.Tests
-- tests/PlayniteCmdPal.Integration.Tests
-- docs/PRD.md, TECHNICAL-DESIGN.md, RESEARCH.md, DECISIONS.md, DEVELOPER-SETUP.md
-- .github/workflows/ci.yml, .editorconfig, .gitignore, README.md
+Playnite documents `--start <gameId>` and `playnite://playnite/start/<gameId>`, as well as `showgame` and `search` URI commands:
+https://api.playnite.link/docs/manual/advanced/cmdlineArguments.html
 
-Do not create the bridge project until the spike proves it is needed.
+Use a documented URI/CLI request after one focused smoke test with a real game ID. The purpose of the test is to validate our chosen invocation and failure handling, not to re-prove that documented features exist. Do not launch the game's executable directly when Playnite should apply its configured launch behavior.
+
+## Catalog integration decision
+
+Playnite's plugin SDK exposes `PlayniteApi.Database.Games` to an in-process plugin. That does not by itself establish a general-purpose external-process catalog API:
+- https://api.playnite.link/docs/api/Playnite.SDK.IPlayniteAPI.html
+- https://api.playnite.link/docs/api/Playnite.SDK.IGameDatabase.html
+- https://api.playnite.link/docs/tutorials/extensions/library.html
+
+WERD-56 owns the bounded transport decision. If no supported external catalog API is documented, evaluate a companion plugin that writes a normalized, read-only JSON snapshot atomically. Define stable IDs, schema version, snapshot path, refresh behavior, stale-data handling, and malformed/missing-file behavior. Do not add named pipes or another IPC protocol unless the snapshot design proves insufficient.
+
+Rejected for production:
+- Direct database writes.
+- UI automation.
+- Direct database parsing as the supported integration contract.
+- Arbitrary shell commands or executable paths derived from untrusted catalog data.
+
+## Proposed logical structure
+
+Keep the generated project intact while the core boundary is introduced. Proposed code organization may be folders/projects in this solution or separate projects only when useful:
+- Extension presentation/provider and result actions.
+- Core game model and search.
+- Catalog adapter and serialization contract.
+- Unit/contract tests independent of Playnite.
+- Manual local smoke tests for the actual Playnite launch.
+
+Do not create a companion bridge project until WERD-56 establishes that it is needed.
 
 ## Security and reliability
-- Never accept arbitrary shell commands over IPC.
-- Validate game IDs against the catalog before launch.
-- If using named pipes, restrict access to current user/session and cap message sizes.
-- No network listener, telemetry, or cloud dependency.
-- Never write to Playnite data.
-- Distinguish request sent, accepted, failed, and unknown launch outcomes.
 
-## Testing
-Unit tests for exact/prefix/word-prefix/substring ranking, tie-breaks, duplicates and empty query. Contract tests for catalog serialization if IPC is used. Integration tests for Playnite absent/stopped, empty library, unavailable game, URI/CLI launch behavior and errors. Benchmark a synthetic 10k-game catalog. CI must not require Playnite for core tests.
+- Treat catalog data as input; validate stable IDs and expected schema before launch.
+- Never accept arbitrary shell commands over IPC.
+- No network listener, telemetry, cloud dependency, or private game-library data in Git.
+- Never write to Playnite's database.
+- Distinguish missing catalog, stale catalog, malformed catalog, no matches, launch requested, and launch failure.
+- Keep disk/network/process operations off the CmdPal UI thread.
+
+## Testing and CI
+
+- Core tests: ranking order, case normalization, duplicates, tie-breaks, empty query/catalog.
+- Adapter/contract tests: valid, missing, malformed, stale, and empty catalog data.
+- Manual integration: real Playnite library and launch-by-ID behavior.
+- Normal CI must not require Playnite or personal library data.
+- Windows CI builds the generated solution on pull requests and default-branch pushes; add test execution when test projects exist.
 
 ## Developer setup
-1. Windows 11; current stable PowerToys with CmdPal enabled.
-2. Run CmdPal's built-in Create extension command.
-3. Install Visual Studio workloads/components required by the generated template.
-4. Build and run the untouched generated extension.
-5. Record actual target framework, SDK versions, packaging and debugging steps.
-6. Add core search tests.
-7. Install Playnite and create a test library with multiple sources and similarly named games.
-8. Run the catalog/launch spike before committing to a bridge.
+
+See [DEVELOPER-SETUP.md](DEVELOPER-SETUP.md). Key loop:
+1. Record `dotnet --info` and actual Visual Studio version/components.
+2. Run `dotnet restore .\testExtension.sln` and `dotnet build .\testExtension.sln -c Debug`.
+3. In Visual Studio use **Build > Deploy** to register the generated MSIX package.
+4. Reload Command Palette extensions and debug using the generated launch settings.
+5. Record the successful exact steps in WERD-57.
 
 ## Open decisions
-Catalog transport and bridge lifecycle; minimum supported versions; alias/fuzzy matching; packaging and WinGet manifest ownership; license. Do not reuse third-party branding assets without permission.
+
+- Catalog transport and companion-plugin lifecycle.
+- Tested minimum PowerToys/Visual Studio/.NET SDK versions.
+- Optional alias/fuzzy matching beyond title matching.
+- Packaging and gallery submission route.
+- Repository license.
