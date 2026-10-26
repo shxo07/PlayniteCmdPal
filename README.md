@@ -2,7 +2,7 @@
 
 Search and launch games from a Playnite library through Microsoft PowerToys Command Palette.
 
-> Status: generated Command Palette template is committed. Core search, Playnite catalog integration, and launch behavior are not implemented yet; the clean build/local deployment still need verification.
+> **Status:** The generated Command Palette template is committed. Core search and Playnite integration are under development. CI/security workflows are configured, but their first successful runs and the clean local build/deploy loop still need verification.
 
 ## Goal
 
@@ -15,7 +15,7 @@ Provide a keyboard-first route to a user's unified Playnite library: open Comman
 - Launch through a documented Playnite-supported mechanism using a stable game ID.
 - Handle missing Playnite/integration, empty library, stale data, and launch errors clearly.
 - Automated core/adapter tests and reproducible Windows developer setup.
-- Windows CI that builds the generated solution.
+- Windows CI and static security analysis.
 
 ## Architecture
 
@@ -31,20 +31,25 @@ Provide a keyboard-first route to a user's unified Playnite library: open Comman
 - Generated project: `testExtension/testExtension.csproj`
 - Central package versions: `Directory.Packages.props`
 - Repo-specific CmdPal instructions: `.github/copilot-instructions.md` and `.github/instructions/cmdpal-extension.instructions.md`
-- Build/deploy and integration are not yet verified; do not describe this repository as a working extension until WERD-57 and WERD-56 acceptance criteria are met.
+- GitHub Actions: Windows build workflow and CodeQL workflow; Dependabot is configured for NuGet and Actions.
+- The first workflow runs have not yet been verified. Do not describe the repository as a working extension until the build, local deployment, and Playnite integration acceptance criteria pass.
 - License not selected yet. Do not assume the repository is licensed for reuse until a license file is added.
 
-## Project tracking
+## Development and project tracking
 
-Work, dependencies, milestones, acceptance criteria, and authoritative links are tracked in [Linear](https://linear.app/werdscopez7347/project/playnite-for-command-palette-9103e0746de7). The [Implementation Roadmap & Engineering Workflow](https://linear.app/werdscopez7347/document/implementation-roadmap-and-engineering-workflow-aa55b062593b) is the project execution overview.
+- [Developer setup](docs/DEVELOPER-SETUP.md)
+- [Contributing](.github/CONTRIBUTING.md)
+- [Security policy](SECURITY.md)
+- [Code of Conduct](CODE_OF_CONDUCT.md)
+- [Linear project and roadmap](https://linear.app/werdscopez7347/project/playnite-for-command-palette-9103e0746de7)
+- [Implementation Roadmap & Engineering Workflow](https://linear.app/werdscopez7347/document/implementation-roadmap-and-engineering-workflow-aa55b062593b)
 
-## Docs
+## Project docs
 
 - [PRD](docs/PRD.md)
 - [Technical design](docs/TECHNICAL-DESIGN.md)
 - [Research](docs/RESEARCH.md)
 - [Decisions](docs/DECISIONS.md)
-- [Developer setup](docs/DEVELOPER-SETUP.md)
 
 ## References
 
