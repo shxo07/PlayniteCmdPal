@@ -41,7 +41,7 @@ References:
 1. **CmdPal presentation:** current-template command provider, search/results, actions, and clear unavailable/error states.
 2. **Core:** game model, query normalization, deterministic ranking, and interfaces. No CmdPal or Playnite SDK types.
 3. **Catalog adapter:** maps the selected read-only catalog transport into the core model.
-4. **Playnite bridge/transport:** use a documented external catalog contract if one exists; otherwise evaluate a small companion Playnite plugin exporting a normalized JSON snapshot.
+4. **Playnite bridge/transport:** companion Playnite plugin exports a normalized JSON snapshot; CmdPal reads it read-only.
 
 Playnite remains the source of truth for game identity, library metadata, and launch configuration. The extension must not independently recreate storefront launch logic.
 
@@ -67,7 +67,7 @@ Playnite's plugin SDK exposes `PlayniteApi.Database.Games` to an in-process plug
 - https://api.playnite.link/docs/api/Playnite.SDK.IGameDatabase.html
 - https://api.playnite.link/docs/tutorials/extensions/library.html
 
-The catalog transport decision remains open. If no supported external catalog API is documented, evaluate a companion plugin that writes a normalized, read-only JSON snapshot atomically. Define stable IDs, schema version, snapshot path, refresh behavior, stale-data handling, and malformed/missing-file behavior. Do not add named pipes or another IPC protocol unless the snapshot design proves insufficient.
+The catalog transport is selected by WERD-56: companion plugin plus atomic normalized JSON snapshot, using the contract below. Do not add named pipes or another IPC protocol unless implementation evidence proves the snapshot insufficient.
 
 Rejected for production:
 - Direct database writes.
@@ -114,7 +114,7 @@ See [DEVELOPER-SETUP.md](DEVELOPER-SETUP.md). Key loop:
 
 ## Open decisions
 
-- Catalog transport and companion-plugin lifecycle.
+- Implement the selected companion-plugin snapshot writer and CmdPal reader against the WERD-56 contract.
 - Tested minimum PowerToys/Visual Studio/.NET SDK versions.
 - Optional alias/fuzzy matching beyond title matching.
 - Packaging and gallery submission route.
