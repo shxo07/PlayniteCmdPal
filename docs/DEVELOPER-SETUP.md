@@ -1,6 +1,6 @@
 # Developer Setup
 
-**Status:** The generated CmdPal template is committed. The clean build and local deploy/debug loop still need to be verified. Do not regenerate the template.
+**Status:** The generated CmdPal template is committed. The clean build and local deploy/debug loop still need to be verified and recorded by WERD-57. Do not regenerate the template.
 
 ## Repository layout
 
@@ -42,18 +42,18 @@ Use a .NET SDK capable of targeting .NET 10 and a current Visual Studio installa
 5. In Visual Studio, follow the generated project's deployment path. The repository's instructions say to use **Build > Deploy**, not Build alone, because deployment registers the MSIX package.
 6. In Command Palette, run **Reload** and choose the command to reload Command Palette extensions.
 7. Debug in Visual Studio using the generated launch settings; inspect the Output window and relevant Windows event/debug output if startup fails.
-8. Record exact successful commands, SDK/Visual Studio versions, deployment path, and any machine prerequisites in this guide.
+8. Record exact successful commands, SDK/Visual Studio versions, deployment path, and any machine prerequisites in this guide and WERD-57.
 
 ## Playnite integration testing
 
 1. Install current stable Playnite and create a small test library with at least two similarly named games.
-2. Verify the documented launch-by-ID URI against a real game ID and decide how the extension reads a catalog.
+2. Follow WERD-56 to verify the documented launch-by-ID URI against a real game ID and decide how the extension reads a catalog.
 3. Keep Playnite-specific integration tests separate from normal CI. CI must not need a personal library or Playnite installation.
 4. Test with Playnite both running and closed only if those behaviors are in the supported scope. Record results rather than assuming multi-install/portable behavior.
 
 ## CI and tests
 
-- Windows GitHub Actions CI builds `testExtension.sln`.
+- WERD-64 adds baseline Windows GitHub Actions build CI for `testExtension.sln`.
 - Core search tests should run without PowerToys or Playnite.
 - Adapter/protocol tests should use deterministic fixtures and cover missing, malformed, stale, and empty data.
 - Real Playnite launch smoke tests are manual/local and should never run against private library data in CI.
