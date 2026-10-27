@@ -4,7 +4,7 @@
 
 ## Related issue
 
-Closes <!-- GitHub issue URL or #issue-number, if applicable -->
+Closes <!-- WERD-xx or GitHub issue URL -->
 
 ## Validation
 
