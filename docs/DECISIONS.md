@@ -23,3 +23,12 @@ The Playnite SDK documents in-process plugin access to `PlayniteApi.Database.Gam
 ## ADR-006: Clock/timer extension is separate
 **Status:** Accepted  
 Clock and timer functionality is out of scope for this repository and MVP.
+
+## ADR-007: Companion-plugin JSON snapshot for catalog access
+**Status:** Accepted; implementation pending
+
+The reviewed official SDK docs expose IPlayniteAPI.Database and demonstrate in-process PlayniteApi.Database.Games enumeration, but do not document a general external-process catalog endpoint. Use a small companion Playnite plugin to export a read-only normalized JSON snapshot to %LOCALAPPDATA%\\PlayniteCmdPal\\catalog-v1.json. CmdPal reads this file only. Never write Playnite's database, parse its internal files as a supported contract, automate its UI, or add named-pipe IPC without new evidence.
+
+Schema v1 has schemaVersion, generatedAtUtc, and games array; each game has stable GUID id, required name and isInstalled, and optional source/platform. Refresh on plugin initialization, OnLibraryUpdated, and debounced game collection changes. Write through a same-directory temporary file and atomic replace. Missing and malformed snapshots are errors, not empty libraries; valid snapshots older than 24 hours remain usable with explicit stale status. Full contract: docs/TECHNICAL-DESIGN.md.
+
+ADR-004 clarification: use playnite://playnite/start/{gameId} as primary launch request and --start <gameId> only as fallback if needed. Validate the stable GUID. URI dispatch is not proof the game started. Real-game local smoke test remains pending.
