@@ -84,7 +84,7 @@ Keep the generated project intact while the core boundary is introduced. Propose
 - Unit/contract tests independent of Playnite.
 - Manual local smoke tests for the actual Playnite launch.
 
-Do not create a companion bridge project until evidence establishes that it is needed.
+The transport decision is made by WERD-56; this spike documents the contract but does not implement the companion plugin or reader.
 
 ## Security and reliability
 
@@ -114,7 +114,7 @@ See [DEVELOPER-SETUP.md](DEVELOPER-SETUP.md). Key loop:
 
 ## Open decisions
 
-- Implement the selected companion-plugin snapshot writer and CmdPal reader against the WERD-56 contract.
+- Validate the companion-plugin snapshot writer and CmdPal reader against the selected WERD-56 contract.
 - Tested minimum PowerToys/Visual Studio/.NET SDK versions.
 - Optional alias/fuzzy matching beyond title matching.
 - Packaging and gallery submission route.
@@ -146,9 +146,9 @@ Snapshot v1 path: %LOCALAPPDATA%\\PlayniteCmdPal\\catalog-v1.json. This is per-u
 }
 ```
 
-The id is the Playnite database GUID in canonical D format and sole identity key. name and isInstalled are required; source and platform are optional. Export only this allowlisted projection, never full SDK models, executable paths, or configured actions.
+The id is the Playnite database GUID in canonical D format and sole identity key. `name` must be a non-empty string and `isInstalled` a Boolean; `source` and `platform` are optional strings. Treat titles as display/search data, never identity. Export only this allowlisted projection, never full SDK models, executable paths, configured actions, or private library data. Store the snapshot under the current user's Local AppData with inherited per-user permissions; do not elevate. CmdPal opens it read-only.
 
-Writer refreshes on plugin initialization and after OnLibraryUpdated; subscribe to game collection change/update events for direct edits. Debounce bursts, serialize writes, and re-enumerate the database for each export. Write to a unique same-directory temporary file, flush/close, then atomically replace/move the canonical file. On failure preserve the old snapshot. Reader bounds file size and game count, requires schemaVersion 1, timestamp, and games array; skips invalid individual records and rejects malformed top-level JSON/unsupported schema without replacing last-known-good memory. Missing means integration unavailable, not an empty library. Empty games is valid. Valid snapshots older than 24 hours remain searchable with explicit stale status. Parse off the CmdPal UI thread.
+Writer refreshes on plugin initialization and after `OnLibraryUpdated`; also subscribe to game collection-change/update events for direct edits. Debounce bursts, serialize writes, and re-enumerate the database for each export. Write a complete unique temporary file in the same directory, flush and close it, then atomically replace the canonical file (or move it into place on first creation). On failure preserve the previous snapshot. Reader must enforce documented implementation limits for file size and game count; require schemaVersion 1, a valid ISO-8601 UTC `generatedAtUtc`, and a `games` array. Reject malformed top-level JSON, missing/invalid required envelope fields, and unsupported schema versions without replacing last-known-good in-memory data. Skip invalid individual records and report them; if the file is missing and no cached snapshot exists, report integration unavailable rather than an empty library. An empty `games` array is valid. If a prior valid snapshot is cached, retain it when a later read is missing or invalid and surface the integration error. Valid snapshots older than 24 hours remain searchable with explicit stale status. Parse off the CmdPal UI thread.
 
 Launch: validate the selected ID as a GUID and open playnite://playnite/start/{id:D}. Do not derive executable paths or shell-interpolate snapshot data. URI dispatch is not confirmation that the game started.
 
