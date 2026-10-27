@@ -16,10 +16,9 @@ Never write to Playnite data. Do not use UI automation as the production integra
 **Status:** Direction accepted; local smoke test pending  
 Official docs list `--start <gameId>` and `playnite://playnite/start/<gameId>`: https://api.playnite.link/docs/manual/advanced/cmdlineArguments.html. Use the documented URI/CLI after a focused test with a real game ID. The test validates our invocation and error handling, not whether the documented feature exists.
 
-## ADR-005: Catalog transport remains open
-**Status:** Open  
-The Playnite SDK documents in-process plugin access to `PlayniteApi.Database.Games`, but that does not itself prove an external-process catalog API. First check for a documented external interface. If none exists, evaluate a companion Playnite plugin that exports a normalized read-only JSON snapshot atomically. Do not default to named-pipe IPC; add it only if evidence shows the snapshot is insufficient.
-
+## ADR-005: Companion-plugin JSON snapshot for catalog access
+**Status:** Accepted; implementation pending  
+The reviewed official SDK docs expose IPlayniteAPI.Database and demonstrate in-process PlayniteApi.Database.Games enumeration, but do not document a general external-process catalog endpoint. Use a small companion Playnite plugin to export a read-only normalized JSON snapshot to %LOCALAPPDATA%\\PlayniteCmdPal\\catalog-v1.json. CmdPal reads this file only. Never write Playnite's database, parse its internal files as a supported contract, automate its UI, or add named-pipe IPC without new evidence. The v1 schema, refresh, atomic-write, stale-data, and failure policies are specified in docs/TECHNICAL-DESIGN.md.
 ## ADR-006: Clock/timer extension is separate
 **Status:** Accepted  
 Clock and timer functionality is out of scope for this repository and MVP.
