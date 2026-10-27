@@ -130,7 +130,7 @@ Evidence:
 - Launch URI/CLI: https://api.playnite.link/docs/manual/advanced/cmdlineArguments.html
 - URI routing source: https://github.com/JosefNemec/Playnite/blob/master/source/Playnite/App/PlayniteApplication.cs
 
-Snapshot v1 path: %LOCALAPPDATA%\\PlayniteCmdPal\\catalog-v1.json. This is per-user Local AppData, not the Playnite database directory. Preserve default user ACLs; no elevation. Example schema:
+Snapshot v1 path: %LOCALAPPDATA%\PlayniteCmdPal\catalog-v1.json. This is per-user Local AppData, not the Playnite database directory. Preserve default user ACLs; no elevation. Example schema:
 
 ```json
 {
@@ -148,8 +148,19 @@ Snapshot v1 path: %LOCALAPPDATA%\\PlayniteCmdPal\\catalog-v1.json. This is per-u
 
 The id is the Playnite database GUID in canonical D format and sole identity key. `name` must be a non-empty string and `isInstalled` a Boolean; `source` and `platform` are optional strings. Treat titles as display/search data, never identity. Export only this allowlisted projection, never full SDK models, executable paths, configured actions, or private library data. Store the snapshot under the current user's Local AppData with inherited per-user permissions; do not elevate. CmdPal opens it read-only.
 
-Writer refreshes on plugin initialization and after `OnLibraryUpdated`; also subscribe to game collection-change/update events for direct edits. Debounce bursts, serialize writes, and re-enumerate the database for each export. Write a complete unique temporary file in the same directory, flush and close it, then atomically replace the canonical file (or move it into place on first creation). On failure preserve the previous snapshot. Reader must enforce documented implementation limits for file size and game count; require schemaVersion 1, a valid ISO-8601 UTC `generatedAtUtc`, and a `games` array. Reject malformed top-level JSON, missing/invalid required envelope fields, and unsupported schema versions without replacing last-known-good in-memory data. Skip invalid individual records and report them; if the file is missing and no cached snapshot exists, report integration unavailable rather than an empty library. An empty `games` array is valid. If a prior valid snapshot is cached, retain it when a later read is missing or invalid and surface the integration error. Valid snapshots older than 24 hours remain searchable with explicit stale status. Parse off the CmdPal UI thread.
+Writer refreshes on plugin initialization and after `OnLibraryUpdated`; also subscribe to game collection-change/update events for direct edits. Debounce bursts, serialize writes, and re-enumerate the database for each export. Write a complete unique temporary file in the same directory, flush and close it, then atomically replace the canonical file (or move it into place on first creation). On failure preserve the previous snapshot. Reader rejects snapshots larger than 32 MiB or containing more than 100,000 game records; require schemaVersion 1, a valid ISO-8601 UTC `generatedAtUtc`, and a `games` array. Reject malformed top-level JSON, missing/invalid required envelope fields, and unsupported schema versions without replacing last-known-good in-memory data. Skip invalid individual records and report them; if the file is missing and no cached snapshot exists, report integration unavailable rather than an empty library. An empty `games` array is valid. If a prior valid snapshot is cached, retain it when a later read is missing or invalid and surface the integration error. Valid snapshots older than 24 hours remain searchable with explicit stale status. Parse off the CmdPal UI thread.
 
 Launch: validate the selected ID as a GUID and open playnite://playnite/start/{id:D}. Do not derive executable paths or shell-interpolate snapshot data. URI dispatch is not confirmation that the game started.
 
-Local smoke test pending; not performed here: obtain a real non-sensitive game GUID locally, press Win+R, enter playnite://playnite/start/{actual-guid}, and confirm the intended game starts through Playnite. Record Playnite version, install mode, whether already running, and outcome. If URI dispatch fails, check protocol registration before trying --start with the same ID. Do not commit the game ID.
+Local smoke test pending; not performed in this environment. On the maintainer's Windows machine, obtain a real game's GUID through Playnite's plugin API or an existing local diagnostic (do not inspect or parse Playnite's internal database files for this purpose). In PowerShell, run the following and enter that GUID when prompted:
+
+```powershell
+$gameId = Read-Host 'Enter a real Playnite game GUID (do not commit or paste it into chat)'
+$parsedId = [guid]::Empty
+if (-not [guid]::TryParse($gameId, [ref]$parsedId)) { throw 'Invalid game GUID' }
+$uri = "playnite://playnite/start/$($parsedId.ToString('D'))"
+Write-Host 'Dispatching Playnite URI'
+Start-Process $uri
+```
+
+Confirm the intended game actually starts through Playnite; successful `Start-Process` dispatch alone is not a pass. Record Playnite version, standard/portable install mode, whether Playnite was already running, and observed outcome. If URI dispatch fails, check protocol registration before trying `& '<Playnite.exe path>' --start $($parsedId.ToString('D'))` with the same ID. Do not commit or share the game ID.
