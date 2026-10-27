@@ -1,6 +1,6 @@
 # Research: Market and Feasibility
 
-**Last reviewed:** 2026-10-26. Findings below distinguish documented facts from implementation checks that remain.
+**Last reviewed:** 2026-10-27. Findings below distinguish documented facts from implementation checks that remain.
 
 ## Technical findings
 
@@ -46,3 +46,17 @@ Validate demand through a working demo and community feedback; do not equate gal
 - https://api.playnite.link/docs/api/Playnite.SDK.IGameDatabase.html
 - https://api.playnite.link/docs/tutorials/extensions/library.html
 - https://api.playnite.link/docs/api/Playnite.SDK.Models.Game.html
+
+## WERD-56 decision (2026-10-27)
+
+Selected catalog transport: a companion Playnite plugin exports a normalized JSON snapshot; the out-of-process CmdPal extension reads it read-only. The official references reviewed document in-process database access but do not document a general external-process catalog endpoint. This is a finding about the reviewed documented API, not a claim that no third-party or undocumented interface exists.
+
+The plugin reads PlayniteApi.Database.Games and exports only an allowlisted projection. Canonical path: %LOCALAPPDATA%\\PlayniteCmdPal\\catalog-v1.json. Use default per-user Local AppData permissions; CmdPal opens the file read-only. Write a complete temporary file in the same directory, flush and close it, then atomically replace the canonical file. Preserve the previous snapshot on write failure. No named pipe, network listener, database parsing, or UI automation.
+
+Schema v1: schemaVersion integer 1, generatedAtUtc ISO-8601 UTC timestamp, and games array. Each record has id (Playnite database GUID in canonical D format), required name, optional source and platform, and required isInstalled. Do not export full SDK models, executable paths, or configured actions.
+
+Refresh on plugin initialization and OnLibraryUpdated; also subscribe to game collection change/update events, debounce bursts, and re-enumerate the database on export. Bound file size and game count. Reject malformed top-level JSON and unsupported schema; skip invalid individual records; never replace last-known-good in-memory data with invalid content. Missing file means integration unavailable, not an empty library. An empty games array is a valid empty library. A valid snapshot older than 24 hours remains searchable but must be marked stale.
+
+Playnite documents --start <gameId> and playnite://playnite/start/<gameId>. Use the URI as primary launch path, validate the ID as a GUID, and construct playnite://playnite/start/{id:D}. URI dispatch is not proof the game started. References: https://api.playnite.link/docs/manual/advanced/cmdlineArguments.html ; https://api.playnite.link/docs/api/Playnite.SDK.IPlayniteAPI.html ; https://api.playnite.link/docs/tutorials/extensions/library.html ; https://github.com/JosefNemec/Playnite/blob/master/source/Playnite/App/PlayniteApplication.cs
+
+Manual check pending: this environment did not have access to the maintainer's installed Playnite instance or a real game ID. Do not claim local URI launch passed. Exact smoke-test steps are in docs/TECHNICAL-DESIGN.md.
