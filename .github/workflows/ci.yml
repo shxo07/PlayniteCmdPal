@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   build:
-    name: Restore and build (Windows)
+    name: Restore, build, and test (Windows)
     runs-on: windows-latest
     timeout-minutes: 20
 
@@ -38,3 +38,6 @@ jobs:
 
       - name: Build
         run: dotnet build .\testExtension.sln --configuration Release --no-restore
+
+      - name: Test core search
+        run: dotnet test .\PlayniteCmdPal.Core.Tests\PlayniteCmdPal.Core.Tests.csproj --configuration Release --no-build --no-restore

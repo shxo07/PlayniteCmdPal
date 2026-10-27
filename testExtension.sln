@@ -1,9 +1,12 @@
-
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.13.35507.96 d17.13
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "testExtension", "testExtension\testExtension.csproj", "{79F86DE5-70B1-4EC1-9832-DF428B55E466}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PlayniteCmdPal.Core", "PlayniteCmdPal.Core\PlayniteCmdPal.Core.csproj", "{C70C0D56-7CB0-4A0D-A67B-6E90A4BB91E2}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PlayniteCmdPal.Core.Tests", "PlayniteCmdPal.Core.Tests\PlayniteCmdPal.Core.Tests.csproj", "{AAEC1E7C-6B7C-4D8E-93DA-8F9A18C4B1D9}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -21,18 +24,38 @@ Global
 		{79F86DE5-70B1-4EC1-9832-DF428B55E466}.Debug|x64.ActiveCfg = Debug|x64
 		{79F86DE5-70B1-4EC1-9832-DF428B55E466}.Debug|x64.Build.0 = Debug|x64
 		{79F86DE5-70B1-4EC1-9832-DF428B55E466}.Debug|x64.Deploy.0 = Debug|x64
-		{79F86DE5-70B1-4EC1-9832-DF428B55E466}.Debug|x86.ActiveCfg = Debug|x86
-		{79F86DE5-70B1-4EC1-9832-DF428B55E466}.Debug|x86.Build.0 = Debug|x86
-		{79F86DE5-70B1-4EC1-9832-DF428B55E466}.Debug|x86.Deploy.0 = Debug|x86
+		{79F86DE5-70B1-4EC1-9832-DF428B55E466}.Debug|x86.ActiveCfg = Debug|x64
 		{79F86DE5-70B1-4EC1-9832-DF428B55E466}.Release|ARM64.ActiveCfg = Release|ARM64
 		{79F86DE5-70B1-4EC1-9832-DF428B55E466}.Release|ARM64.Build.0 = Release|ARM64
 		{79F86DE5-70B1-4EC1-9832-DF428B55E466}.Release|ARM64.Deploy.0 = Release|ARM64
 		{79F86DE5-70B1-4EC1-9832-DF428B55E466}.Release|x64.ActiveCfg = Release|x64
 		{79F86DE5-70B1-4EC1-9832-DF428B55E466}.Release|x64.Build.0 = Release|x64
 		{79F86DE5-70B1-4EC1-9832-DF428B55E466}.Release|x64.Deploy.0 = Release|x64
-		{79F86DE5-70B1-4EC1-9832-DF428B55E466}.Release|x86.ActiveCfg = Release|x86
-		{79F86DE5-70B1-4EC1-9832-DF428B55E466}.Release|x86.Build.0 = Release|x86
-		{79F86DE5-70B1-4EC1-9832-DF428B55E466}.Release|x86.Deploy.0 = Release|x86
+		{79F86DE5-70B1-4EC1-9832-DF428B55E466}.Release|x86.ActiveCfg = Release|x64
+		{79F86DE5-70B1-4EC1-9832-DF428B55E466}.Release|x86.Build.0 = Release|x64
+		{C70C0D56-7CB0-4A0D-A67B-6E90A4BB91E2}.Debug|ARM64.ActiveCfg = Debug|Any CPU
+		{C70C0D56-7CB0-4A0D-A67B-6E90A4BB91E2}.Debug|ARM64.Build.0 = Debug|Any CPU
+		{C70C0D56-7CB0-4A0D-A67B-6E90A4BB91E2}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{C70C0D56-7CB0-4A0D-A67B-6E90A4BB91E2}.Debug|x64.Build.0 = Debug|Any CPU
+		{C70C0D56-7CB0-4A0D-A67B-6E90A4BB91E2}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{C70C0D56-7CB0-4A0D-A67B-6E90A4BB91E2}.Release|ARM64.ActiveCfg = Release|Any CPU
+		{C70C0D56-7CB0-4A0D-A67B-6E90A4BB91E2}.Release|ARM64.Build.0 = Release|Any CPU
+		{C70C0D56-7CB0-4A0D-A67B-6E90A4BB91E2}.Release|x64.ActiveCfg = Release|Any CPU
+		{C70C0D56-7CB0-4A0D-A67B-6E90A4BB91E2}.Release|x64.Build.0 = Release|Any CPU
+		{C70C0D56-7CB0-4A0D-A67B-6E90A4BB91E2}.Release|x86.ActiveCfg = Release|Any CPU
+		{C70C0D56-7CB0-4A0D-A67B-6E90A4BB91E2}.Release|x86.Build.0 = Release|Any CPU
+		{AAEC1E7C-6B7C-4D8E-93DA-8F9A18C4B1D9}.Debug|ARM64.ActiveCfg = Debug|Any CPU
+		{AAEC1E7C-6B7C-4D8E-93DA-8F9A18C4B1D9}.Debug|ARM64.Build.0 = Debug|Any CPU
+		{AAEC1E7C-6B7C-4D8E-93DA-8F9A18C4B1D9}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{AAEC1E7C-6B7C-4D8E-93DA-8F9A18C4B1D9}.Debug|x64.Build.0 = Debug|Any CPU
+		{AAEC1E7C-6B7C-4D8E-93DA-8F9A18C4B1D9}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{AAEC1E7C-6B7C-4D8E-93DA-8F9A18C4B1D9}.Debug|x86.Build.0 = Debug|Any CPU
+		{AAEC1E7C-6B7C-4D8E-93DA-8F9A18C4B1D9}.Release|ARM64.ActiveCfg = Release|Any CPU
+		{AAEC1E7C-6B7C-4D8E-93DA-8F9A18C4B1D9}.Release|ARM64.Build.0 = Release|Any CPU
+		{AAEC1E7C-6B7C-4D8E-93DA-8F9A18C4B1D9}.Release|x64.ActiveCfg = Release|Any CPU
+		{AAEC1E7C-6B7C-4D8E-93DA-8F9A18C4B1D9}.Release|x64.Build.0 = Release|Any CPU
+		{AAEC1E7C-6B7C-4D8E-93DA-8F9A18C4B1D9}.Release|x86.ActiveCfg = Release|Any CPU
+		{AAEC1E7C-6B7C-4D8E-93DA-8F9A18C4B1D9}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
