@@ -22,7 +22,7 @@ Provide a keyboard-first route to a user's unified Playnite library: open Comman
 - C# extension based on the current official Microsoft CmdPal template in `testExtension/`.
 - Playnite remains the source of truth for library data and launch configuration.
 - Keep the core game model and ranking logic independent from the CmdPal and Playnite SDKs.
-- Put catalog access behind a read-only adapter. If no documented external catalog API exists, evaluate a companion Playnite plugin that exports a normalized JSON snapshot.
+- Put catalog access behind a read-only adapter. WERD-56 chooses the transport; if no documented external catalog API exists, evaluate a companion Playnite plugin that exports a normalized JSON snapshot.
 - Do not use direct Playnite database writes or UI automation. Do not add IPC unless evidence shows it is needed.
 
 ## Current baseline
@@ -41,6 +41,8 @@ Provide a keyboard-first route to a user's unified Playnite library: open Comman
 - [Contributing](.github/CONTRIBUTING.md)
 - [Security policy](SECURITY.md)
 - [Code of Conduct](CODE_OF_CONDUCT.md)
+- [Linear project and roadmap](https://linear.app/werdscopez7347/project/playnite-for-command-palette-9103e0746de7)
+- [Implementation Roadmap & Engineering Workflow](https://linear.app/werdscopez7347/document/implementation-roadmap-and-engineering-workflow-aa55b062593b)
 
 ## Project docs
 
