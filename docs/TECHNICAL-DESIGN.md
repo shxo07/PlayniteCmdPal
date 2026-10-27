@@ -1,7 +1,7 @@
 # Technical Design
 
-**Status:** Implementation plan; generated template committed, build/deploy and Playnite integration still to be verified.  
-**Last reviewed:** 2026-10-26.
+**Status:** Implementation plan; generated CmdPal template build and local deployment validated on Windows. Playnite catalog/launch integration remains to be verified.  
+**Last reviewed:** 2026-10-27.
 
 ## Current generated-template baseline
 
@@ -20,7 +20,15 @@ Observed from checked-in project files:
 - `Microsoft.Windows.SDK.BuildTools.MSIX` 1.7.20250829.1.
 - Additional versions are pinned in `Directory.Packages.props`.
 
-Sources: [project](../testExtension/testExtension.csproj), [package versions](../Directory.Packages.props), [shared build properties](../Directory.Build.props). These values describe the checked-in template; they do not prove that a clean build or local deployment succeeds. WERD-57 owns that validation.
+Sources: [project](../testExtension/testExtension.csproj), [package versions](../Directory.Packages.props), [shared build properties](../Directory.Build.props). These values describe the checked-in template; local restore/build/deployment validation is recorded below.
+
+## Template validation update (2026-10-27)
+
+The generated project was inspected without regeneration. Its current source pins `net10.0-windows10.0.26100.0`, Windows SDK package property `10.0.26100.68-preview`, minimum/supported platform `10.0.19041.0`, and RIDs `win-x64;win-arm64`. Shared build platforms are `x64;ARM64`. Central package versions are recorded in `Directory.Packages.props`; the primary extension packages are `Microsoft.CommandPalette.Extensions` 0.9.260303001, `Microsoft.Windows.CsWinRT` 2.2.0, `Shmuelie.WinRTServer` 2.1.1, and `Microsoft.Windows.SDK.BuildTools.MSIX` 1.7.20250829.1. Maintainer-reported SDK: .NET SDK 10.0.403. The solution metadata reports VS 17.13.35507.96 as generator environment, not as a verified minimum.
+
+The initial build failure was `APPX1685` because `x-generate` selected default language `en-AE`. The source manifest now explicitly declares `<Resource Language="en-US"/>`; this valid language tag avoids dependence on the build machine locale while keeping manifest validation enabled. On the maintainer's Windows 10.0.19044 machine with .NET SDK 10.0.403, restore succeeded and x64/ARM64 builds succeeded both with and without `-p:DefaultLanguage=en-US` (all build commands exit code 0). Visual Studio package deployment succeeded; Command Palette was reloaded, the extension opened, and the placeholder page was confirmed. Exact Visual Studio version/workloads and PowerToys version were not recorded. See [developer setup](DEVELOPER-SETUP.md) for commands and detailed results.
+
+Generated lifecycle inspected: the `IExtension` implementation returns a single `CommandProvider` for `ProviderType.Commands`; its provider returns a cached top-level command; the placeholder page is a static `ListPage` whose `GetItems()` returns one placeholder and which does not implement dynamic search. Microsoft documents `DynamicListPage.UpdateSearchText(oldSearch, newSearch)` for reactive filtering and `RaiseItemsChanged()` to notify the host after data changes. The official guide requires **Build > Deploy**, then **Reload > Reload Command Palette extensions**; the packaged launch profile is required, not the unpackaged profile.
 
 ## Stack and framework
 
