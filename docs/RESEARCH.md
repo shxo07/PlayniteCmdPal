@@ -17,9 +17,9 @@
 
 ## Current architecture recommendation
 
-Keep Playnite authoritative. Use its documented launch-by-ID interface after a focused local smoke test. For catalog retrieval, check for a documented external API; if none is documented, evaluate a companion Playnite plugin that writes a normalized read-only JSON snapshot. Do not use direct database writes or UI automation, and do not add IPC complexity without evidence.
+Keep Playnite authoritative. Use its documented launch-by-ID URI after a focused local smoke test. The selected catalog transport is a companion plugin writing a normalized read-only JSON snapshot; do not use direct database writes, UI automation, or IPC.
 
-The launch mechanism is documented. The remaining question is the catalog transport and the verification of our own integration, not whether the documented CLI/URI exists.
+The launch mechanism and catalog transport decision are documented. Remaining work is implementation and the real-game local launch smoke test.
 
 ## Market
 
