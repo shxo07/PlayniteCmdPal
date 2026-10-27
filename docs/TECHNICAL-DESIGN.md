@@ -119,3 +119,37 @@ See [DEVELOPER-SETUP.md](DEVELOPER-SETUP.md). Key loop:
 - Optional alias/fuzzy matching beyond title matching.
 - Packaging and gallery submission route.
 - Repository license.
+
+## WERD-56: selected catalog adapter contract
+
+Decision: a companion Playnite plugin exports a normalized JSON snapshot; the out-of-process CmdPal extension reads it read-only. The reviewed official references document IPlayniteAPI.Database and in-process library access, but do not document a general external-process catalog endpoint.
+
+Evidence:
+- IPlayniteAPI.Database: https://api.playnite.link/docs/api/Playnite.SDK.IPlayniteAPI.html
+- Library enumeration and change events (ItemCollectionChanged, ItemUpdated, OnLibraryUpdated): https://api.playnite.link/docs/tutorials/extensions/library.html
+- Launch URI/CLI: https://api.playnite.link/docs/manual/advanced/cmdlineArguments.html
+- URI routing source: https://github.com/JosefNemec/Playnite/blob/master/source/Playnite/App/PlayniteApplication.cs
+
+Snapshot v1 path: %LOCALAPPDATA%\\PlayniteCmdPal\\catalog-v1.json. This is per-user Local AppData, not the Playnite database directory. Preserve default user ACLs; no elevation. Example schema:
+
+```json
+{
+  "schemaVersion": 1,
+  "generatedAtUtc": "2026-10-27T12:00:00Z",
+  "games": [{
+    "id": "64f78cd1-0b00-4271-a9e1-89abc55f66cc",
+    "name": "Example Game",
+    "source": "Optional source",
+    "platform": "Optional platform",
+    "isInstalled": true
+  }]
+}
+```
+
+The id is the Playnite database GUID in canonical D format and sole identity key. name and isInstalled are required; source and platform are optional. Export only this allowlisted projection, never full SDK models, executable paths, or configured actions.
+
+Writer refreshes on plugin initialization and after OnLibraryUpdated; subscribe to game collection change/update events for direct edits. Debounce bursts, serialize writes, and re-enumerate the database for each export. Write to a unique same-directory temporary file, flush/close, then atomically replace/move the canonical file. On failure preserve the old snapshot. Reader bounds file size and game count, requires schemaVersion 1, timestamp, and games array; skips invalid individual records and rejects malformed top-level JSON/unsupported schema without replacing last-known-good memory. Missing means integration unavailable, not an empty library. Empty games is valid. Valid snapshots older than 24 hours remain searchable with explicit stale status. Parse off the CmdPal UI thread.
+
+Launch: validate the selected ID as a GUID and open playnite://playnite/start/{id:D}. Do not derive executable paths or shell-interpolate snapshot data. URI dispatch is not confirmation that the game started.
+
+Local smoke test pending; not performed here: obtain a real non-sensitive game GUID locally, press Win+R, enter playnite://playnite/start/{actual-guid}, and confirm the intended game starts through Playnite. Record Playnite version, install mode, whether already running, and outcome. If URI dispatch fails, check protocol registration before trying --start with the same ID. Do not commit the game ID.
