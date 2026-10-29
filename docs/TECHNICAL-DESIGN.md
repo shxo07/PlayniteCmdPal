@@ -1,6 +1,6 @@
 # Technical Design
 
-**Status:** Implementation plan; generated CmdPal template build and local deployment validated on Windows. Playnite catalog/launch integration remains to be verified.
+**Status:** Implementation plan; generated CmdPal template build and local deployment validated on Windows. The running-instance launch URI smoke test passed; catalog integration remains to be implemented and verified.
 **Last reviewed:** 2026-10-27.
 
 ## Current generated-template baseline
@@ -66,9 +66,9 @@ Playnite remains the source of truth for game identity, library metadata, and la
 Playnite documents `--start <gameId>` and `playnite://playnite/start/<gameId>`, as well as `showgame` and `search` URI commands:
 https://api.playnite.link/docs/manual/advanced/cmdlineArguments.html
 
-Use the documented URI as the primary launch request after one focused smoke test with a real game ID. The purpose of the test is to validate our chosen invocation, not to re-prove that documented features exist. Do not launch the game's executable directly when Playnite should apply its configured launch behavior.
+Use the documented URI as the primary launch request; a focused smoke test with a real game ID passed as described below. The purpose of the test is to validate our chosen invocation, not to re-prove that documented features exist. Do not launch the game's executable directly when Playnite should apply its configured launch behavior.
 
-### Manual URI smoke test (pending)
+### Manual URI smoke test
 
 1. On a Windows machine with Playnite installed, choose an installed game safe to start and obtain its **Playnite game GUID** (not a store ID) from a trusted Playnite-provided source, such as an existing game shortcut if it exposes the ID. Keep the ID and library details private.
 2. With Playnite running, open PowerShell and enter the real game GUID when prompted:
@@ -79,7 +79,7 @@ Use the documented URI as the primary launch request after one focused smoke tes
 3. Confirm that the intended game actually starts via Playnite. A successful `Start-Process` only shows that Windows accepted the request; it does not establish that the game launched.
 4. Record the Playnite version, install mode, whether Playnite was running, and the observed outcome without committing the game ID or personal library data. If it fails, record the error and distinguish URI registration/dispatch from Playnite or game-launch failures.
 
-**Result:** Not yet tested on a local Playnite installation. A closed-Playnite test and CLI fallback are separate follow-ups, not implied by a successful running-instance test.
+**Result (user-reported, 2026-10-29):** With a normal installation of Playnite 10.63 already running, the URI test launched the intended Steam-installed game successfully. A closed-Playnite test and CLI fallback are separate follow-ups, not implied by this result.
 
 ## Catalog integration decision
 
