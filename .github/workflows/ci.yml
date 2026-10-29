@@ -30,14 +30,6 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
-      - name: Show SDK information
-        run: dotnet --info
-
-      - name: Restore
-        run: dotnet restore .\testExtension.sln
-
-      - name: Build
-        run: dotnet build .\testExtension.sln --configuration Release --no-restore
-
-      - name: Test core search
-        run: dotnet test .\PlayniteCmdPal.Core.Tests\PlayniteCmdPal.Core.Tests.csproj --configuration Release --no-build --no-restore
+      - name: Run shared local CI checks
+        shell: pwsh
+        run: .\scripts\ci.ps1

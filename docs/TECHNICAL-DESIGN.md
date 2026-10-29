@@ -35,7 +35,7 @@ Generated lifecycle inspected: the `IExtension` implementation returns a single 
 - C# extension using the current official Microsoft Command Palette extension template.
 - `Microsoft.CommandPalette.Extensions` is referenced directly. Use the exact generated project pattern and consult the current Microsoft guide before implementing providers, pages, result actions, or navigation.
 - Keep the generated COM server/hosting, manifest, and MSIX packaging structure unless the official docs show a required change.
-- Add a Windows GitHub Actions build workflow in WERD-64 using the actual SDK/framework requirements established by WERD-57.
+- Windows CI is defined in `.github/workflows/ci.yml`; it installs .NET 10 and invokes the shared `scripts/ci.ps1` checks. It does not require Playnite or private library data.
 - Do not guess or casually upgrade template dependencies during MVP implementation.
 
 References:
@@ -109,7 +109,7 @@ Do not create a companion bridge project until WERD-56 establishes that it is ne
 - Adapter/contract tests: valid, missing, malformed, stale, and empty catalog data.
 - Manual integration: real Playnite library and launch-by-ID behavior.
 - Normal CI must not require Playnite or personal library data.
-- Windows CI builds the generated solution on pull requests and default-branch pushes; add test execution when test projects exist.
+- Windows CI builds the generated solution and runs `PlayniteCmdPal.Core.Tests` on pull requests and default-branch pushes; see [developer setup](DEVELOPER-SETUP.md) for the shared script and current verification evidence.
 
 ## Developer setup
 
