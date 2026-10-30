@@ -5,7 +5,7 @@
 
 Search and launch games from a Playnite library through Microsoft PowerToys Command Palette.
 
-> **Status:** The generated Command Palette template is committed and core search is under development. Windows CI and CodeQL run on pull requests and `main`, with verified successful runs. The clean local build/deploy loop and Playnite integration still need verification. There are no releases yet.
+> **Status:** The generated Command Palette template has been validated, and the independent core game model and deterministic search implementation are complete. Windows CI and CodeQL run on pull requests and `main`, with verified successful runs. The Playnite catalog adapter, end-to-end search/launch integration, and release packaging remain in progress. There are no releases yet.
 
 ## Goal
 
@@ -25,7 +25,7 @@ Provide a keyboard-first route to a user's unified Playnite library: open Comman
 - C# extension based on the current official Microsoft CmdPal template in `PlayniteCmdPal/`.
 - Playnite remains the source of truth for library data and launch configuration.
 - Keep the core game model and ranking logic independent from the CmdPal and Playnite SDKs.
-- Put catalog access behind a read-only adapter. WERD-56 chooses the transport; if no documented external catalog API exists, evaluate a companion Playnite plugin that exports a normalized JSON snapshot.
+- Catalog transport is decided in [ADR-005](docs/DECISIONS.md#adr-005-companion-plugin-json-snapshot-for-catalog-access): a companion Playnite plugin exports a normalized JSON snapshot for the read-only CmdPal adapter.
 - Do not use direct Playnite database writes or UI automation. Do not add IPC unless evidence shows it is needed.
 
 ## Current baseline
@@ -34,8 +34,8 @@ Provide a keyboard-first route to a user's unified Playnite library: open Comman
 - Generated project: `PlayniteCmdPal/PlayniteCmdPal.csproj`
 - Central package versions: `Directory.Packages.props`
 - Repo-specific CmdPal instructions: `.github/copilot-instructions.md` and `.github/instructions/cmdpal-extension.instructions.md`
-- GitHub Actions: Windows build workflow and CodeQL workflow; Dependabot is configured for NuGet and Actions.
-- Previous Windows CI and CodeQL runs succeeded. Checks are rerunning after the project rename; do not describe the repository as a working extension until local deployment and Playnite integration acceptance criteria pass.
+- GitHub Actions: Windows build/test workflow and CodeQL workflow; Dependabot is configured for NuGet and Actions.
+- Windows CI and CodeQL have successful runs. The core model/search tests run in CI; do not describe the repository as a working end-to-end extension until local deployment and Playnite integration acceptance criteria pass.
 - **License:** MIT for PlayniteCmdPal-authored material; see [LICENSE](LICENSE). Third-party components and assets retain their own license and attribution requirements. See [licensing and release readiness](docs/LICENSING-AND-RELEASE.md).
 
 ## Development and project tracking
