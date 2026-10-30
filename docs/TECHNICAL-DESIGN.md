@@ -1,7 +1,7 @@
 # Technical Design
 
 **Status:** Implementation plan; generated CmdPal template build and local deployment validated on Windows. The running- and closed-instance launch URI smoke tests passed; catalog integration remains to be implemented and verified.
-**Last reviewed:** 2026-10-27.
+**Last reviewed:** 2026-10-30.
 
 ## Current generated-template baseline
 

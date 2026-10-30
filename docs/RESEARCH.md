@@ -1,6 +1,6 @@
 # Research: Market and Feasibility
 
-**Last reviewed:** 2026-10-27. Findings below distinguish documented facts from implementation checks that remain.
+**Last reviewed:** 2026-10-30. Findings below distinguish documented facts from implementation checks that remain.
 
 ## Technical findings
 
