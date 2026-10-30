@@ -2,7 +2,7 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.13.35507.96 d17.13
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "testExtension", "testExtension\testExtension.csproj", "{79F86DE5-70B1-4EC1-9832-DF428B55E466}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PlayniteCmdPal", "PlayniteCmdPal\PlayniteCmdPal.csproj", "{79F86DE5-70B1-4EC1-9832-DF428B55E466}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PlayniteCmdPal.Core", "PlayniteCmdPal.Core\PlayniteCmdPal.Core.csproj", "{C70C0D56-7CB0-4A0D-A67B-6E90A4BB91E2}"
 EndProject

@@ -9,15 +9,14 @@
   IgnorableNamespaces="uap uap3 rescap">
 
   <Identity
-    Name="testExtension"
-    Publisher="CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+    Name="PlayniteCmdPal"
+    Publisher="CN=PlayniteCmdPal"
     Version="0.0.1.0" />
-  <!-- When you're ready to publish your extension, you'll need to change the
-       Publisher= to match your own identity -->
+  <!-- Publisher must match the subject of the certificate used to sign the MSIX. -->
 
   <Properties>
-    <DisplayName>testExtension</DisplayName>
-    <PublisherDisplayName>A Lone Developer</PublisherDisplayName>
+    <DisplayName>PlayniteCmdPal</DisplayName>
+    <PublisherDisplayName>PlayniteCmdPal</PublisherDisplayName>
     <Logo>Assets\StoreLogo.png</Logo>
   </Properties>
 
@@ -35,8 +34,8 @@
       Executable="$targetnametoken$.exe"
       EntryPoint="$targetentrypoint$">
       <uap:VisualElements
-        DisplayName="testExtension"
-        Description="testExtension"
+        DisplayName="PlayniteCmdPal"
+        Description="Search and launch games from your Playnite library using PowerToys Command Palette."
         BackgroundColor="transparent"
         Square150x150Logo="Assets\Square150x150Logo.png"
         Square44x44Logo="Assets\Square44x44Logo.png">
@@ -46,8 +45,8 @@
       <Extensions>
         <com:Extension Category="windows.comServer">
           <com:ComServer>
-            <com:ExeServer Executable="testExtension.exe" Arguments="-RegisterProcessAsComServer" DisplayName="testExtension">
-              <com:Class Id="5fa90ed5-fcab-47c0-bbc0-e0b72f39aa16" DisplayName="testExtension" />
+            <com:ExeServer Executable="PlayniteCmdPal.exe" Arguments="-RegisterProcessAsComServer" DisplayName="PlayniteCmdPal">
+              <com:Class Id="5fa90ed5-fcab-47c0-bbc0-e0b72f39aa16" DisplayName="PlayniteCmdPal" />
             </com:ExeServer>
           </com:ComServer>
         </com:Extension>
@@ -55,8 +54,8 @@
           <uap3:AppExtension Name="com.microsoft.commandpalette"
             Id="ID"
             PublicFolder="Public"
-            DisplayName="testExtension"
-            Description="testExtension">
+            DisplayName="PlayniteCmdPal"
+            Description="Search and launch games from your Playnite library using PowerToys Command Palette.">
             <uap3:Properties>
               <CmdPalProvider>
                 <Activation>

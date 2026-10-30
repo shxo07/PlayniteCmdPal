@@ -5,7 +5,7 @@
 
 ## Current generated-template baseline
 
-The current repository contains `testExtension.sln` and `testExtension/testExtension.csproj`. Do not regenerate the template.
+The current repository contains `PlayniteCmdPal.sln` and `PlayniteCmdPal/PlayniteCmdPal.csproj`. Do not regenerate the template.
 
 Observed from checked-in project files:
 - Target framework: `net10.0-windows10.0.26100.0`.
@@ -20,7 +20,7 @@ Observed from checked-in project files:
 - `Microsoft.Windows.SDK.BuildTools.MSIX` 1.7.20250829.1.
 - Additional versions are pinned in `Directory.Packages.props`.
 
-Sources: [project](../testExtension/testExtension.csproj), [package versions](../Directory.Packages.props), [shared build properties](../Directory.Build.props). These values describe the checked-in template; local restore/build/deployment validation is recorded below.
+Sources: [project](../PlayniteCmdPal/PlayniteCmdPal.csproj), [package versions](../Directory.Packages.props), [shared build properties](../Directory.Build.props). These values describe the checked-in template; local restore/build/deployment validation is recorded below.
 
 ## Template validation update (2026-10-27)
 
@@ -134,7 +134,7 @@ Earlier fork-origin runs reported `action_required`; those were superseded by th
 
 See [DEVELOPER-SETUP.md](DEVELOPER-SETUP.md). Key loop:
 1. Record `dotnet --info` and actual Visual Studio version/components.
-2. Run `dotnet restore .\testExtension.sln` and `dotnet build .\testExtension.sln -c Debug`.
+2. Run `dotnet restore .\PlayniteCmdPal.sln` and `dotnet build .\PlayniteCmdPal.sln -c Debug`.
 3. In Visual Studio use **Build > Deploy** to register the generated MSIX package.
 4. Reload Command Palette extensions and debug using the generated launch settings.
 5. Record the successful exact steps in WERD-57.

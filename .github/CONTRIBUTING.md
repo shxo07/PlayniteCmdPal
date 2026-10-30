@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for helping improve PlayniteCmdPal.
+Contributions to PlayniteCmdPal are accepted under the repository's MIT License. By submitting a contribution, you agree that it may be distributed under those MIT terms. You must have the right to submit the contribution and must identify and preserve any third-party code, assets, notices or restrictions included with it. The project license does not relicense third-party material.
 
 ## Before starting
 
@@ -31,7 +31,7 @@ Thanks for helping improve PlayniteCmdPal.
 
 ## Local build
 
-Use the SDK and commands documented in [Developer Setup](../docs/DEVELOPER-SETUP.md). The checked-in solution is `testExtension.sln`. If the generated template fails to build, report the exact command, SDK version, and sanitized error output rather than silently changing package versions.
+Use the SDK and commands documented in [Developer Setup](../docs/DEVELOPER-SETUP.md). The checked-in solution is `PlayniteCmdPal.sln`. If the generated template fails to build, report the exact command, SDK version, and sanitized error output rather than silently changing package versions.
 
 ## Security
 

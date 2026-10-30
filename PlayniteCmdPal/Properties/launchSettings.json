@@ -1,10 +1,10 @@
 {
   "profiles": {
-    "testExtension (Package)": {
+    "PlayniteCmdPal (Package)": {
       "commandName": "MsixPackage",
       "doNotLaunchApp": true
     },
-    "testExtension (Unpackaged)": {
+    "PlayniteCmdPal (Unpackaged)": {
       "commandName": "Project"
     }
   }

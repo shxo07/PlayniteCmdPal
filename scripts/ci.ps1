@@ -4,7 +4,7 @@ param ()
 Set-StrictMode -Version Latest
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-$solutionPath = Join-Path $repoRoot 'testExtension.sln'
+$solutionPath = Join-Path $repoRoot 'PlayniteCmdPal.sln'
 $testProjectPath = Join-Path $repoRoot 'PlayniteCmdPal.Core.Tests\PlayniteCmdPal.Core.Tests.csproj'
 
 if (-not (Test-Path -LiteralPath $solutionPath) -or -not (Test-Path -LiteralPath $testProjectPath)) {

@@ -4,7 +4,7 @@
 
 ## Checked-in toolchain
 
-Source of truth: `testExtension.sln`, `testExtension/testExtension.csproj`, `Directory.Build.props`, and `Directory.Packages.props`.
+Source of truth: `PlayniteCmdPal.sln`, `PlayniteCmdPal/PlayniteCmdPal.csproj`, `Directory.Build.props`, and `Directory.Packages.props`.
 
 - Target framework: `net10.0-windows10.0.26100.0`.
 - Target Windows SDK package property: `10.0.26100.68-preview`.
@@ -39,8 +39,8 @@ Run the shared check script from the repository root in PowerShell:
 Prerequisites: Windows, PowerShell 5.1 or later (`pwsh` 7 or Windows PowerShell), the .NET 10 SDK (`10.0.x`), and network access for NuGet restore. The script runs the same commands as the Windows CI job, in order:
 
 1. `dotnet --info`
-2. `dotnet restore .\testExtension.sln`
-3. `dotnet build .\testExtension.sln --configuration Release --no-restore`
+2. `dotnet restore .\PlayniteCmdPal.sln`
+3. `dotnet build .\PlayniteCmdPal.sln --configuration Release --no-restore`
 4. `dotnet test .\PlayniteCmdPal.Core.Tests\PlayniteCmdPal.Core.Tests.csproj --configuration Release --no-build --no-restore`
 
 It stops at the first failed command, reports the step and its exit code, and returns that code. The Windows CI and CodeQL workflows install the .NET 10 SDK on `windows-latest` and invoke this same script; CodeQL also initializes its analyzer before running the script. No Visual Studio, Playnite installation, personal game library, or secrets are required for these checks. The test step covers the platform-independent core tests; the script does not deploy the MSIX package or verify Playnite integration.
@@ -57,11 +57,11 @@ Run from a clean Windows checkout using PowerShell. Capture exit codes and compl
 
 ```powershell
 dotnet --info
-dotnet restore .\testExtension.sln
+dotnet restore .\PlayniteCmdPal.sln
 $restoreExit = $LASTEXITCODE
-dotnet build .\testExtension.sln --no-restore -c Debug -p:DefaultLanguage=en-US -p:Platform=x64
+dotnet build .\PlayniteCmdPal.sln --no-restore -c Debug -p:DefaultLanguage=en-US -p:Platform=x64
 $x64Exit = $LASTEXITCODE
-dotnet build .\testExtension.sln --no-restore -c Debug -p:DefaultLanguage=en-US -p:Platform=ARM64
+dotnet build .\PlayniteCmdPal.sln --no-restore -c Debug -p:DefaultLanguage=en-US -p:Platform=ARM64
 $arm64Exit = $LASTEXITCODE
 "restore=$restoreExit x64=$x64Exit arm64=$arm64Exit"
 ```
@@ -69,11 +69,11 @@ $arm64Exit = $LASTEXITCODE
 The explicit `DefaultLanguage=en-US` is retained in the reproduction command as a deterministic diagnostic, although the source manifest now pins the language. Also run the normal build without the property to prove the source fix is sufficient:
 
 ```powershell
-dotnet build .\testExtension.sln --no-restore -c Debug -p:Platform=x64
-dotnet build .\testExtension.sln --no-restore -c Debug -p:Platform=ARM64
+dotnet build .\PlayniteCmdPal.sln --no-restore -c Debug -p:Platform=x64
+dotnet build .\PlayniteCmdPal.sln --no-restore -c Debug -p:Platform=ARM64
 ```
 
-**Observed on the maintainer's Windows machine (SDK 10.0.403, OS build 19044):** `dotnet restore .\testExtension.sln` completed successfully (`RESTORE_EXIT=0`). The x64 and ARM64 builds each succeeded with `-p:DefaultLanguage=en-US` and again without the override; all four build commands returned exit code `0`. Outputs targeted `win-x64` and `win-arm64`, respectively. The earlier `APPX1685` failure with default language `en-AE` was resolved by the explicit `en-US` manifest resource language. These results were run locally by the maintainer.
+**Observed on the maintainer's Windows machine (SDK 10.0.403, OS build 19044):** `dotnet restore .\PlayniteCmdPal.sln` completed successfully (`RESTORE_EXIT=0`). The x64 and ARM64 builds each succeeded with `-p:DefaultLanguage=en-US` and again without the override; all four build commands returned exit code `0`. Outputs targeted `win-x64` and `win-arm64`, respectively. The earlier `APPX1685` failure with default language `en-AE` was resolved by the explicit `en-US` manifest resource language. These results were run locally by the maintainer.
 
 ## GitHub Actions verification (2026-10-29)
 
@@ -134,11 +134,11 @@ if (Test-Path $vswhere) {
 Get-AppxPackage Microsoft.PowerToys | Select-Object Name, Version, Architecture
 
 # Build results
-dotnet restore .\testExtension.sln
+dotnet restore .\PlayniteCmdPal.sln
 $restoreExit = $LASTEXITCODE
-dotnet build .\testExtension.sln --no-restore -c Debug -p:Platform=x64
+dotnet build .\PlayniteCmdPal.sln --no-restore -c Debug -p:Platform=x64
 $x64Exit = $LASTEXITCODE
-dotnet build .\testExtension.sln --no-restore -c Debug -p:Platform=ARM64
+dotnet build .\PlayniteCmdPal.sln --no-restore -c Debug -p:Platform=ARM64
 $arm64Exit = $LASTEXITCODE
 "restore=$restoreExit x64=$x64Exit arm64=$arm64Exit"
 ```
@@ -147,21 +147,21 @@ For Visual Studio, use **Help > About Microsoft Visual Studio** to capture the v
 
 ## Deploy, reload, and debug
 
-1. Open `testExtension.sln` in Visual Studio on Windows.
+1. Open `PlayniteCmdPal.sln` in Visual Studio on Windows.
 2. Select `Debug` and the intended platform (`x64` or `ARM64`).
-3. Use **Build > Deploy testExtension**. A normal build alone does not register/update the MSIX package.
-4. Select the `testExtension (Package)` launch profile, not `testExtension (Unpackaged)`. The package profile has `doNotLaunchApp: true` because Command Palette activates the extension as its out-of-process COM server.
+3. Use **Build > Deploy PlayniteCmdPal**. A normal build alone does not register/update the MSIX package.
+4. Select the `PlayniteCmdPal (Package)` launch profile, not `PlayniteCmdPal (Unpackaged)`. The package profile has `doNotLaunchApp: true` because Command Palette activates the extension as its out-of-process COM server.
 5. Start/enable Command Palette in PowerToys. Run `Reload` and select **Reload Command Palette extensions**.
-6. Find `testExtension` at the bottom of the command list and open it. The untouched template should display `TODO: Implement your extension here`.
+6. Find `PlayniteCmdPal` at the bottom of the command list and open it. The untouched template should display `TODO: Implement your extension here`.
 7. For debugging, start the packaged profile as configured, attach/use the Visual Studio debugger for the extension process as appropriate, and inspect **View > Output** (Debug). Reload the extension after each redeploy to force re-instantiation.
 8. Record the exact PowerToys version, Windows build, Visual Studio version/workloads, actual deploy result, and runtime behavior after this loop has been performed.
 
 ## Template lifecycle and search behavior
 
-- `testExtension` implements `IExtension` and `IDisposable`; `GetProvider(ProviderType.Commands)` returns the single `testExtensionCommandsProvider`. Disposal signals the hosting event.
+- `PlayniteCmdPal` implements `IExtension` and `IDisposable`; `GetProvider(ProviderType.Commands)` returns the single `PlayniteCmdPalCommandsProvider`. Disposal signals the hosting event.
 - The manifest registers the extension as an out-of-process COM server and an app extension named `com.microsoft.commandpalette`. Its CLSID must match the `[Guid]` in the extension class and the manifest registrations.
-- `testExtensionCommandsProvider` derives from `CommandProvider` and returns one cached top-level `CommandItem` from `TopLevelCommands()`. It does not override `FallbackCommands()`.
-- `testExtensionPage` derives from static `ListPage`; `GetItems()` returns the placeholder item. It does not override `UpdateSearchText` and does not implement dynamic filtering. For a search-reactive list, Microsoft documents `DynamicListPage.UpdateSearchText(oldSearch, newSearch)`; after changing backing items, call `RaiseItemsChanged()` so the host fetches the new list.
+- `PlayniteCmdPalCommandsProvider` derives from `CommandProvider` and returns one cached top-level `CommandItem` from `TopLevelCommands()`. It does not override `FallbackCommands()`.
+- `PlayniteCmdPalPage` derives from static `ListPage`; `GetItems()` returns the placeholder item. It does not override `UpdateSearchText` and does not implement dynamic filtering. For a search-reactive list, Microsoft documents `DynamicListPage.UpdateSearchText(oldSearch, newSearch)`; after changing backing items, call `RaiseItemsChanged()` so the host fetches the new list.
 - The official overview says only the Commands provider type is currently supported. Top-level commands come from `TopLevelCommands()`; fallback commands are optional. Context actions are attached to command items and return a `CommandResult` to control dismissal/navigation.
 
 Sources: [create an extension](https://learn.microsoft.com/en-us/windows/powertoys/command-palette/creating-an-extension), [extensibility overview](https://learn.microsoft.com/en-us/windows/powertoys/command-palette/extensibility-overview), [DynamicListPage.UpdateSearchText](https://learn.microsoft.com/en-us/windows/powertoys/command-palette/microsoft-commandpalette-extensions-toolkit/dynamiclistpage_updatesearchtext), [updating a list of commands](https://learn.microsoft.com/en-us/windows/powertoys/command-palette/update-a-list-of-commands).
@@ -186,7 +186,7 @@ Sources: [create an extension](https://learn.microsoft.com/en-us/windows/powerto
 
 - [x] Checked-in solution, project, shared props, package versions, manifest, provider, page, extension lifecycle, and package launch profile inspected.
 - [x] Deterministic manifest language fix applied on the issue branch.
-- [x] Windows restore succeeded after fix (`dotnet restore .\\testExtension.sln`, exit code 0).
+- [x] Windows restore succeeded after fix (`dotnet restore .\\PlayniteCmdPal.sln`, exit code 0).
 - [x] x64 and ARM64 builds succeeded with and without the `DefaultLanguage=en-US` override (all four builds exit code 0).
 - [x] Visual Studio package deployment succeeded; Command Palette extension reload and placeholder-page runtime check succeeded.
 - [x] Windows version recorded as 10.0.19044 and .NET SDK as 10.0.403.

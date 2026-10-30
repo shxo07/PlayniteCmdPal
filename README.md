@@ -22,7 +22,7 @@ Provide a keyboard-first route to a user's unified Playnite library: open Comman
 
 ## Architecture
 
-- C# extension based on the current official Microsoft CmdPal template in `testExtension/`.
+- C# extension based on the current official Microsoft CmdPal template in `PlayniteCmdPal/`.
 - Playnite remains the source of truth for library data and launch configuration.
 - Keep the core game model and ranking logic independent from the CmdPal and Playnite SDKs.
 - Put catalog access behind a read-only adapter. WERD-56 chooses the transport; if no documented external catalog API exists, evaluate a companion Playnite plugin that exports a normalized JSON snapshot.
@@ -30,14 +30,13 @@ Provide a keyboard-first route to a user's unified Playnite library: open Comman
 
 ## Current baseline
 
-- Solution: `testExtension.sln`
-- Generated project: `testExtension/testExtension.csproj`
+- Solution: `PlayniteCmdPal.sln`
+- Generated project: `PlayniteCmdPal/PlayniteCmdPal.csproj`
 - Central package versions: `Directory.Packages.props`
 - Repo-specific CmdPal instructions: `.github/copilot-instructions.md` and `.github/instructions/cmdpal-extension.instructions.md`
-- GitHub Actions: Windows build workflow and CodeQL workflow (both verified green on `main` and pull requests); Dependabot is configured for NuGet and Actions.
-- Do not describe the repository as a working extension until the local deployment and Playnite integration acceptance criteria pass.
-- License not selected yet. Do not assume the repository is licensed for reuse until a license file is added.
-- Repository settings and release governance: [docs/REPO-GOVERNANCE.md](docs/REPO-GOVERNANCE.md).
+- GitHub Actions: Windows build workflow and CodeQL workflow; Dependabot is configured for NuGet and Actions.
+- Previous Windows CI and CodeQL runs succeeded. Checks are rerunning after the project rename; do not describe the repository as a working extension until local deployment and Playnite integration acceptance criteria pass.
+- **License:** MIT for PlayniteCmdPal-authored material; see [LICENSE](LICENSE). Third-party components and assets retain their own license and attribution requirements. See [licensing and release readiness](docs/LICENSING-AND-RELEASE.md).
 
 ## Development and project tracking
 

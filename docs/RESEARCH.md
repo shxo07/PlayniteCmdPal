@@ -5,7 +5,7 @@
 ## Technical findings
 
 - Microsoft documents how to generate, deploy, reload, and develop a Command Palette extension: https://learn.microsoft.com/en-us/windows/powertoys/command-palette/creating-an-extension
-- The current repository contains the generated solution `testExtension.sln` and project `testExtension/testExtension.csproj`; build and local deployment are recorded in WERD-57.
+- The current repository contains the generated solution `PlayniteCmdPal.sln` and project `PlayniteCmdPal/PlayniteCmdPal.csproj`; build and local deployment are recorded in WERD-57.
 - Checked-in target framework is `net10.0-windows10.0.26100.0`; minimum supported Windows platform is `10.0.19041.0`; runtime identifiers are `win-x64;win-arm64`.
 - The central package file pins `Microsoft.CommandPalette.Extensions` to `0.9.260303001`, `Microsoft.Windows.CsWinRT` to `2.2.0`, and `Shmuelie.WinRTServer` to `2.1.1`. Source: https://github.com/werdscopez7347/PlayniteCmdPal/blob/main/Directory.Packages.props
 - Playnite documents `--start <gameId>` and `playnite://playnite/start/<gameId>`, plus `showgame` and `search` URI commands: https://api.playnite.link/docs/manual/advanced/cmdlineArguments.html
