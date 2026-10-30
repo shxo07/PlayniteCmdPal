@@ -13,13 +13,34 @@ Use the generated C# template and its current package versions. The checked-in t
 Never write to Playnite data. Do not use UI automation as the production integration.
 
 ## ADR-004: Use Playnite's documented launch interface
-**Status:** Direction accepted; local smoke test pending  
-Official docs list `--start <gameId>` and `playnite://playnite/start/<gameId>`: https://api.playnite.link/docs/manual/advanced/cmdlineArguments.html. Use the documented URI/CLI after a focused test with a real game ID. The test validates our invocation and error handling, not whether the documented feature exists.
+**Status:** Direction accepted; running- and closed-instance real-game smoke tests passed (user-reported)
 
-## ADR-005: Catalog transport remains open
-**Status:** Open; bounded decision tracked in WERD-56  
-The Playnite SDK documents in-process plugin access to `PlayniteApi.Database.Games`, but that does not itself prove an external-process catalog API. First check for a documented external interface. If none exists, evaluate a companion Playnite plugin that exports a normalized read-only JSON snapshot atomically. Do not default to named-pipe IPC; add it only if evidence shows the snapshot is insufficient.
-Tracking: https://linear.app/werdscopez7347/issue/WERD-56/spike-finalize-the-supported-playnite-catalog-and-launch-integration
+Playnite documents `playnite://playnite/start/<gameId>` and `--start <gameId>`: https://api.playnite.link/docs/manual/advanced/cmdlineArguments.html. Prefer the URI as the primary launch request; use the CLI form only as a fallback if URI dispatch fails in the supported setup. Validate the selected stable ID as a GUID and format it as canonical D form before constructing the URI. Dispatching a URI is not proof the game actually started. The user reports that the URI launched an intended Steam-installed game with a normal installation of Playnite 10.63 already running on 2026-10-29. The user also reports that, with Playnite fully closed, including its system-tray process, the same URI reopened Playnite and then launched the selected game. CLI fallback remains untested. See [the smoke test](TECHNICAL-DESIGN.md#manual-uri-smoke-test).
+
+## ADR-005: Companion-plugin JSON snapshot for catalog access
+**Status:** Accepted; implementation pending
+
+The reviewed official Playnite SDK documentation exposes `IPlayniteAPI.Database` and demonstrates `PlayniteApi.Database.Games` enumeration in an in-process plugin, but does not document a general external-process catalog endpoint. This conclusion is limited to the reviewed documented API; it is not a claim that no third-party or undocumented interface exists.
+
+Use a small companion Playnite plugin to export an allowlisted, normalized JSON snapshot. The out-of-process CmdPal extension reads that file only. Canonical path: `%LOCALAPPDATA%\PlayniteCmdPal\catalog-v1.json`. Keep it in the current user's Local AppData with inherited per-user permissions; neither component needs elevation, and the reader opens the file read-only. Do not export full SDK models, executable paths, configured actions, or private library data into the repository.
+
+Schema v1 contains `schemaVersion`, `generatedAtUtc`, and `games`. Each game has Playnite's stable GUID `id` in canonical D format, required non-empty `name`, required Boolean `isInstalled`, and optional string `source` and `platform`. The GUID is the identity key; title is display/search data only.
+
+Refresh on plugin initialization and `OnLibraryUpdated`, plus debounced game collection-change/update events. Serialize writes and re-enumerate the database for each export. Write a complete temporary file in the same directory, flush and close it, then atomically replace the canonical file (or move it into place on first creation). A failed export must leave the prior snapshot intact.
+
+The reader rejects snapshots larger than 32 MiB or containing more than 100,000 game records. It rejects malformed top-level JSON, missing/invalid required envelope fields, and unsupported schema versions; skips invalid individual records while reporting them; and never replaces last-known-good in-memory data with invalid input. If the file is missing and no cached snapshot exists, report integration unavailable rather than an empty library. An empty `games` array is a valid empty library. If a prior valid snapshot is cached, retain it when a later read is missing or invalid and surface the integration error. A valid snapshot older than 24 hours remains usable but must be marked stale. This ADR is the canonical contract; [Technical Design](TECHNICAL-DESIGN.md) links to it.
+
+**Trade-offs:** A documented external catalog API would avoid a companion plugin, but none was found in the official API reviewed. A snapshot keeps the reader independent of Playnite's internal storage and works without a live connection, at the cost of installing a plugin and potentially stale data. Direct database parsing couples consumers to undocumented storage; UI automation is fragile; IPC adds lifecycle and security complexity without demonstrated need. Revisit the decision if an official external interface or evidence of insufficient snapshot freshness emerges.
+
+Do not write Playnite's database, parse its internal files as the supported contract, automate its UI, start a network listener, or add named-pipe IPC without new evidence that the snapshot is insufficient.
+
+Evidence:
+- [Playnite command-line and URI arguments](https://api.playnite.link/docs/manual/advanced/cmdlineArguments.html)
+- [IPlayniteAPI](https://api.playnite.link/docs/api/Playnite.SDK.IPlayniteAPI.html)
+- [IGameDatabase](https://api.playnite.link/docs/api/Playnite.SDK.IGameDatabase.html)
+- [Playnite library extension tutorial](https://api.playnite.link/docs/tutorials/extensions/library.html)
+- [Playnite URI routing source](https://github.com/JosefNemec/Playnite/blob/master/source/Playnite/App/PlayniteApplication.cs)
+- Tracking: [WERD-56](https://linear.app/werdscopez7347/issue/WERD-56/spike-finalize-the-supported-playnite-catalog-and-launch-integration)
 
 ## ADR-006: Clock/timer extension is separate
 **Status:** Accepted  

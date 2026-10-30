@@ -1,7 +1,7 @@
 # Technical Design
 
-**Status:** Implementation plan; generated CmdPal template build and local deployment validated on Windows. Playnite catalog/launch integration remains to be verified.  
-**Last reviewed:** 2026-10-27.
+**Status:** Implementation plan; generated CmdPal template build and local deployment validated on Windows. The running- and closed-instance launch URI smoke tests passed; catalog integration remains to be implemented and verified.
+**Last reviewed:** 2026-10-30.
 
 ## Current generated-template baseline
 
@@ -49,7 +49,7 @@ References:
 1. **CmdPal presentation:** current-template command provider, search/results, actions, and clear unavailable/error states.
 2. **Core:** game model, query normalization, deterministic ranking, and interfaces. No CmdPal or Playnite SDK types.
 3. **Catalog adapter:** maps the selected read-only catalog transport into the core model.
-4. **Playnite bridge/transport:** decided by WERD-56. Use a documented external catalog contract if one exists; otherwise evaluate a small companion Playnite plugin exporting a normalized JSON snapshot.
+4. **Playnite bridge/transport:** a companion Playnite plugin exports an atomic, normalized JSON snapshot for the extension to read. See [ADR-005](DECISIONS.md#adr-005-companion-plugin-json-snapshot-for-catalog-access) for the contract and its limits.
 
 Playnite remains the source of truth for game identity, library metadata, and launch configuration. The extension must not independently recreate storefront launch logic.
 
@@ -66,7 +66,20 @@ Playnite remains the source of truth for game identity, library metadata, and la
 Playnite documents `--start <gameId>` and `playnite://playnite/start/<gameId>`, as well as `showgame` and `search` URI commands:
 https://api.playnite.link/docs/manual/advanced/cmdlineArguments.html
 
-Use a documented URI/CLI request after one focused smoke test with a real game ID. The purpose of the test is to validate our chosen invocation and failure handling, not to re-prove that documented features exist. Do not launch the game's executable directly when Playnite should apply its configured launch behavior.
+Use the documented URI as the primary launch request; a focused smoke test with a real game ID passed as described below. The purpose of the test is to validate our chosen invocation, not to re-prove that documented features exist. Do not launch the game's executable directly when Playnite should apply its configured launch behavior.
+
+### Manual URI smoke test
+
+1. On a Windows machine with Playnite installed, choose an installed game safe to start and obtain its **Playnite game GUID** (not a store ID) from a trusted Playnite-provided source, such as an existing game shortcut if it exposes the ID. Keep the ID and library details private.
+2. With Playnite running, open PowerShell and enter the real game GUID when prompted:
+   ```powershell
+   $id = [guid](Read-Host 'Playnite game GUID')
+   Start-Process "playnite://playnite/start/$($id.ToString('D'))"
+   ```
+3. Confirm that the intended game actually starts via Playnite. A successful `Start-Process` only shows that Windows accepted the request; it does not establish that the game launched.
+4. Record the Playnite version, install mode, whether Playnite was running, and the observed outcome without committing the game ID or personal library data. If it fails, record the error and distinguish URI registration/dispatch from Playnite or game-launch failures.
+
+**Result (user-reported, 2026-10-29):** With a normal installation of Playnite 10.63 already running, the URI test launched the intended Steam-installed game successfully. The user also reports that, with Playnite fully closed, including its system-tray process, the same URI reopened Playnite and then launched the selected game. These observations cover one local installation and game; they do not establish behavior across all systems or games. CLI fallback remains untested.
 
 ## Catalog integration decision
 
@@ -75,7 +88,7 @@ Playnite's plugin SDK exposes `PlayniteApi.Database.Games` to an in-process plug
 - https://api.playnite.link/docs/api/Playnite.SDK.IGameDatabase.html
 - https://api.playnite.link/docs/tutorials/extensions/library.html
 
-WERD-56 owns the bounded transport decision. If no supported external catalog API is documented, evaluate a companion plugin that writes a normalized, read-only JSON snapshot atomically. Define stable IDs, schema version, snapshot path, refresh behavior, stale-data handling, and malformed/missing-file behavior. Do not add named pipes or another IPC protocol unless the snapshot design proves insufficient.
+WERD-56 selects a companion plugin that exports an atomic, normalized JSON snapshot. [ADR-005](DECISIONS.md#adr-005-companion-plugin-json-snapshot-for-catalog-access) is the canonical adapter contract: it specifies identity, schema, path, refresh, size limits, stale data, and error handling. The writer and reader are future implementation work; event availability and runtime behavior still need validation against the supported Playnite version. Do not add named pipes or another IPC protocol without evidence that the snapshot design is insufficient.
 
 Rejected for production:
 - Direct database writes.
@@ -92,7 +105,7 @@ Keep the generated project intact while the core boundary is introduced. Propose
 - Unit/contract tests independent of Playnite.
 - Manual local smoke tests for the actual Playnite launch.
 
-Do not create a companion bridge project until WERD-56 establishes that it is needed.
+The companion bridge is selected, but implementing it is outside the WERD-56 research spike.
 
 ## Security and reliability
 
@@ -104,6 +117,8 @@ Do not create a companion bridge project until WERD-56 establishes that it is ne
 - Keep disk/network/process operations off the CmdPal UI thread.
 
 ## Testing and CI
+
+For PR [#10](https://github.com/werdscopez7347/PlayniteCmdPal/pull/10), the Windows CI and CodeQL pull-request runs for commit `fee56f4` reported `action_required`, not pass or fail. These are fork-origin runs; a repository maintainer may need to approve workflows under the repository's fork-approval settings. The precise cause has not been confirmed. Obtain approval or otherwise arrange for both checks to run and review their results before merging; do not treat `action_required` as a successful check.
 
 - Core tests: ranking order, case normalization, duplicates, tie-breaks, empty query/catalog.
 - Adapter/contract tests: valid, missing, malformed, stale, and empty catalog data.
@@ -122,7 +137,7 @@ See [DEVELOPER-SETUP.md](DEVELOPER-SETUP.md). Key loop:
 
 ## Open decisions
 
-- Catalog transport and companion-plugin lifecycle.
+- Validate the selected companion-plugin lifecycle and refresh events during implementation.
 - Tested minimum PowerToys/Visual Studio/.NET SDK versions.
 - Optional alias/fuzzy matching beyond title matching.
 - Packaging and gallery submission route.
