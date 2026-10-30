@@ -34,7 +34,7 @@ public sealed class PlayniteCatalogAdapterTests : IDisposable
     }
 
     [Fact]
-    public async TaskCanceledReadDoesNotStartOrJoinFileWork()
+    public async Task CanceledReadDoesNotStartOrJoinFileWork()
     {
         var adapter = new PlayniteCatalogAdapter(_path, _time);
         using var cancellation = new CancellationTokenSource();

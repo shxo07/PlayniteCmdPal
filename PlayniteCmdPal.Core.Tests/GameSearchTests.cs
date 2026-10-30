@@ -101,8 +101,11 @@ public sealed class GameSearchTests
 
         var results = GameSearch.Search(catalog, "same title");
 
-        Assert.Equal(new[] { "pc", "switch" }, results.Select(game => game.GameId));
-        Assert.Equal(new[] { "PC", "Switch" }, results.Select(game => game.Platform));
+        Assert.Equal(2, results.Count);
+        Assert.Equal("pc", results[0].GameId);
+        Assert.Equal("switch", results[1].GameId);
+        Assert.Equal("PC", results[0].Platform);
+        Assert.Equal("Switch", results[1].Platform);
     }
 
     [Fact]

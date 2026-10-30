@@ -34,7 +34,7 @@ function Invoke-DotNetStep {
     & dotnet @Arguments
     $exitCode = $LASTEXITCODE
     if ($exitCode -ne 0) {
-        [Console]::Error.WriteLine("ERROR: {0} failed with exit code {1}." -f $Name, $exitCode)
+        [Console]::Error.WriteLine("ERROR: $Name failed with exit code $exitCode.")
         exit $exitCode
     }
 }
