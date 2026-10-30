@@ -6,7 +6,7 @@ param ()
 
 $ErrorActionPreference = 'Continue'
 $manifestId = 'PlayniteCmdPalBridge_9E4CF37F-EF29-495F-9E83-4EA1A389ABD8'
-$logPattern = 'PlayniteCmdPal|PlayniteCmdPalBridge|9E4CF37F|Failed to load plugin|Loaded plugin|catalog export|System\.Text\.Json|System\.Memory|System\.Runtime\.CompilerServices\.Unsafe|Microsoft\.Bcl\.AsyncInterfaces|System\.Threading\.Tasks\.Extensions|FileNotFoundException|FileLoadException|BadImageFormatException|TypeLoadException|MissingMethodException'
+$logPattern = 'PlayniteCmdPal|9E4CF37F|Failed to load plugin|Loaded plugin|Opening db |Failed to open library database|Failed to execute OnApplicationStarted|catalog export|System\.Text\.Json|System\.Memory|System\.Runtime\.CompilerServices\.Unsafe|Microsoft\.Bcl\.AsyncInterfaces|System\.Threading\.Tasks\.Extensions|System\.IO\.Pipelines|System\.Text\.Encodings\.Web|FileNotFoundException|FileLoadException|BadImageFormatException|TypeLoadException|MissingMethodException'
 
 $roots = New-Object 'System.Collections.Generic.List[string]'
 
