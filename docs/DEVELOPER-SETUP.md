@@ -1,6 +1,6 @@
 # Developer Setup
 
-**Status (2026-10-27):** Validated on the maintainer's Windows machine with .NET SDK 10.0.403 and Windows 10.0.19044. Restore succeeded; x64 and ARM64 builds succeeded both with and without `-p:DefaultLanguage=en-US`; Visual Studio package deployment succeeded; the extension was reloaded in Command Palette and its placeholder page was confirmed. The manifest explicitly declares `en-US` to prevent the earlier locale-dependent `APPX1685` failure. Exact Visual Studio version/workloads and PowerToys version were not captured. Do not regenerate the template.
+**Status (2026-10-29):** The maintainer's Windows validation with .NET SDK 10.0.403 and Windows 10.0.19044 succeeded: restore, x64/ARM64 builds with and without `-p:DefaultLanguage=en-US`, Visual Studio package deployment, and a Command Palette placeholder-page smoke test. GitHub-hosted Windows CI and CodeQL have successful runs on `main` and pull requests (details below). The shared `scripts/ci.ps1` entry point cannot be run locally in this Agent sandbox: it is Linux and has no `dotnet`, `pwsh`, or Windows PowerShell executable. Do not regenerate the template.
 
 ## Checked-in toolchain
 
@@ -27,6 +27,23 @@ Source of truth: `testExtension.sln`, `testExtension/testExtension.csproj`, `Dir
 - Exact SDK reported by maintainer: .NET SDK `10.0.403`. The repository does not pin an SDK with `global.json`.
 - Visual Studio: solution metadata records Visual Studio `17.13.35507.96` in the generating environment, not a verified minimum. Use Visual Studio with the .NET desktop/.NET 10 SDK and Windows application development tooling required for MSIX/Windows SDK packaging. Exact installed workloads/components still need recording from the machine that successfully builds.
 - Runtime requirement: Windows with Command Palette available in a current PowerToys installation, Command Palette enabled/running, and Windows Developer Mode enabled for local deployment as directed by Microsoft.
+
+## Shared local CI checks
+
+Run the shared check script from the repository root in PowerShell:
+
+```powershell
+.\scripts\ci.ps1
+```
+
+Prerequisites: Windows, PowerShell 5.1 or later (`pwsh` 7 or Windows PowerShell), the .NET 10 SDK (`10.0.x`), and network access for NuGet restore. The script runs the same commands as the Windows CI job, in order:
+
+1. `dotnet --info`
+2. `dotnet restore .\testExtension.sln`
+3. `dotnet build .\testExtension.sln --configuration Release --no-restore`
+4. `dotnet test .\PlayniteCmdPal.Core.Tests\PlayniteCmdPal.Core.Tests.csproj --configuration Release --no-build --no-restore`
+
+It stops at the first failed command, reports the step and its exit code, and returns that code. The Windows CI and CodeQL workflows install the .NET 10 SDK on `windows-latest` and invoke this same script; CodeQL also initializes its analyzer before running the script. No Visual Studio, Playnite installation, personal game library, or secrets are required for these checks. The test step covers the platform-independent core tests; the script does not deploy the MSIX package or verify Playnite integration.
 
 ## Manifest language fix
 
@@ -58,22 +75,33 @@ dotnet build .\testExtension.sln --no-restore -c Debug -p:Platform=ARM64
 
 **Observed on the maintainer's Windows machine (SDK 10.0.403, OS build 19044):** `dotnet restore .\testExtension.sln` completed successfully (`RESTORE_EXIT=0`). The x64 and ARM64 builds each succeeded with `-p:DefaultLanguage=en-US` and again without the override; all four build commands returned exit code `0`. Outputs targeted `win-x64` and `win-arm64`, respectively. The earlier `APPX1685` failure with default language `en-AE` was resolved by the explicit `en-US` manifest resource language. These results were run locally by the maintainer.
 
-## Windows CI results and warnings (2026-10-27)
+## GitHub Actions verification (2026-10-29)
 
-The latest observed PR workflow run before this documentation update was Windows CI run [40514661047](https://github.com/werdscopez7347/PlayniteCmdPal/actions/runs/40514661047), using .NET SDK 10.0.403 on a GitHub-hosted Windows x64 runner. The workflow ran:
+The GitHub run records were inspected, including actual job conclusions:
 
-```powershell
-dotnet restore .\testExtension.sln
-dotnet build .\testExtension.sln --configuration Release --no-restore
-```
+- **Windows CI, default-branch push:** [run 40351115311](https://github.com/werdscopez7347/PlayniteCmdPal/actions/runs/40351115311) on `main` completed successfully (restore and Release build).
+- **Windows CI, pull request:** [run 40833436815](https://github.com/werdscopez7347/PlayniteCmdPal/actions/runs/40833436815) completed successfully, including restore, Release build, and the core search test.
+- **Windows CI, WERD-64 implementation PR:** [run 40835007856](https://github.com/werdscopez7347/PlayniteCmdPal/actions/runs/40835007856) completed successfully on a GitHub-hosted Windows runner; the shared-script step passed.
+- **CodeQL, default-branch push:** [run 40351115315](https://github.com/werdscopez7347/PlayniteCmdPal/actions/runs/40351115315) completed successfully.
+- **CodeQL, scheduled main run:** [run 40490182715](https://github.com/werdscopez7347/PlayniteCmdPal/actions/runs/40490182715) completed successfully.
+- **CodeQL, pull request:** [run 40833436859](https://github.com/werdscopez7347/PlayniteCmdPal/actions/runs/40833436859) completed successfully.
+- **CodeQL, WERD-64 implementation PR:** [run 40835007751](https://github.com/werdscopez7347/PlayniteCmdPal/actions/runs/40835007751) completed successfully; both the shared-script and analysis steps passed.
 
-Restore succeeded. The Release build succeeded with exit code 0 and 0 errors. The build output targeted `win-arm64` and reported three warnings: one `APPX1707` and two `IL2104` warnings (the SDK/WinRT reference assemblies `Microsoft.Windows.SDK.NET` and `WinRT.Runtime` each reported trim warnings). The workflow is a build check, not a test suite; this solution currently contains no test project, so no unit tests were run.
+The main/earlier PR runs establish the baseline workflow status. The WERD-64 implementation PR runs executed the new shared script on Windows and completed restore, Release build, core search tests, and CodeQL analysis successfully. This verifies the script in GitHub-hosted Windows CI; the separate local Windows invocation remains unverified because the Agent sandbox is Linux without PowerShell or the .NET SDK. A default-branch run of the new script will occur after merge and remains a follow-up.
+
+## Dependabot verification (2026-10-29)
+
+`.github/dependabot.yml` requests weekly NuGet and GitHub Actions version updates. GitHub PR history confirms that Actions updates are being recognized: Dependabot PRs [#2](https://github.com/werdscopez7347/PlayniteCmdPal/pull/2) (`github/codeql-action`) and [#3](https://github.com/werdscopez7347/PlayniteCmdPal/pull/3) (`actions/setup-dotnet`) were merged; PR #1 for `actions/checkout` was closed. No NuGet version-update PR is visible in the available PR history, so recognition of this repository's Central Package Management file (`Directory.Packages.props`) remains unverified. The Dependabot alerts API returned 403 because alerts are disabled; that is separate from version-update parsing and does not resolve the NuGet question. Do not claim NuGet CPM is verified until a NuGet update PR or relevant Dependabot run evidence is available.
+
+## Windows build warning notes (captured 2026-10-27)
+
+Windows CI run [40514661047](https://github.com/werdscopez7347/PlayniteCmdPal/actions/runs/40514661047) used .NET SDK 10.0.403 on a GitHub-hosted Windows x64 runner. Restore and Release build succeeded with exit code 0. The build targeted `win-arm64` and reported three warnings: one `APPX1707` and two `IL2104` warnings. At the time, the solution had no test project; core search tests have since been added and are now run by Windows CI.
 
 - **APPX1707:** MSIX packaging targets report that the SDK package's `Microsoft.CommandPalette.Extensions.winmd` reference has no implementation file metadata. This is emitted by the generated template/package combination during packaging validation. The build still succeeds, and the extension was manually deployed and loaded according to the maintainer's report. Do not invent an implementation file or add `Implementation` metadata for a contract WinMD just to silence the warning; change this only if the SDK/template's documented packaging guidance establishes a required mapping.
 - **IL2104:** the trimmer reports warnings in `Microsoft.Windows.SDK.NET` and `WinRT.Runtime` reference assemblies during the Release build. These are dependency/reference-assembly trim-analysis warnings, not build errors. Keep them visible; investigate separately if publishing/trimming becomes part of the release acceptance criteria.
-- **NETSDK1198:** this warning was not present in the captured output for the latest Windows CI run. Do not state that it was reproduced or fixed on CI. If it appears locally, capture the exact command, selected `Platform`, and the referenced `Properties\PublishProfiles\win-*.pubxml` file name; the project sets `PublishProfile` from `$(Platform)`, so diagnose the profile/platform mismatch before changing packaging settings.
+- **NETSDK1198:** this warning was not present in the captured output for run 40514661047. Do not state that it was reproduced or fixed on CI. If it appears locally, capture the exact command, selected `Platform`, and the referenced `Properties\PublishProfiles\win-*.pubxml` file name; the project sets `PublishProfile` from `$(Platform)`, so diagnose the profile/platform mismatch before changing packaging settings.
 
-The source manifest language fix was also validated by CI without a command-line `DefaultLanguage` override: the workflow's restore and Release build use only the checked-in manifest, which now explicitly declares `en-US`. The maintainer separately reported successful local restore and x64/ARM64 Debug builds both with and without the override. CI validates the default solution configuration used by that workflow; it does not replace the maintainer's architecture-specific local builds or the manual Visual Studio deployment check.
+The source manifest language fix was validated by that CI build without a command-line `DefaultLanguage` override: it used the checked-in manifest, which explicitly declares `en-US`. The maintainer separately reported successful local restore and x64/ARM64 Debug builds both with and without the override. CI builds the default solution configuration; it does not replace architecture-specific local builds or the manual Visual Studio deployment check.
 
 ## Contributor environment reporting
 
