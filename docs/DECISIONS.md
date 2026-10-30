@@ -5,8 +5,8 @@
 Use Playnite's unified library and configured launch behavior rather than integrating each storefront independently.
 
 ## ADR-002: C# and official CmdPal template
-**Status:** Accepted; build/deploy validation in progress  
-Use the generated C# template and its current package versions. The checked-in target framework is `net10.0-windows10.0.26100.0`; the central package version for `Microsoft.CommandPalette.Extensions` is `0.9.260303001`. Record clean-build and local-deploy results in WERD-57 before calling the setup verified.
+**Status:** Accepted; generated-template validation completed (WERD-57)  
+Use the generated C# template and its current package versions. The checked-in target framework is `net10.0-windows10.0.26100.0`; the central package version for `Microsoft.CommandPalette.Extensions` is `0.9.260303001`. The template build/deployment validation tracked by WERD-57 is complete. This validates the extension scaffold and local development baseline, not the finished Playnite catalog/search/launch integration or release packaging.
 
 ## ADR-003: No direct database writes or UI automation
 **Status:** Accepted  
