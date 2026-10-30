@@ -13,9 +13,9 @@ Use the generated C# template and its current package versions. The checked-in t
 Never write to Playnite data. Do not use UI automation as the production integration.
 
 ## ADR-004: Use Playnite's documented launch interface
-**Status:** Direction accepted; running-instance real-game smoke test passed (user-reported)
+**Status:** Direction accepted; running- and closed-instance real-game smoke tests passed (user-reported)
 
-Playnite documents `playnite://playnite/start/<gameId>` and `--start <gameId>`: https://api.playnite.link/docs/manual/advanced/cmdlineArguments.html. Prefer the URI as the primary launch request; use the CLI form only as a fallback if URI dispatch fails in the supported setup. Validate the selected stable ID as a GUID and format it as canonical D form before constructing the URI. Dispatching a URI is not proof the game actually started. The user reports that the URI launched an intended Steam-installed game with a normal installation of Playnite 10.63 already running on 2026-10-29. Closed-instance and CLI behavior remain untested. See [the smoke test](TECHNICAL-DESIGN.md#manual-uri-smoke-test).
+Playnite documents `playnite://playnite/start/<gameId>` and `--start <gameId>`: https://api.playnite.link/docs/manual/advanced/cmdlineArguments.html. Prefer the URI as the primary launch request; use the CLI form only as a fallback if URI dispatch fails in the supported setup. Validate the selected stable ID as a GUID and format it as canonical D form before constructing the URI. Dispatching a URI is not proof the game actually started. The user reports that the URI launched an intended Steam-installed game with a normal installation of Playnite 10.63 already running on 2026-10-29. The user also reports that, with Playnite fully closed, including its system-tray process, the same URI reopened Playnite and then launched the selected game. CLI fallback remains untested. See [the smoke test](TECHNICAL-DESIGN.md#manual-uri-smoke-test).
 
 ## ADR-005: Companion-plugin JSON snapshot for catalog access
 **Status:** Accepted; implementation pending

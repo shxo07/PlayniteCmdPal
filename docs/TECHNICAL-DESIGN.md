@@ -1,6 +1,6 @@
 # Technical Design
 
-**Status:** Implementation plan; generated CmdPal template build and local deployment validated on Windows. The running-instance launch URI smoke test passed; catalog integration remains to be implemented and verified.
+**Status:** Implementation plan; generated CmdPal template build and local deployment validated on Windows. The running- and closed-instance launch URI smoke tests passed; catalog integration remains to be implemented and verified.
 **Last reviewed:** 2026-10-27.
 
 ## Current generated-template baseline
@@ -79,7 +79,7 @@ Use the documented URI as the primary launch request; a focused smoke test with 
 3. Confirm that the intended game actually starts via Playnite. A successful `Start-Process` only shows that Windows accepted the request; it does not establish that the game launched.
 4. Record the Playnite version, install mode, whether Playnite was running, and the observed outcome without committing the game ID or personal library data. If it fails, record the error and distinguish URI registration/dispatch from Playnite or game-launch failures.
 
-**Result (user-reported, 2026-10-29):** With a normal installation of Playnite 10.63 already running, the URI test launched the intended Steam-installed game successfully. A closed-Playnite test and CLI fallback are separate follow-ups, not implied by this result.
+**Result (user-reported, 2026-10-29):** With a normal installation of Playnite 10.63 already running, the URI test launched the intended Steam-installed game successfully. The user also reports that, with Playnite fully closed, including its system-tray process, the same URI reopened Playnite and then launched the selected game. These observations cover one local installation and game; they do not establish behavior across all systems or games. CLI fallback remains untested.
 
 ## Catalog integration decision
 
@@ -117,6 +117,8 @@ The companion bridge is selected, but implementing it is outside the WERD-56 res
 - Keep disk/network/process operations off the CmdPal UI thread.
 
 ## Testing and CI
+
+For PR [#10](https://github.com/werdscopez7347/PlayniteCmdPal/pull/10), the Windows CI and CodeQL pull-request runs for commit `fee56f4` reported `action_required`, not pass or fail. These are fork-origin runs; a repository maintainer may need to approve workflows under the repository's fork-approval settings. The precise cause has not been confirmed. Obtain approval or otherwise arrange for both checks to run and review their results before merging; do not treat `action_required` as a successful check.
 
 - Core tests: ranking order, case normalization, duplicates, tie-breaks, empty query/catalog.
 - Adapter/contract tests: valid, missing, malformed, stale, and empty catalog data.

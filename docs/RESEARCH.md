@@ -17,7 +17,7 @@
 
 ## Current architecture recommendation
 
-Keep Playnite authoritative. Use its documented launch-by-ID URI; a running-instance real-game smoke test has been reported successful. The selected catalog transport is a companion plugin writing a normalized read-only JSON snapshot; do not use direct database writes, UI automation, or IPC.
+Keep Playnite authoritative. Use its documented launch-by-ID URI; real-game smoke tests with Playnite running and fully closed have been reported successful. The selected catalog transport is a companion plugin writing a normalized read-only JSON snapshot; do not use direct database writes, UI automation, or IPC.
 
 The launch mechanism and catalog transport decision are documented. The snapshot writer and reader remain to be implemented and tested.
 
@@ -30,7 +30,7 @@ Validate demand through a working demo and community feedback; do not equate gal
 ## Remaining implementation checks
 
 - Build and deploy the checked-in template and record actual installed SDK/Visual Studio requirements.
-- Test launch behavior with Playnite closed and investigate CLI fallback separately if needed; neither is covered by the running-instance smoke test.
+- Investigate CLI fallback separately if needed; it was not covered by the URI smoke tests.
 - Implement the selected snapshot writer and reader against the documented contract.
 - Confirm provider refresh behavior from the current generated code and current Microsoft docs.
 - Check current packaging/gallery requirements before release.
@@ -59,4 +59,4 @@ Refresh on plugin initialization and `OnLibraryUpdated`; also subscribe to game 
 
 Playnite documents --start <gameId> and playnite://playnite/start/<gameId>. Use the URI as primary launch path, validate the ID as a GUID, and construct playnite://playnite/start/{id:D}. URI dispatch is not proof the game started. References: https://api.playnite.link/docs/manual/advanced/cmdlineArguments.html ; https://api.playnite.link/docs/api/Playnite.SDK.IPlayniteAPI.html ; https://api.playnite.link/docs/tutorials/extensions/library.html ; https://github.com/JosefNemec/Playnite/blob/master/source/Playnite/App/PlayniteApplication.cs
 
-Manual check (user-reported, 2026-10-29): the documented URI launched the intended Steam-installed game on a normal installation of Playnite 10.63 with Playnite already running. This does not verify launch with Playnite closed or CLI fallback. Steps and scope are in docs/TECHNICAL-DESIGN.md.
+Manual check (user-reported, 2026-10-29): the documented URI launched the intended Steam-installed game on a normal installation of Playnite 10.63 with Playnite already running. The user also reports that, with Playnite fully closed, including its system-tray process, the same URI reopened Playnite and then launched the selected game. CLI fallback was not tested. Steps and scope are in docs/TECHNICAL-DESIGN.md.
