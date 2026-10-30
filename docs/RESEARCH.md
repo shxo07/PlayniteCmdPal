@@ -19,7 +19,7 @@
 
 Keep Playnite authoritative. Use its documented launch-by-ID URI; real-game smoke tests with Playnite running and fully closed have been reported successful. The selected catalog transport is a companion plugin writing a normalized read-only JSON snapshot; do not use direct database writes, UI automation, or IPC.
 
-The launch mechanism and catalog transport decision are documented. The snapshot writer and reader remain to be implemented and tested.
+The launch mechanism and catalog transport decision are documented. WERD-60 adds the snapshot writer, reader, adapter cache, and companion plugin on the working branch; Windows build/test and real-library verification remain pending. See [Catalog Bridge](CATALOG-BRIDGE.md).
 
 ## Market
 
@@ -29,9 +29,9 @@ Validate demand through a working demo and community feedback; do not equate gal
 
 ## Remaining implementation checks
 
-- Build and deploy the checked-in template and record actual installed SDK/Visual Studio requirements.
+- Record exact installed Visual Studio/PowerToys versions from the successful template validation; the template build/deploy itself was already reported successful.
 - Investigate CLI fallback separately if needed; it was not covered by the URI smoke tests.
-- Implement the selected snapshot writer and reader against the documented contract.
+- Build and test the WERD-60 snapshot writer/reader on Windows, then verify the companion plugin against a real Playnite library without committing private exports.
 - Confirm provider refresh behavior from the current generated code and current Microsoft docs.
 - Check current packaging/gallery requirements before release.
 
@@ -60,3 +60,11 @@ Refresh on plugin initialization and `OnLibraryUpdated`; also subscribe to game 
 Playnite documents --start <gameId> and playnite://playnite/start/<gameId>. Use the URI as primary launch path, validate the ID as a GUID, and construct playnite://playnite/start/{id:D}. URI dispatch is not proof the game started. References: https://api.playnite.link/docs/manual/advanced/cmdlineArguments.html ; https://api.playnite.link/docs/api/Playnite.SDK.IPlayniteAPI.html ; https://api.playnite.link/docs/tutorials/extensions/library.html ; https://github.com/JosefNemec/Playnite/blob/master/source/Playnite/App/PlayniteApplication.cs
 
 Manual check (user-reported, 2026-10-29): the documented URI launched the intended Steam-installed game on a normal installation of Playnite 10.63 with Playnite already running. The user also reports that, with Playnite fully closed, including its system-tray process, the same URI reopened Playnite and then launched the selected game. CLI fallback was not tested. Steps and scope are in docs/TECHNICAL-DESIGN.md.
+
+## WERD-60 implementation notes (2026-10-30)
+
+The implementation follows ADR-005 rather than inventing a new transport. Official Playnite 10.63 source was reviewed for the SDK surface used by the companion plugin: `GenericPlugin` lifecycle methods, `IPlayniteAPI.Database.Games`, `IGameDatabase.IsOpen/DatabaseOpened`, `IItemCollection<T>.ItemCollectionChanged/ItemUpdated`, `ItemUpdateEvent<T>.OldData/NewData`, `Game.IsInstalled/SourceId/PlatformIds`, `IMainViewAPI.UIDispatcher`, and extension manifest fields. Source: https://github.com/JosefNemec/Playnite/tree/10.63/source/PlayniteSDK and https://github.com/JosefNemec/Playnite/tree/10.63/source/Playnite.
+
+The shared snapshot project targets `netstandard2.0` so the `net462` Playnite plugin and `net10.0` adapter can share the same contract without putting Playnite SDK types into core. The adapter uses a 30-second revalidation interval, explicit refresh, coalesced concurrent reads, last-known-good retention, and a 24-hour stale threshold. The plugin debounces exports by 750 ms, projects on Playnite's UI dispatcher, and performs serialization/flush/atomic replacement in the background. These are implementation choices documented in [Catalog Bridge](CATALOG-BRIDGE.md), not claims of runtime verification.
+
+Validation status: C#/PowerShell syntax and project XML/solution consistency checks were run in the Linux workspace; the .NET build and xUnit tests could not be run because no .NET SDK is installed. No real Playnite library was read. The manual checklist in [Catalog Bridge](CATALOG-BRIDGE.md) must be completed before claiming the real-library acceptance criterion.

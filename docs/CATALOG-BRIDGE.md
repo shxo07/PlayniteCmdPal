@@ -1,0 +1,83 @@
+# Playnite Catalog Bridge
+
+This document describes the WERD-60 implementation of the snapshot transport accepted in [ADR-005](DECISIONS.md#adr-005-companion-plugin-json-snapshot-for-catalog-access). It does not change the Command Palette search UI; WERD-61 consumes `IReadOnlyPlayniteCatalog`.
+
+## Components
+
+- `PlayniteCmdPal.Snapshot` (`netstandard2.0`): shared v1 contract, strict parser, allowlisted serializer, atomic file publisher, and debounced export coordinator. It has no Playnite or CmdPal SDK dependency.
+- `PlayniteCmdPal.Playnite` (`net10.0`): read-only adapter/cache mapping snapshots to `PlayniteCmdPal.Core.GameEntry`.
+- `PlayniteCmdPal.PlaynitePlugin` (`net462`): companion Playnite generic plugin that projects `PlayniteApi.Database.Games` and publishes the snapshot.
+- `PlayniteCmdPal.Playnite.Tests`: synthetic-file adapter/protocol tests. They do not require Playnite, PowerToys, or a personal library; CI runs them on Windows with the rest of the solution.
+
+The canonical file is `%LOCALAPPDATA%\PlayniteCmdPal\catalog-v1.json`. The plugin creates the directory with inherited per-user permissions. The adapter opens the file read-only with `FileShare.ReadWrite | FileShare.Delete`; it never creates, repairs, or deletes the snapshot.
+
+## Schema v1
+
+```json
+{
+  "schemaVersion": 1,
+  "generatedAtUtc": "2026-10-30T00:00:00.0000000Z",
+  "games": [
+    {
+      "id": "11111111-1111-4111-8111-111111111111",
+      "name": "Example",
+      "isInstalled": true,
+      "source": "Steam",
+      "platform": "PC"
+    }
+  ]
+}
+```
+
+`id` is Playnite's stable GUID in lowercase canonical D format and is the only identity key. Empty GUIDs, non-canonical IDs, blank names, missing required fields, wrong field types, duplicate JSON properties, and unknown v1 fields are invalid. `source` and `platform` are optional strings or null; the plugin joins multiple platform names with `, ` in ordinal order. No executable paths, launch actions, icons, or full SDK models are exported.
+
+The parser rejects input over 32 MiB, JSON deeper than 16 levels, unsupported schema versions, malformed envelopes, and arrays over 100,000 records. Invalid individual records and later duplicate IDs are skipped and counted; the first valid record for an ID wins. An empty `games` array is a valid empty library.
+
+## Publication and refresh
+
+The plugin requests an export on application start, database open, `OnLibraryUpdated`, game install/uninstall lifecycle events, game collection changes, relevant game updates, and source/platform metadata changes. Requests are debounced by 750 ms and serialized. A request arriving during an export schedules one follow-up export, so the final state is not lost. Each export re-enumerates the database; it does not patch an old snapshot from event payloads.
+
+Projection runs on Playnite's `IMainViewAPI.UIDispatcher` because SDK database objects are affinity-sensitive. Serialization, flush, and file replacement run in the background. The publisher writes a complete same-directory temporary file, flushes it to disk, closes it, then uses `File.Replace` (or `File.Move` on first creation). A failed or canceled export leaves the previous snapshot intact and removes only its own temporary file. If the library exceeds 100,000 records, the plugin refuses to publish a truncated catalog.
+
+## Adapter cache policy
+
+- First `GetAsync` loads the file. Later `GetAsync` calls revalidate at most once per 30 seconds; between attempts they return the current in-memory result without file I/O.
+- `RefreshAsync` bypasses the interval and is the explicit reconnect/retry trigger. Concurrent callers share one in-flight read.
+- A valid snapshot replaces the cache, including a valid empty library.
+- A missing, unreadable, malformed, unsupported, oversized, or over-limit later file never replaces last-known-good data. The result remains available if a valid snapshot was previously loaded and carries the current `Issue`.
+- With no previous valid snapshot, missing/malformed input is `IsAvailable == false`, not an empty library.
+- A snapshot at least 24 hours old is `IsStale == true` but remains searchable. Staleness is recomputed from `generatedAtUtc` on every result, including cached results.
+- `SkippedRecordCount` reports invalid records skipped from the last valid snapshot. `IsFromCache` distinguishes cached/retained results from a fresh successful read.
+- All adapter file I/O and parsing are asynchronous/background work. Pre-canceled calls return a canceled task; canceling one caller does not cancel a shared in-flight read. Callers must still avoid blocking on the task from the CmdPal UI thread.
+
+There is no file watcher, network listener, IPC, or Playnite database parsing. Reconnection is an explicit refresh or the next interval-based `GetAsync` after the bridge publishes a file.
+
+## Build and package the plugin
+
+On Windows with the repository's .NET 10 SDK and .NET Framework 4.6.2 targeting pack:
+
+```powershell
+dotnet build .\testExtension.sln -c Release
+dotnet test .\PlayniteCmdPal.Playnite.Tests\PlayniteCmdPal.Playnite.Tests.csproj -c Release --no-build
+.\scripts\package-playnite-plugin.ps1
+```
+
+The script creates `artifacts/playnite-plugin/PlayniteCmdPalBridge.pext`. Install it locally through Playnite's add-on install-from-file flow, then restart/reload Playnite. Build output and `.pext` files are not committed.
+
+## Validation status
+
+The Linux workspace ran Tree-sitter syntax checks over the C#/PowerShell files and XML/solution consistency checks. It could not run `dotnet build`, `dotnet test`, or `scripts/ci.ps1` because no .NET SDK/PowerShell toolchain is installed. Those Windows checks and the real-library checklist below remain required; syntax checks are not compilation or runtime evidence.
+
+## Manual Playnite verification still required
+
+Automated tests use synthetic snapshots only. Before closing WERD-60's real-library acceptance criterion:
+
+1. Install the packaged bridge in Playnite 10.63 or the supported version being tested.
+2. Start Playnite with a small test library containing duplicate display names and at least one installed and one uninstalled game.
+3. Confirm `%LOCALAPPDATA%\PlayniteCmdPal\catalog-v1.json` appears and contains only the allowlisted fields.
+4. Read it through `PlayniteCatalogAdapter.GetAsync` in a small Windows harness or the WERD-61 page; confirm stable IDs, names, source/platform, and install state match Playnite.
+5. Add/rename/remove a game and change source/platform metadata; confirm the snapshot refreshes after the debounce and that no partial file is observable.
+6. Close Playnite, delete the snapshot, and confirm the adapter reports unavailable on a fresh process. Restart Playnite and confirm explicit refresh reconnects.
+7. Record the Playnite/Windows versions and observed outcomes without committing game IDs, titles, or library exports.
+
+The existing launch-by-ID URI smoke test is separate evidence from WERD-56; it does not verify this catalog bridge.

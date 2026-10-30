@@ -1,0 +1,9 @@
+Id: PlayniteCmdPalBridge_9E4CF37F-EF29-495F-9E83-4EA1A389ABD8
+Name: PlayniteCmdPal Catalog Bridge
+Author: PlayniteCmdPal contributors
+Version: 0.1.0
+Module: PlayniteCmdPal.PlaynitePlugin.dll
+Type: GenericPlugin
+Links:
+  - Name: Source
+    Url: https://github.com/shxo07/PlayniteCmdPal

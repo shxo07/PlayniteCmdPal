@@ -91,6 +91,34 @@ public sealed class GameSearchTests
     }
 
     [Fact]
+    public void UsesPlatformAsAnOrdinalTieBreakWithoutChangingIdentity()
+    {
+        var catalog = new[]
+        {
+            new GameEntry("switch", "Same Title", Platform: "Switch"),
+            new GameEntry("pc", "Same Title", Platform: "PC"),
+        };
+
+        var results = GameSearch.Search(catalog, "same title");
+
+        Assert.Equal(new[] { "pc", "switch" }, results.Select(game => game.GameId));
+        Assert.Equal(new[] { "PC", "Switch" }, results.Select(game => game.Platform));
+    }
+
+    [Fact]
+    public void ChoosesDeterministicPlatformForDuplicateGameIds()
+    {
+        var entries = new[]
+        {
+            new GameEntry("same-id", "Same Title", Platform: "Switch"),
+            new GameEntry("same-id", "Same Title", Platform: "PC"),
+        };
+
+        Assert.Equal("PC", Assert.Single(GameSearch.Search(entries, "same title")).Platform);
+        Assert.Equal("PC", Assert.Single(GameSearch.Search(entries.Reverse(), "same title")).Platform);
+    }
+
+    [Fact]
     public void RepeatedSearchesReturnTheSameOrder()
     {
         var catalog = new[]

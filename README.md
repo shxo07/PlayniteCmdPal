@@ -2,7 +2,7 @@
 
 Search and launch games from a Playnite library through Microsoft PowerToys Command Palette.
 
-> **Status:** The generated Command Palette template is committed and core search is under development. Windows CI and CodeQL run on pull requests and `main`, with verified successful runs. The clean local build/deploy loop and Playnite integration still need verification. There are no releases yet.
+> **Status:** The generated Command Palette template and deterministic core search are present. Upstream Windows CI/CodeQL runs passed for earlier merged work, and the maintainer reported a successful template build/deploy. The WERD-60 Playnite catalog adapter/bridge is implemented on the working branch but has not yet been built/tested on Windows or verified against a real Playnite library. CmdPal search/launch UI (WERD-61) and releases are still pending.
 
 ## Goal
 
@@ -22,13 +22,14 @@ Provide a keyboard-first route to a user's unified Playnite library: open Comman
 - C# extension based on the current official Microsoft CmdPal template in `testExtension/`.
 - Playnite remains the source of truth for library data and launch configuration.
 - Keep the core game model and ranking logic independent from the CmdPal and Playnite SDKs.
-- Put catalog access behind a read-only adapter. If no documented external catalog API exists, evaluate a companion Playnite plugin that exports a normalized JSON snapshot.
+- Put catalog access behind a read-only adapter. The selected bridge is a companion Playnite plugin that exports a normalized JSON snapshot; the extension reads that file only.
 - Do not use direct Playnite database writes or UI automation. Do not add IPC unless evidence shows it is needed.
 
 ## Current baseline
 
 - Solution: `testExtension.sln`
 - Generated project: `testExtension/testExtension.csproj`
+- Catalog bridge: `PlayniteCmdPal.Snapshot`, `PlayniteCmdPal.Playnite`, and `PlayniteCmdPal.PlaynitePlugin`; see [Catalog Bridge](docs/CATALOG-BRIDGE.md)
 - Central package versions: `Directory.Packages.props`
 - Repo-specific CmdPal instructions: `.github/copilot-instructions.md` and `.github/instructions/cmdpal-extension.instructions.md`
 - GitHub Actions: Windows build workflow and CodeQL workflow (both verified green on `main` and pull requests); Dependabot is configured for NuGet and Actions.
@@ -47,6 +48,7 @@ Provide a keyboard-first route to a user's unified Playnite library: open Comman
 
 - [PRD](docs/PRD.md)
 - [Technical design](docs/TECHNICAL-DESIGN.md)
+- [Catalog Bridge](docs/CATALOG-BRIDGE.md)
 - [Research](docs/RESEARCH.md)
 - [Decisions](docs/DECISIONS.md)
 

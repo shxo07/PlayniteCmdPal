@@ -6,8 +6,9 @@ Set-StrictMode -Version Latest
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $solutionPath = Join-Path $repoRoot 'testExtension.sln'
 $testProjectPath = Join-Path $repoRoot 'PlayniteCmdPal.Core.Tests\PlayniteCmdPal.Core.Tests.csproj'
+$adapterTestProjectPath = Join-Path $repoRoot 'PlayniteCmdPal.Playnite.Tests\PlayniteCmdPal.Playnite.Tests.csproj'
 
-if (-not (Test-Path -LiteralPath $solutionPath) -or -not (Test-Path -LiteralPath $testProjectPath)) {
+if (-not (Test-Path -LiteralPath $solutionPath) -or -not (Test-Path -LiteralPath $testProjectPath) -or -not (Test-Path -LiteralPath $adapterTestProjectPath)) {
     [Console]::Error.WriteLine('ERROR: Expected solution or test project was not found relative to scripts/ci.ps1.')
     exit 1
 }
@@ -42,6 +43,7 @@ Invoke-DotNetStep -Name '.NET SDK information' -Arguments @('--info')
 Invoke-DotNetStep -Name 'Restore' -Arguments @('restore', $solutionPath)
 Invoke-DotNetStep -Name 'Build (Release)' -Arguments @('build', $solutionPath, '--configuration', 'Release', '--no-restore')
 Invoke-DotNetStep -Name 'Test core search (Release)' -Arguments @('test', $testProjectPath, '--configuration', 'Release', '--no-build', '--no-restore')
+Invoke-DotNetStep -Name 'Test Playnite adapter (Release)' -Arguments @('test', $adapterTestProjectPath, '--configuration', 'Release', '--no-build', '--no-restore')
 
 Write-Host ''
 Write-Host 'All local CI checks passed.'
