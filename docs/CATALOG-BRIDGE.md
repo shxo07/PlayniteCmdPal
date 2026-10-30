@@ -62,7 +62,7 @@ dotnet test .\PlayniteCmdPal.Playnite.Tests\PlayniteCmdPal.Playnite.Tests.csproj
 .\scripts\package-playnite-plugin.ps1
 ```
 
-The script creates `artifacts/playnite-plugin/PlayniteCmdPalBridge.pext`. Install it locally through Playnite's add-on install-from-file flow, then restart/reload Playnite. Build output and `.pext` files are not committed.
+The script creates `artifacts/playnite-plugin/PlayniteCmdPalBridge.pext`. In Playnite 10.63, install it locally by dragging the `.pext` onto the main Playnite window and confirming the install/restart prompts, or by running `Playnite.DesktopApp.exe --installext <path-to.pext>`. For development you can instead register `artifacts/playnite-plugin/publish` under Settings → For developers → External extensions → Add, enable it, and restart Playnite. The top-level Add-ons… window manages installed add-ons (this plugin appears under Installed → Generic); it does not provide an install-from-file button. The Menu → Extensions submenu only lists extension-provided commands. Build output and `.pext` files are not committed.
 
 ## Validation status
 

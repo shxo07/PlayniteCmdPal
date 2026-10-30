@@ -58,7 +58,7 @@ On Windows, after the shared CI checks pass:
 .\scripts\package-playnite-plugin.ps1
 ```
 
-This publishes the plugin and creates `artifacts/playnite-plugin/PlayniteCmdPalBridge.pext`. Install it through Playnite's add-on install-from-file flow, restart/reload Playnite, and follow the real-library checklist in [Catalog Bridge](CATALOG-BRIDGE.md). Do not commit the package, publish output, or catalog exports. The adapter itself is consumed by WERD-61; this issue does not add CmdPal search/launch UI.
+This publishes the plugin and creates `artifacts/playnite-plugin/PlayniteCmdPalBridge.pext`. Install it by dragging the `.pext` onto the main Playnite window and confirming the install/restart prompts, or by running `Playnite.DesktopApp.exe --installext <path-to.pext>`. Alternatively, register `artifacts/playnite-plugin/publish` under Settings → For developers → External extensions → Add, enable it, and restart Playnite. Then follow the real-library checklist in [Catalog Bridge](CATALOG-BRIDGE.md). Do not commit the package, publish output, or catalog exports. The adapter itself is consumed by WERD-61; this issue does not add CmdPal search/launch UI.
 
 ## Manifest language fix
 
