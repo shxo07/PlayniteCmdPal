@@ -118,7 +118,11 @@ The companion bridge is selected, but implementing it is outside the WERD-56 res
 
 ## Testing and CI
 
-For PR [#10](https://github.com/werdscopez7347/PlayniteCmdPal/pull/10), the Windows CI and CodeQL pull-request runs for commit `fee56f4` reported `action_required`, not pass or fail. These are fork-origin runs; a repository maintainer may need to approve workflows under the repository's fork-approval settings. The precise cause has not been confirmed. Obtain approval or otherwise arrange for both checks to run and review their results before merging; do not treat `action_required` as a successful check.
+For PR [#10](https://github.com/werdscopez7347/PlayniteCmdPal/pull/10), the final Windows CI and CodeQL runs on the reviewed head commit succeeded before merge:
+- [Windows CI run #67](https://github.com/werdscopez7347/PlayniteCmdPal/actions/runs/41016300900) — succeeded.
+- [CodeQL run #67](https://github.com/werdscopez7347/PlayniteCmdPal/actions/runs/41016300844) — succeeded.
+
+Earlier fork-origin runs reported `action_required`; those were superseded by the successful runs above. PR #10 was squash-merged into `dev` as commit [`7b268d7`](https://github.com/werdscopez7347/PlayniteCmdPal/commit/7b268d79964cb3b83e76826e71b339f076c747a6) on 2026-10-30.
 
 - Core tests: ranking order, case normalization, duplicates, tie-breaks, empty query/catalog.
 - Adapter/contract tests: valid, missing, malformed, stale, and empty catalog data.
