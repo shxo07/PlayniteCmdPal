@@ -37,8 +37,9 @@ jobs:
         with:
           languages: csharp
 
-      - name: Build
-        run: dotnet build .\testExtension.sln --configuration Release
+      - name: Run shared restore, build, and test checks
+        shell: pwsh
+        run: .\scripts\ci.ps1
 
       - name: Analyze
         uses: github/codeql-action/analyze@v4
