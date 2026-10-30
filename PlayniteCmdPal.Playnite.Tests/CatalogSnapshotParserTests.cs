@@ -36,6 +36,20 @@ public sealed class CatalogSnapshotParserTests
         Assert.Null(result.Snapshot.Games[1].Source);
     }
 
+    [Theory]
+    [InlineData("2026-10-30T00:00:00Z")]
+    [InlineData("2026-10-30T00:00:00.1Z")]
+    [InlineData("2026-10-30T00:00:00.1234567Z")]
+    [InlineData("2026-10-30T00:00:00+00:00")]
+    [InlineData("2026-10-30T00:00:00.1234567+00:00")]
+    public void AcceptsUtcTimestampsWithAndWithoutFractionalSeconds(string timestamp)
+    {
+        var result = CatalogSnapshotParser.Parse(Json($$"""{"schemaVersion":1,"generatedAtUtc":"{{timestamp}}","games":[]}"""));
+        Assert.Null(result.Issue);
+        Assert.NotNull(result.Snapshot);
+        Assert.Equal(TimeSpan.Zero, result.Snapshot!.GeneratedAtUtc.Offset);
+    }
+
     [Fact]
     public void EmptyGamesArrayIsValid()
     {

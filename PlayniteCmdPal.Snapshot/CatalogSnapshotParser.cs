@@ -52,6 +52,13 @@ public static class CatalogSnapshotParser
         CommentHandling = JsonCommentHandling.Disallow,
     };
 
+    // Accept ISO-8601 UTC with or without fractional seconds. A non-zero offset is still rejected below.
+    private static readonly string[] TimestampFormats =
+    {
+        "yyyy-MM-dd'T'HH:mm:sszzz",
+        "yyyy-MM-dd'T'HH:mm:ss.FFFFFFFzzz",
+    };
+
     public static CatalogSnapshotParseResult Parse(ReadOnlyMemory<byte> utf8Json)
     {
         if (utf8Json.Length > SnapshotLimits.MaxBytes)
@@ -92,8 +99,7 @@ public static class CatalogSnapshotParser
 
             if (!TryGetProperty(root, "generatedAtUtc", out var timestamp) ||
                 timestamp.ValueKind != JsonValueKind.String ||
-                !DateTimeOffset.TryParseExact(timestamp.GetString(), "O", CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var generatedAt) ||
-                generatedAt.Offset != TimeSpan.Zero)
+                !TryParseTimestamp(timestamp.GetString(), out var generatedAt))
             {
                 return InvalidEnvelope();
             }
@@ -126,6 +132,24 @@ public static class CatalogSnapshotParser
 
             return new CatalogSnapshotParseResult(new CatalogSnapshot(generatedAt, games), null, skipped);
         }
+    }
+
+    private static bool TryParseTimestamp(string? value, out DateTimeOffset generatedAt)
+    {
+        generatedAt = default;
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return false;
+        }
+
+        var text = value!;
+        if (text.EndsWith("Z", StringComparison.Ordinal))
+        {
+            text = text.Substring(0, text.Length - 1) + "+00:00";
+        }
+
+        return DateTimeOffset.TryParseExact(text, TimestampFormats, CultureInfo.InvariantCulture, DateTimeStyles.None, out generatedAt) &&
+               generatedAt.Offset == TimeSpan.Zero;
     }
 
     private static bool TryParseGame(JsonElement element, out SnapshotGame? game)

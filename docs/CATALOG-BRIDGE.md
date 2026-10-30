@@ -29,7 +29,7 @@ The canonical file is `%LOCALAPPDATA%\PlayniteCmdPal\catalog-v1.json`. The plugi
 }
 ```
 
-`id` is Playnite's stable GUID in lowercase canonical D format and is the only identity key. Empty GUIDs, non-canonical IDs, blank names, missing required fields, wrong field types, duplicate JSON properties, and unknown v1 fields are invalid. `source` and `platform` are optional strings or null; the plugin joins multiple platform names with `, ` in ordinal order. No executable paths, launch actions, icons, or full SDK models are exported.
+`generatedAtUtc` is an ISO-8601 UTC timestamp; fractional seconds are optional, and non-UTC offsets are rejected. `id` is Playnite's stable GUID in lowercase canonical D format and is the only identity key. Empty GUIDs, non-canonical IDs, blank names, missing required fields, wrong field types, duplicate JSON properties, and unknown v1 fields are invalid. `source` and `platform` are optional strings or null; the plugin joins multiple platform names with `, ` in ordinal order. No executable paths, launch actions, icons, or full SDK models are exported.
 
 The parser rejects input over 32 MiB, JSON deeper than 16 levels, unsupported schema versions, malformed envelopes, and arrays over 100,000 records. Invalid individual records and later duplicate IDs are skipped and counted; the first valid record for an ID wins. An empty `games` array is a valid empty library.
 
