@@ -65,7 +65,7 @@ The maintainer-reported symptom is two **extension entries** when searching for 
 
 ### Checked-in registration facts
 
-The current source has one `uap3:Extension` with one `uap3:AppExtension` named `com.microsoft.commandpalette` (ID `ID`), one COM class registration, and one `CommandItem` returned by `PlayniteCmdPalCommandsProvider.TopLevelCommands()`. The manifest identity is `Name=PlayniteCmdPal`, `Publisher=CN=PlayniteCmdPal`, `Version=0.0.1.0`. The manifest app-extension `DisplayName`, `CommandProvider.DisplayName`, and `CommandItem.Title` are all `Playnite`. The description is present; there is no source evidence that it creates a second registration.
+The current source has one `uap3:Extension` with one `uap3:AppExtension` named `com.microsoft.commandpalette` (ID `ID`), one COM class registration, and one `CommandItem` returned by `PlayniteCmdPalCommandsProvider.TopLevelCommands()`. The manifest identity is `Name=PlayniteCmdPal`, `Publisher=CN=PlayniteCmdPal`, `Version=0.0.2.0` (bumped from `0.0.1.0` for this retest). The manifest app-extension `DisplayName`, `CommandProvider.DisplayName`, and `CommandItem.Title` are all `Playnite`. The description is present; there is no source evidence that it creates a second registration.
 
 The `dev` baseline uses the same package identity and version and also declares one Command Palette app extension and one command item; its visible names are `PlayniteCmdPal`. The WERD-61 branch changes the visible names to `Playnite`, not the package identity, version, AppExtension count, or command count. This source inspection does **not** prove what Windows has registered or what Command Palette has cached. The duplicate has not yet been reproduced or cleared on a clean Windows install.
 
