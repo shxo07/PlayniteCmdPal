@@ -105,9 +105,11 @@ Microsoft's extension-development guidance explicitly requires **Build → Deplo
 
 ### Duplicate-result mitigation in WERD-61
 
-The packaged application's ordinary Windows app identity is now displayed as **Command Palette Extension Host** in both the package-level `Properties/DisplayName` and application `uap:VisualElements/DisplayName`. The actual `uap3:AppExtension` remains named **Playnite**, as does the Command Palette provider and command item. This separates the host application's Start/app-catalog label from the extension's Command Palette label, so searching for Playnite should surface the extension rather than the host app as a second, inert result.
+The package contains one executable entry point because the out-of-process COM server needs an application declaration, but that executable is a background host and is not intended to be launched directly by users. The manifest now sets `uap:VisualElements AppListEntry="none"` on that application entry. Microsoft documents this value as excluding the app from the All Apps list; the app's registered extension points remain available. This is materially different from merely renaming the host app.
 
-After deploying this change, reload Command Palette extensions and search for `Playnite`. Confirm there is exactly one result and that it opens the dynamic game-search page. Also search for `Command Palette Extension Host` to confirm the host app has only its distinct label if it is surfaced in the palette. This is a targeted mitigation based on the identical package path and differing activation behavior; it still requires the manual Windows check below and should not be described as verified fixed until that check passes.
+The package version is now `0.0.3.0` to make the updated manifest easy to identify. The package's ordinary display name is restored to `PlayniteCmdPal`; the actual `uap3:AppExtension`, Command Palette provider, and command item remain named `Playnite`, with the description retained.
+
+After deploying this package, reload Command Palette extensions and search for `Playnite`. Verify that exactly one result remains and opens the dynamic game-search page. Also check the Windows Start menu/search for the host app: it should no longer have a normal app-list entry. This is a targeted manifest-level fix based on Windows' documented `AppListEntry="none"` behavior, but the duplicate-result symptom still requires the manual Windows verification below.
 
 ### Interpretation
 
