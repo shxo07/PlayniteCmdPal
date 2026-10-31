@@ -48,8 +48,8 @@ References:
 
 1. **CmdPal presentation:** current-template command provider, search/results, actions, and clear unavailable/error states.
 2. **Core:** game model, query normalization, deterministic ranking, and interfaces. No CmdPal or Playnite SDK types.
-3. **Catalog adapter:** `PlayniteCmdPal.Playnite` maps the read-only JSON snapshot into `PlayniteCmdPal.Core.GameEntry` and owns the in-memory cache policy.
-4. **Playnite bridge/transport:** `PlayniteCmdPal.PlaynitePlugin` exports an atomic, normalized JSON snapshot; `PlayniteCmdPal.Snapshot` holds the shared v1 DTOs, parser, serializer, publisher, and export coordinator without SDK dependencies. See [ADR-005](DECISIONS.md#adr-005-companion-plugin-json-snapshot-for-catalog-access) for the canonical contract and [Catalog Bridge](CATALOG-BRIDGE.md) for implementation details.
+3. **Catalog adapter:** `PlayniteCmdPal.Playnite` strictly parses the read-only JSON snapshot, maps it into `PlayniteCmdPal.Core.GameEntry`, and owns the in-memory cache policy.
+4. **Playnite bridge/transport:** `PlayniteCmdPal.PlaynitePlugin` exports an atomic, normalized JSON snapshot; `PlayniteCmdPal.Snapshot` holds the shared v1 DTOs, serializer, publisher, and export coordinator without SDK dependencies. See [ADR-005](DECISIONS.md#adr-005-companion-plugin-json-snapshot-for-catalog-access) for the canonical contract and [Catalog Bridge](CATALOG-BRIDGE.md) for implementation details.
 
 Playnite remains the source of truth for game identity, library metadata, and launch configuration. The extension must not independently recreate storefront launch logic.
 
@@ -101,8 +101,8 @@ Rejected for production:
 The generated CmdPal project remains intact. WERD-61 will consume the catalog adapter from the presentation layer; WERD-60 does not implement CmdPal search/launch UI.
 - `testExtension/`: generated CmdPal presentation/hosting template.
 - `PlayniteCmdPal.Core/`: SDK-independent game model and deterministic search.
-- `PlayniteCmdPal.Snapshot/`: shared v1 snapshot contract, strict parser, allowlisted serializer, atomic publisher, and debounced export coordinator.
-- `PlayniteCmdPal.Playnite/`: read-only adapter/cache exposing `IReadOnlyPlayniteCatalog`.
+- `PlayniteCmdPal.Snapshot/`: shared v1 snapshot contract, allowlisted serializer, atomic publisher, and debounced export coordinator.
+- `PlayniteCmdPal.Playnite/`: strict parser and read-only adapter/cache exposing `IReadOnlyPlayniteCatalog`.
 - `PlayniteCmdPal.PlaynitePlugin/`: Playnite companion plugin projecting the database into the snapshot.
 - `PlayniteCmdPal.Core.Tests/` and `PlayniteCmdPal.Playnite.Tests/`: synthetic unit/contract tests.
 - Manual local smoke tests remain separate from automated CI.

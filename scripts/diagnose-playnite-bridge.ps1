@@ -172,8 +172,7 @@ if ($bridgeDir) {
     $requiredFiles = @(
         'extension.yaml',
         'PlayniteCmdPal.PlaynitePlugin.dll',
-        'PlayniteCmdPal.Snapshot.dll',
-        'System.Text.Json.dll'
+        'PlayniteCmdPal.Snapshot.dll'
     )
     foreach ($requiredFile in $requiredFiles) {
         $requiredPath = Join-Path $bridgeDir $requiredFile
@@ -191,7 +190,7 @@ if ($bridgeDir) {
         'Microsoft.Bcl.AsyncInterfaces.dll',
         'System.Text.Encodings.Web.dll'
     )
-    Write-Line 'Bridge assembly versions:'
+    Write-Line 'Bridge assembly versions (legacy System.* dependencies may be absent):'
     foreach ($assemblyFile in $assemblyFiles) {
         $assemblyPath = Join-Path $bridgeDir $assemblyFile
         if (Test-Path -LiteralPath $assemblyPath) {

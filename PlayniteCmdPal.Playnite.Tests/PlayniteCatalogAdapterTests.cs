@@ -1,4 +1,5 @@
 using PlayniteCmdPal.Core;
+using PlayniteCmdPal.Playnite;
 using PlayniteCmdPal.Snapshot;
 using Xunit;
 

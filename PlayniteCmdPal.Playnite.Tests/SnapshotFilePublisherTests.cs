@@ -1,3 +1,4 @@
+using PlayniteCmdPal.Playnite;
 using PlayniteCmdPal.Snapshot;
 using Xunit;
 
@@ -50,6 +51,23 @@ public sealed class SnapshotFilePublisherTests : IDisposable
         Assert.Null(result.Issue);
         Assert.Single(result.Snapshot!.Games);
         Assert.Single(Directory.GetFiles(_directory));
+    }
+
+    [Fact]
+    public async Task OversizedPublicationPreservesPreviousSnapshotAndCleansTempFile()
+    {
+        var path = Path.Combine(_directory, "catalog-v1.json");
+        await SnapshotFilePublisher.PublishAsync(path, Snapshot("First"));
+        var previous = await File.ReadAllBytesAsync(path);
+        var largeName = new string('x', 1024 * 1024);
+        var games = Enumerable.Range(0, 33)
+            .Select(_ => new SnapshotGame(Guid.NewGuid().ToString("D"), largeName, false))
+            .ToArray();
+        var oversized = new CatalogSnapshot(DateTimeOffset.Parse("2026-10-30T00:00:00Z"), games);
+
+        await Assert.ThrowsAsync<InvalidDataException>(() => SnapshotFilePublisher.PublishAsync(path, oversized));
+        Assert.Equal(previous, await File.ReadAllBytesAsync(path));
+        Assert.Single(Directory.GetFiles(_directory, "*", SearchOption.AllDirectories));
     }
 
     private static CatalogSnapshot Snapshot(string name) =>

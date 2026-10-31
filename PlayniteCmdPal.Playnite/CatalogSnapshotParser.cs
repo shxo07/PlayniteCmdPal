@@ -1,7 +1,8 @@
 using System.Globalization;
 using System.Text.Json;
+using PlayniteCmdPal.Snapshot;
 
-namespace PlayniteCmdPal.Snapshot;
+namespace PlayniteCmdPal.Playnite;
 
 public enum CatalogErrorCode
 {

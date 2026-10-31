@@ -45,5 +45,21 @@ Invoke-DotNetStep -Name 'Build (Release)' -Arguments @('build', $solutionPath, '
 Invoke-DotNetStep -Name 'Test core search (Release)' -Arguments @('test', $testProjectPath, '--configuration', 'Release', '--no-build', '--no-restore')
 Invoke-DotNetStep -Name 'Test Playnite adapter (Release)' -Arguments @('test', $adapterTestProjectPath, '--configuration', 'Release', '--no-build', '--no-restore')
 
+$frameworkPowerShell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+$frameworkSmoke = Join-Path $repoRoot 'scripts\test-playnite-snapshot-netfx.ps1'
+$pluginBuildDir = Join-Path $repoRoot 'PlayniteCmdPal.PlaynitePlugin\bin\Release\net462'
+if (-not (Test-Path -LiteralPath $frameworkPowerShell)) {
+    [Console]::Error.WriteLine('ERROR: Windows PowerShell 5.1 is required for the .NET Framework bridge smoke test.')
+    exit 127
+}
+
+Write-Host ''
+Write-Host '==> Test Playnite snapshot publication on .NET Framework (synthetic data)'
+& $frameworkPowerShell -NoProfile -ExecutionPolicy Bypass -File $frameworkSmoke -SnapshotAssembly (Join-Path $pluginBuildDir 'PlayniteCmdPal.Snapshot.dll') -PluginAssembly (Join-Path $pluginBuildDir 'PlayniteCmdPal.PlaynitePlugin.dll')
+if ($LASTEXITCODE -ne 0) {
+    [Console]::Error.WriteLine("ERROR: .NET Framework snapshot smoke test failed with exit code $LASTEXITCODE.")
+    exit $LASTEXITCODE
+}
+
 Write-Host ''
 Write-Host 'All local CI checks passed.'

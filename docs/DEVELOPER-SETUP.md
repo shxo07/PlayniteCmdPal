@@ -23,7 +23,6 @@ Source of truth: `testExtension.sln`, `testExtension/testExtension.csproj`, `Dir
   - `Microsoft.WindowsAppSDK` — `2.0.1`
   - `Shmuelie.WinRTServer` — `2.1.1`
   - `StyleCop.Analyzers` — `1.2.0-beta.556`
-  - `System.Text.Json` — `9.0.8`
   - `PlayniteSDK` — `6.18.0` (companion plugin; runtime assembly supplied by Playnite)
   - `Microsoft.NETFramework.ReferenceAssemblies` — `1.0.3` (build-time `net462` targeting)
 - Exact SDK reported by maintainer: .NET SDK `10.0.403`. The repository does not pin an SDK with `global.json`.
@@ -38,19 +37,20 @@ Run the shared check script from the repository root in PowerShell:
 .\scripts\ci.ps1
 ```
 
-Prerequisites: Windows, PowerShell 5.1 or later (`pwsh` 7 or Windows PowerShell), the .NET 10 SDK (`10.0.x`), and network access for NuGet restore. The script runs the same commands as the Windows CI job, in order:
+Prerequisites: Windows with Windows PowerShell 5.1 installed (the script may be launched from `pwsh` 7), the .NET 10 SDK (`10.0.x`), and network access for NuGet restore. The script runs the same commands as the Windows CI job, in order:
 
 1. `dotnet --info`
 2. `dotnet restore .\testExtension.sln`
 3. `dotnet build .\testExtension.sln --configuration Release --no-restore`
 4. `dotnet test .\PlayniteCmdPal.Core.Tests\PlayniteCmdPal.Core.Tests.csproj --configuration Release --no-build --no-restore`
 5. `dotnet test .\PlayniteCmdPal.Playnite.Tests\PlayniteCmdPal.Playnite.Tests.csproj --configuration Release --no-build --no-restore`
+6. Run the synthetic snapshot publication smoke test against the built `net462` assemblies in Windows PowerShell 5.1.
 
 It stops at the first failed command, reports the step and its exit code, and returns that code. The Windows CI and CodeQL workflows install the .NET 10 SDK on `windows-latest` and invoke this same script; CodeQL also initializes its analyzer before running the script. No Visual Studio, Playnite installation, personal game library, or secrets are required for these checks. The test steps cover core search and synthetic catalog adapter/contract tests; the script does not deploy the MSIX package, install the Playnite plugin, or verify a real Playnite library.
 
 ## Playnite catalog bridge (WERD-60)
 
-The companion plugin targets `net462` and uses `PlayniteSDK` 6.18.0 with `ExcludeAssets="runtime"` so Playnite supplies the SDK assembly at runtime. Build-time targeting uses `Microsoft.NETFramework.ReferenceAssemblies`. The shared snapshot contract targets `netstandard2.0`; the adapter targets `net10.0`. No Playnite installation or personal library is required for restore/build/unit tests.
+The companion plugin targets `net462` and uses `PlayniteSDK` 6.18.0 with `ExcludeAssets="runtime"` so Playnite supplies the SDK assembly at runtime. Build-time targeting uses `Microsoft.NETFramework.ReferenceAssemblies`. The shared snapshot contract targets both `net462` and `net10.0`; the adapter and strict parser target `net10.0`. The plugin's writer uses framework-provided JSON APIs rather than `System.Text.Json` to avoid the reported extension dependency-binding failure. No Playnite installation or personal library is required for restore/build/unit tests.
 
 On Windows, after the shared CI checks pass:
 
