@@ -16,6 +16,13 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- Third-party notices and the retained PowerToys template license travel with the
+         published package. See docs/LICENSING-AND-RELEASE.md. -->
+    <Content Include="..\third-party\THIRD-PARTY-NOTICES.md" Link="THIRD-PARTY-NOTICES.md" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="..\third-party\Microsoft-PowerToys-LICENSE.txt" Link="Microsoft-PowerToys-LICENSE.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Content Include="Assets\SplashScreen.scale-200.png" />
     <Content Include="Assets\LockScreenLogo.scale-200.png" />
     <Content Include="Assets\Square150x150Logo.scale-200.png" />
@@ -93,4 +100,16 @@
   </PropertyGroup>
 
 
+  <!-- Self-contained publishes must carry the notices from the exact runtime pack restored. -->
+  <Target Name="CopyDotNetRuntimeThirdPartyNotices" AfterTargets="Publish"
+          Condition="'$(SelfContained)' == 'true' and '$(RuntimeIdentifier)' != ''">
+    <PropertyGroup>
+      <_DotNetRuntimePackageDir>$(NuGetPackageRoot)microsoft.netcore.app.runtime.$(RuntimeIdentifier)\\$(RuntimeFrameworkVersion)</_DotNetRuntimePackageDir>
+      <_DotNetRuntimeNotices>$(_DotNetRuntimePackageDir)\\THIRD-PARTY-NOTICES.TXT</_DotNetRuntimeNotices>
+    </PropertyGroup>
+    <Error Condition="!Exists('$(_DotNetRuntimeNotices)')"
+           Text="The .NET runtime third-party notices were not found at '$(_DotNetRuntimeNotices)'. Do not distribute this self-contained publish without the notices for the restored runtime pack." />
+    <Copy SourceFiles="$(_DotNetRuntimeNotices)"
+          DestinationFiles="$(PublishDir)dotnet-runtime-THIRD-PARTY-NOTICES.txt" />
+  </Target>
 </Project>

@@ -23,8 +23,12 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 $manifest = Join-Path $publishDir 'extension.yaml'
 $module = Join-Path $publishDir 'PlayniteCmdPal.PlaynitePlugin.dll'
 $snapshot = Join-Path $publishDir 'PlayniteCmdPal.Snapshot.dll'
+$notices = Join-Path $publishDir 'THIRD-PARTY-NOTICES.md'
 if (-not (Test-Path -LiteralPath $manifest) -or -not (Test-Path -LiteralPath $module) -or -not (Test-Path -LiteralPath $snapshot)) {
     throw 'The publish output is missing extension.yaml, the plugin module, or the snapshot assembly.'
+}
+if (-not (Test-Path -LiteralPath $notices)) {
+    throw 'The publish output is missing THIRD-PARTY-NOTICES.md. Do not distribute the package without the third-party notices.'
 }
 if (Test-Path -LiteralPath (Join-Path $publishDir 'System.Text.Json.dll')) {
     throw 'Unexpected legacy System.Text.Json.dll in publish output. Clean the project bin/obj directories and package again.'
