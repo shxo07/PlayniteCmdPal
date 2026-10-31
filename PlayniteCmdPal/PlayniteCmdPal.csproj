@@ -93,4 +93,8 @@
   </PropertyGroup>
 
 
+  <ItemGroup>
+    <ProjectReference Include="..\PlayniteCmdPal.Core\PlayniteCmdPal.Core.csproj" />
+    <ProjectReference Include="..\PlayniteCmdPal.Playnite\PlayniteCmdPal.Playnite.csproj" />
+  </ItemGroup>
 </Project>

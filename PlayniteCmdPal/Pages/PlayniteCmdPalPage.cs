@@ -95,7 +95,7 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage
         }
     }
 
-    private static IListItem[] BuildItems(CatalogReadResult catalog, string query)
+    private IListItem[] BuildItems(CatalogReadResult catalog, string query)
     {
         if (!catalog.IsAvailable)
         {

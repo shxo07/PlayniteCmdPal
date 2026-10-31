@@ -13,7 +13,7 @@ public partial class PlayniteCmdPalCommandsProvider : CommandProvider
 
     public PlayniteCmdPalCommandsProvider()
     {
-        DisplayName = "PlayniteCmdPal";
+        DisplayName = "Playnite";
         Icon = IconHelpers.FromRelativePath("Assets\\StoreLogo.png");
         _commands = [
             new CommandItem(new PlayniteCmdPalPage()) { Title = DisplayName },
