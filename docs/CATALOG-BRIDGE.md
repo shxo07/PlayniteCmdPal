@@ -70,7 +70,11 @@ The Linux workspace ran Tree-sitter syntax checks over the C#/PowerShell files a
 
 A maintainer reported that `scripts/ci.ps1` and the packaging script passed on Windows at commit `398044e`. The installed 0.1.0 bridge subsequently loaded, but export failed with an assembly-load exception for `System.Text.Json` 9.0.0.0 or one of its dependencies. Version 0.1.1 removes that dependency from the export path and adds .NET Framework smoke coverage. At `9ece548`, Windows CI reached the new smoke step but PowerShell reflection rejected a wrapped path argument before publication; the smoke invocation was subsequently corrected.
 
-A maintainer subsequently reported that the default snapshot exists and the verifier introduced in `68ecd29` read four records through the adapter with no skipped records, staleness, or issue. An immediate second read used the cache; an explicit refresh read the file and returned the same IDs. This verifies an initial real-library adapter read, not metadata matching, ID stability across library changes, event-driven export, or missing-file recovery. Windows CI and packaging after the smoke-test correction have not yet been explicitly confirmed.
+A maintainer subsequently reported that the default snapshot exists and the verifier introduced in `68ecd29` read four records through the adapter with no skipped records, staleness, or issue. An immediate second read used the cache; an explicit refresh read the file and returned the same IDs.
+
+A later manual Playnite session verified the live bridge behaviours: renaming a game refreshed the snapshot while preserving its ID; adding and removing a temporary game added and removed the corresponding record; changing source/platform metadata refreshed the matching record; and, with Playnite closed and the snapshot moved aside, a fresh verifier process reported `Available: False`, `Game count: 0`, `Skipped records: 0`, `Stale: False`, `Issue: Missing`. Restarting Playnite recreated the snapshot successfully. These are maintainer-reported manual results; the Playnite/Windows versions were not recorded, and no personal library data was committed. This extends real-library evidence to event-driven refresh and missing-file recovery, but does not by itself prove metadata parity for every field or that no partial file can ever be observed.
+
+Windows CI and packaging after the smoke-test correction have not yet been explicitly confirmed.
 
 ## Troubleshooting a missing snapshot
 
