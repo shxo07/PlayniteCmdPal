@@ -5,8 +5,8 @@
 Use Playnite's unified library and configured launch behavior rather than integrating each storefront independently.
 
 ## ADR-002: C# and official CmdPal template
-**Status:** Accepted; generated-template validation completed (WERD-57)  
-Use the generated C# template and its current package versions. The checked-in target framework is `net10.0-windows10.0.26100.0`; the central package version for `Microsoft.CommandPalette.Extensions` is `0.9.260303001`. The template build/deployment validation tracked by WERD-57 is complete. This validates the extension scaffold and local development baseline, not the finished Playnite catalog/search/launch integration or release packaging.
+**Status:** Accepted; generated-template validation completed  
+Use the generated C# template and its current package versions. The checked-in target framework is `net10.0-windows10.0.26100.0`; the central package version for `Microsoft.CommandPalette.Extensions` is `0.9.260303001`. The template build/deployment validation is complete. This validates the extension scaffold and local development baseline, not the finished Playnite catalog/search/launch integration or release packaging.
 
 ## ADR-003: No direct database writes or UI automation
 **Status:** Accepted  
@@ -18,7 +18,7 @@ Never write to Playnite data. Do not use UI automation as the production integra
 Playnite documents `playnite://playnite/start/<gameId>` and `--start <gameId>`: https://api.playnite.link/docs/manual/advanced/cmdlineArguments.html. Prefer the URI as the primary launch request; use the CLI form only as a fallback if URI dispatch fails in the supported setup. Validate the selected stable ID as a GUID and format it as canonical D form before constructing the URI. Dispatching a URI is not proof the game actually started. The user reports that the URI launched an intended Steam-installed game with a normal installation of Playnite 10.63 already running on 2026-10-29. The user also reports that, with Playnite fully closed, including its system-tray process, the same URI reopened Playnite and then launched the selected game. CLI fallback remains untested. See [the smoke test](TECHNICAL-DESIGN.md#manual-uri-smoke-test).
 
 ## ADR-005: Companion-plugin JSON snapshot for catalog access
-**Status:** Accepted; implementation present (WERD-60), maintainer-reported Windows build/packaging and real-library verification; automated Windows build/test results not yet independently reviewed
+**Status:** Accepted; implementation present; Windows CI, CodeQL, and the .NET Framework snapshot smoke test passed; maintainer-reported real-library verification is documented.
 
 The reviewed official Playnite SDK documentation exposes `IPlayniteAPI.Database` and demonstrates `PlayniteApi.Database.Games` enumeration in an in-process plugin, but does not document a general external-process catalog endpoint. This conclusion is limited to the reviewed documented API; it is not a claim that no third-party or undocumented interface exists.
 
@@ -42,15 +42,13 @@ Evidence:
 - [IGameDatabase](https://api.playnite.link/docs/api/Playnite.SDK.IGameDatabase.html)
 - [Playnite library extension tutorial](https://api.playnite.link/docs/tutorials/extensions/library.html)
 - [Playnite URI routing source](https://github.com/JosefNemec/Playnite/blob/master/source/Playnite/App/PlayniteApplication.cs)
-- Tracking: [WERD-56](https://linear.app/werdscopez7347/issue/WERD-56/spike-finalize-the-supported-playnite-catalog-and-launch-integration)
 
 ## ADR-006: Clock/timer extension is separate
 **Status:** Accepted  
 Clock and timer functionality is out of scope for this repository and MVP.
 
 ## ADR-007: Project license and release policy
-**Status:** MIT license and initial release policy accepted; distribution verification pending (WERD-65)  
+**Status:** MIT license and initial release policy accepted; distribution verification pending  
 PlayniteCmdPal-authored material is licensed under the MIT License in the repository root `LICENSE`. Microsoft PowerToys template source retains its separate MIT notice in `third-party/Microsoft-PowerToys-LICENSE.txt`; third-party dependencies and other materials retain their own terms. Contributions are intended under the project MIT terms, subject to third-party rights and notice preservation.
 
 Use Semantic Versioning; before 1.0.0, use `0.y.z` and increment the minor version for incompatible changes. Publish version-tagged releases through GitHub Releases. Use the release description as the release notes; defer a separate `CHANGELOG.md` until release volume justifies it. Mark preview versions as prereleases using SemVer prerelease identifiers. Before public distribution, finish the dependency license/redistribution audit, verify the original project artwork, and validate the MSIX identity and signing certificate. See [Licensing and release readiness](LICENSING-AND-RELEASE.md).
-Tracking: https://linear.app/werdscopez7347/issue/WERD-65/choose-repository-license-and-add-releaselegal-metadata

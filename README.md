@@ -36,24 +36,24 @@ Provide a keyboard-first route to a user's unified Playnite library: open Comman
 - Central package versions: `Directory.Packages.props`
 - Repo-specific CmdPal instructions: `.github/copilot-instructions.md` and `.github/instructions/cmdpal-extension.instructions.md`
 - GitHub Actions: Windows build/test workflow and CodeQL workflow; Dependabot is configured for NuGet and Actions.
-- Windows CI and CodeQL have successful runs. The core model/search tests run in CI; do not describe the repository as a working end-to-end extension until local deployment and Playnite integration acceptance criteria pass.
+- Windows CI and CodeQL have successful runs. Both test projects (`PlayniteCmdPal.Core.Tests` and `PlayniteCmdPal.Playnite.Tests`) run in CI through `scripts/ci.ps1` alongside the .NET Framework snapshot smoke test; see [Testing](docs/TESTING.md) for the coverage map. Do not describe the repository as a working end-to-end extension until local deployment and Playnite integration acceptance criteria pass.
 - **License:** MIT for PlayniteCmdPal-authored material; see [LICENSE](LICENSE). Third-party components and assets retain their own license and attribution requirements. See [licensing and release readiness](docs/LICENSING-AND-RELEASE.md).
 
 ## Development and project tracking
 
-- [Developer setup](docs/DEVELOPER-SETUP.md)
-- Run the same Windows restore/build/test checks as CI with `.\scripts\ci.ps1` from PowerShell on Windows with the .NET 10 SDK; see Developer Setup for details and verification status.
+- [Developer setup](docs/DEVELOPER-SETUP.md): clean Windows setup, Visual Studio/`.NET 10` prerequisites, deploy/reload/debug loop, and troubleshooting.
+- [Testing](docs/TESTING.md): what the automated suites cover, which checks run in CI versus requiring a local Playnite/PowerToys install, and how to run one project or one test.
+- Run the same Windows restore/build/test checks as CI with `.\scripts\ci.ps1` from PowerShell on Windows with the .NET 10 SDK; the script is the single source of truth for the automated steps.
 - [Contributing](.github/CONTRIBUTING.md)
 - [Security policy](SECURITY.md)
 - [Code of Conduct](CODE_OF_CONDUCT.md)
-- [Linear project and roadmap](https://linear.app/werdscopez7347/project/playnite-for-command-palette-9103e0746de7)
-- [Implementation Roadmap & Engineering Workflow](https://linear.app/werdscopez7347/document/implementation-roadmap-and-engineering-workflow-aa55b062593b)
 
 ## Project docs
 
 - [PRD](docs/PRD.md)
 - [Technical design](docs/TECHNICAL-DESIGN.md)
 - [Catalog Bridge](docs/CATALOG-BRIDGE.md)
+- [Testing](docs/TESTING.md)
 - [Research](docs/RESEARCH.md)
 - [Decisions](docs/DECISIONS.md)
 
