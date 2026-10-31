@@ -5,7 +5,7 @@
 
 Search and launch games from a Playnite library through Microsoft PowerToys Command Palette.
 
-> **Status:** The generated Command Palette template has been validated, and the independent core game model and deterministic search implementation are complete. Windows CI and CodeQL run on pull requests and `main`, with verified successful runs. The catalog bridge (snapshot transport, adapter, and companion Playnite plugin) is implemented and has maintainer-reported Windows build/packaging and real-library verification; see [Catalog Bridge](docs/CATALOG-BRIDGE.md) for the exact evidence and remaining gaps. CmdPal search/launch UI and release packaging remain in progress. There are no releases yet.
+> **Status:** The generated Command Palette template has been validated, and the independent core game model and deterministic search implementation are complete. Windows CI and CodeQL run on pull requests and `main`, with verified successful runs. The catalog bridge (snapshot transport, adapter, and companion Playnite plugin) is implemented and has maintainer-reported Windows build/packaging and real-library verification; see [Catalog Bridge](docs/CATALOG-BRIDGE.md) for the exact evidence and remaining gaps. CmdPal search/launch UI remains in progress. Release preparation is documented in [Release packaging](docs/RELEASE-PACKAGING.md); the Gallery metadata is an unlisted draft and licensing/signing/clean-machine gates remain open. There are no releases yet.
 
 ## Goal
 
@@ -43,6 +43,7 @@ Provide a keyboard-first route to a user's unified Playnite library: open Comman
 
 - [Developer setup](docs/DEVELOPER-SETUP.md): clean Windows setup, Visual Studio/`.NET 10` prerequisites, deploy/reload/debug loop, and troubleshooting.
 - [Testing](docs/TESTING.md): what the automated suites cover, which checks run in CI versus requiring a local Playnite/PowerToys install, and how to run one project or one test.
+- [Release packaging](docs/RELEASE-PACKAGING.md): project-specific MSIX distribution decision, Gallery metadata draft, installation/update/uninstall guidance, and release blockers.
 - Run the same Windows restore/build/test checks as CI with `.\scripts\ci.ps1` from PowerShell on Windows with the .NET 10 SDK; the script is the single source of truth for the automated steps.
 - [Contributing](.github/CONTRIBUTING.md)
 - [Security policy](SECURITY.md)
@@ -56,6 +57,7 @@ Provide a keyboard-first route to a user's unified Playnite library: open Comman
 - [Testing](docs/TESTING.md)
 - [Research](docs/RESEARCH.md)
 - [Decisions](docs/DECISIONS.md)
+- [Release packaging](docs/RELEASE-PACKAGING.md)
 
 ## References
 
