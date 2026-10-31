@@ -34,6 +34,7 @@ public static class GameSearch
             .ThenBy(entry => entry.Source, StringComparer.Ordinal)
             .ThenBy(entry => entry.IsInstalled)
             .ThenBy(entry => entry.IconReference, StringComparer.Ordinal)
+            .ThenBy(entry => entry.Platform, StringComparer.Ordinal)
             .GroupBy(entry => entry.GameId, StringComparer.Ordinal)
             .Select(group => group.First());
 
@@ -48,6 +49,7 @@ public static class GameSearch
             .ThenBy(result => result.Entry.Source, StringComparer.Ordinal)
             .ThenBy(result => result.Entry.IsInstalled)
             .ThenBy(result => result.Entry.IconReference, StringComparer.Ordinal)
+            .ThenBy(result => result.Entry.Platform, StringComparer.Ordinal)
             .Select(result => result.Entry)
             .ToArray();
     }

@@ -1,6 +1,6 @@
 # Developer Setup
 
-**Status (2026-10-29):** The maintainer's Windows validation with .NET SDK 10.0.403 and Windows 10.0.19044 succeeded: restore, x64/ARM64 builds with and without `-p:DefaultLanguage=en-US`, Visual Studio package deployment, and a Command Palette placeholder-page smoke test. GitHub-hosted Windows CI and CodeQL have successful runs on `main` and pull requests (details below). The shared `scripts/ci.ps1` entry point cannot be run locally in this Agent sandbox: it is Linux and has no `dotnet`, `pwsh`, or Windows PowerShell executable. Do not regenerate the template.
+**Status (2026-10-30):** WERD-60 adds the catalog bridge projects and adapter tests to the solution/shared CI script. Those additions have not been built or tested in this Linux workspace because no .NET SDK or PowerShell executable is available; syntax/XML checks are not a substitute for `dotnet build`/`dotnet test`. The maintainer reports later Windows build, `.NET Framework` smoke, packaging, and real-library runs for the bridge; see the validation status in [Catalog Bridge](CATALOG-BRIDGE.md). The maintainer's earlier Windows validation with .NET SDK 10.0.403 and Windows 10.0.19044 succeeded: restore, x64/ARM64 builds with and without `-p:DefaultLanguage=en-US`, Visual Studio package deployment, and a Command Palette placeholder-page smoke test. GitHub-hosted Windows CI and CodeQL have successful runs on `main` and pull requests (details below). The shared `scripts/ci.ps1` entry point cannot be run locally in this Agent sandbox: it is Linux and has no `dotnet`, `pwsh`, or Windows PowerShell executable. Do not regenerate the template.
 
 ## Checked-in toolchain
 
@@ -23,7 +23,8 @@ Source of truth: `PlayniteCmdPal.sln`, `PlayniteCmdPal/PlayniteCmdPal.csproj`, `
   - `Microsoft.WindowsAppSDK` — `2.0.1`
   - `Shmuelie.WinRTServer` — `2.1.1`
   - `StyleCop.Analyzers` — `1.2.0-beta.556`
-  - `System.Text.Json` — `9.0.8`
+  - `PlayniteSDK` — `6.18.0` (companion plugin; runtime assembly supplied by Playnite)
+  - `Microsoft.NETFramework.ReferenceAssemblies` — `1.0.3` (build-time `net462` targeting)
 - Exact SDK reported by maintainer: .NET SDK `10.0.403`. The repository does not pin an SDK with `global.json`.
 - Visual Studio: solution metadata records Visual Studio `17.13.35507.96` in the generating environment, not a verified minimum. Use Visual Studio with the .NET desktop/.NET 10 SDK and Windows application development tooling required for MSIX/Windows SDK packaging. Exact installed workloads/components still need recording from the machine that successfully builds.
 - Runtime requirement: Windows with Command Palette available in a current PowerToys installation, Command Palette enabled/running, and Windows Developer Mode enabled for local deployment as directed by Microsoft.
@@ -36,14 +37,28 @@ Run the shared check script from the repository root in PowerShell:
 .\scripts\ci.ps1
 ```
 
-Prerequisites: Windows, PowerShell 5.1 or later (`pwsh` 7 or Windows PowerShell), the .NET 10 SDK (`10.0.x`), and network access for NuGet restore. The script runs the same commands as the Windows CI job, in order:
+Prerequisites: Windows with Windows PowerShell 5.1 installed (the script may be launched from `pwsh` 7), the .NET 10 SDK (`10.0.x`), and network access for NuGet restore. The script runs the same commands as the Windows CI job, in order:
 
 1. `dotnet --info`
 2. `dotnet restore .\PlayniteCmdPal.sln`
 3. `dotnet build .\PlayniteCmdPal.sln --configuration Release --no-restore`
 4. `dotnet test .\PlayniteCmdPal.Core.Tests\PlayniteCmdPal.Core.Tests.csproj --configuration Release --no-build --no-restore`
+5. `dotnet test .\PlayniteCmdPal.Playnite.Tests\PlayniteCmdPal.Playnite.Tests.csproj --configuration Release --no-build --no-restore`
+6. Run the synthetic snapshot publication smoke test against the built `net462` assemblies in Windows PowerShell 5.1.
 
-It stops at the first failed command, reports the step and its exit code, and returns that code. The Windows CI and CodeQL workflows install the .NET 10 SDK on `windows-latest` and invoke this same script; CodeQL also initializes its analyzer before running the script. No Visual Studio, Playnite installation, personal game library, or secrets are required for these checks. The test step covers the platform-independent core tests; the script does not deploy the MSIX package or verify Playnite integration.
+It stops at the first failed command, reports the step and its exit code, and returns that code. The Windows CI and CodeQL workflows install the .NET 10 SDK on `windows-latest` and invoke this same script; CodeQL also initializes its analyzer before running the script. No Visual Studio, Playnite installation, personal game library, or secrets are required for these checks. The test steps cover core search and synthetic catalog adapter/contract tests; the script does not deploy the MSIX package, install the Playnite plugin, or verify a real Playnite library.
+
+## Playnite catalog bridge (WERD-60)
+
+The companion plugin targets `net462` and uses `PlayniteSDK` 6.18.0 with `ExcludeAssets="runtime"` so Playnite supplies the SDK assembly at runtime. Build-time targeting uses `Microsoft.NETFramework.ReferenceAssemblies`. The shared snapshot contract targets both `net462` and `net10.0`; the adapter and strict parser target `net10.0`. The plugin's writer uses framework-provided JSON APIs rather than `System.Text.Json` to avoid the reported extension dependency-binding failure. No Playnite installation or personal library is required for restore/build/unit tests.
+
+On Windows, after the shared CI checks pass:
+
+```powershell
+.\scripts\package-playnite-plugin.ps1
+```
+
+This publishes the plugin and creates `artifacts/playnite-plugin/PlayniteCmdPalBridge.pext`. Install it by dragging the `.pext` onto the main Playnite window and confirming the install/restart prompts, or by running `Playnite.DesktopApp.exe --installext <path-to.pext>`. Alternatively, register `artifacts/playnite-plugin/publish` under Settings → For developers → External extensions → Add, enable it, and restart Playnite. Then follow the real-library checklist in [Catalog Bridge](CATALOG-BRIDGE.md). Do not commit the package, publish output, or catalog exports. The adapter itself is consumed by WERD-61; this issue does not add CmdPal search/launch UI.
 
 ## Manifest language fix
 
