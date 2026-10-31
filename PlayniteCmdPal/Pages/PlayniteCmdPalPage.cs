@@ -126,12 +126,6 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage
             return items.ToArray();
         }
 
-        if (string.IsNullOrWhiteSpace(query))
-        {
-            items.Add(CreateStatusItem("Type a game title to search your Playnite library."));
-            return items.ToArray();
-        }
-
         var matches = GameSearch.Search(catalog.Games, query);
         if (matches.Count == 0)
         {
