@@ -11,13 +11,13 @@
   <Identity
     Name="PlayniteCmdPal"
     Publisher="CN=PlayniteCmdPal"
-    Version="0.0.2.0" />
+    Version="0.0.3.0" />
   <!-- Publisher must match the subject of the certificate used to sign the MSIX. -->
 
   <Properties>
-    <DisplayName>Command Palette Extension Host</DisplayName>
+    <DisplayName>PlayniteCmdPal</DisplayName>
     <PublisherDisplayName>PlayniteCmdPal</PublisherDisplayName>
-    <Logo>Assets\StoreLogo.png</Logo>
+    <Logo>Assets\\StoreLogo.png</Logo>
   </Properties>
 
   <Dependencies>
@@ -34,13 +34,14 @@
       Executable="$targetnametoken$.exe"
       EntryPoint="$targetentrypoint$">
       <uap:VisualElements
-        DisplayName="Command Palette Extension Host"
-        Description="Background host for the Playnite Command Palette extension."
+        DisplayName="PlayniteCmdPal"
+        Description="Playnite Command Palette extension host."
         BackgroundColor="transparent"
-        Square150x150Logo="Assets\Square150x150Logo.png"
-        Square44x44Logo="Assets\Square44x44Logo.png">
-        <uap:DefaultTile Wide310x150Logo="Assets\Wide310x150Logo.png" />
-        <uap:SplashScreen Image="Assets\SplashScreen.png" />
+        Square150x150Logo="Assets\\Square150x150Logo.png"
+        Square44x44Logo="Assets\\Square44x44Logo.png"
+        AppListEntry="none">
+        <uap:DefaultTile Wide310x150Logo="Assets\\Wide310x150Logo.png" />
+        <uap:SplashScreen Image="Assets\\SplashScreen.png" />
       </uap:VisualElements>
       <Extensions>
         <com:Extension Category="windows.comServer">
