@@ -11,7 +11,7 @@
   <Identity
     Name="PlayniteCmdPal"
     Publisher="CN=PlayniteCmdPal"
-    Version="0.0.1.0" />
+    Version="0.0.2.0" />
   <!-- Publisher must match the subject of the certificate used to sign the MSIX. -->
 
   <Properties>
