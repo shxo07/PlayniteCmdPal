@@ -1,6 +1,6 @@
 # Repository Governance and Release Policy
 
-Last audited **2026-10-30**. This document records the repository settings confirmed after the maintainer completed the GitHub UI configuration for WERD-66.
+Last audited **2026-10-30**. This document records the repository settings confirmed after the maintainer completed the GitHub UI configuration.
 
 Committed files (workflows, Dependabot config, CODEOWNERS, SECURITY.md) do not enforce repository-level settings by themselves; the GitHub-hosted controls below are configured separately.
 

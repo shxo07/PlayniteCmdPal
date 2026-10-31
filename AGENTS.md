@@ -7,7 +7,7 @@ This file is the repository-wide starting point for coding agents and AI-assiste
 1. Read `README.md`, `docs/PRD.md`, `docs/TECHNICAL-DESIGN.md`, `docs/DECISIONS.md`, and the relevant sections of `docs/RESEARCH.md`.
 2. Read `.github/copilot-instructions.md` and `.github/instructions/cmdpal-extension.instructions.md` for CmdPal-specific code.
 3. Read relevant files under `.github/skills/` when working on the corresponding workflow.
-4. Check Linear (and relevant GitHub issues and pull requests) for issue scope, acceptance criteria, dependencies, and existing decisions.
+4. Check relevant GitHub issues and pull requests for scope, acceptance criteria, dependencies, and existing decisions.
 
 ## Non-negotiable project constraints
 

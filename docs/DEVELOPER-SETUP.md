@@ -1,6 +1,6 @@
 # Developer Setup
 
-**Status (2026-10-30):** WERD-60 adds the catalog bridge projects and adapter tests to the solution/shared CI script. Those additions have not been built or tested in this Linux workspace because no .NET SDK or PowerShell executable is available; syntax/XML checks are not a substitute for `dotnet build`/`dotnet test`. The maintainer reports later Windows build, `.NET Framework` smoke, packaging, and real-library runs for the bridge; see the validation status in [Catalog Bridge](CATALOG-BRIDGE.md). The maintainer's earlier Windows validation with .NET SDK 10.0.403 and Windows 10.0.19044 succeeded: restore, x64/ARM64 builds with and without `-p:DefaultLanguage=en-US`, Visual Studio package deployment, and a Command Palette placeholder-page smoke test. GitHub-hosted Windows CI and CodeQL have successful runs on `main` and pull requests (details below). The shared `scripts/ci.ps1` entry point cannot be run locally in this Agent sandbox: it is Linux and has no `dotnet`, `pwsh`, or Windows PowerShell executable. Do not regenerate the template.
+**Status (2026-10-31):** The catalog bridge and adapter are included in the solution and shared CI script. Windows CI [run 41177945707](https://github.com/werdscopez7347/PlayniteCmdPal/actions/runs/41177945707) passed restore, Release build, core tests, adapter tests, and the .NET Framework snapshot smoke test; CodeQL [run 41177945516](https://github.com/werdscopez7347/PlayniteCmdPal/actions/runs/41177945516) also passed. The maintainer reports successful plugin packaging and real-library refresh/recovery checks; see [Catalog Bridge](CATALOG-BRIDGE.md). This Linux workspace cannot independently run Windows/PowerShell/.NET Framework validation. The maintainer's earlier Windows validation with .NET SDK 10.0.403 and Windows 10.0.19044 succeeded: restore, x64/ARM64 builds with and without `-p:DefaultLanguage=en-US`, Visual Studio package deployment, and a Command Palette placeholder-page smoke test. Do not regenerate the template.
 
 ## Checked-in toolchain
 
@@ -48,7 +48,7 @@ Prerequisites: Windows with Windows PowerShell 5.1 installed (the script may be 
 
 It stops at the first failed command, reports the step and its exit code, and returns that code. The Windows CI and CodeQL workflows install the .NET 10 SDK on `windows-latest` and invoke this same script; CodeQL also initializes its analyzer before running the script. No Visual Studio, Playnite installation, personal game library, or secrets are required for these checks. The test steps cover core search and synthetic catalog adapter/contract tests; the script does not deploy the MSIX package, install the Playnite plugin, or verify a real Playnite library.
 
-## Playnite catalog bridge (WERD-60)
+## Playnite catalog bridge
 
 The companion plugin targets `net462` and uses `PlayniteSDK` 6.18.0 with `ExcludeAssets="runtime"` so Playnite supplies the SDK assembly at runtime. Build-time targeting uses `Microsoft.NETFramework.ReferenceAssemblies`. The shared snapshot contract targets both `net462` and `net10.0`; the adapter and strict parser target `net10.0`. The plugin's writer uses framework-provided JSON APIs rather than `System.Text.Json` to avoid the reported extension dependency-binding failure. No Playnite installation or personal library is required for restore/build/unit tests.
 
@@ -58,7 +58,7 @@ On Windows, after the shared CI checks pass:
 .\scripts\package-playnite-plugin.ps1
 ```
 
-This publishes the plugin and creates `artifacts/playnite-plugin/PlayniteCmdPalBridge.pext`. Install it by dragging the `.pext` onto the main Playnite window and confirming the install/restart prompts, or by running `Playnite.DesktopApp.exe --installext <path-to.pext>`. Alternatively, register `artifacts/playnite-plugin/publish` under Settings → For developers → External extensions → Add, enable it, and restart Playnite. Then follow the real-library checklist in [Catalog Bridge](CATALOG-BRIDGE.md). Do not commit the package, publish output, or catalog exports. The adapter itself is consumed by WERD-61; this issue does not add CmdPal search/launch UI.
+This publishes the plugin and creates `artifacts/playnite-plugin/PlayniteCmdPalBridge.pext`. Install it by dragging the `.pext` onto the main Playnite window and confirming the install/restart prompts, or by running `Playnite.DesktopApp.exe --installext <path-to.pext>`. Alternatively, register `artifacts/playnite-plugin/publish` under Settings → For developers → External extensions → Add, enable it, and restart Playnite. Then follow the real-library checklist in [Catalog Bridge](CATALOG-BRIDGE.md). Do not commit the package, publish output, or catalog exports. The adapter is consumed by the Command Palette presentation layer; this bridge does not add search/launch UI.
 
 ## Manifest language fix
 
@@ -96,13 +96,13 @@ The GitHub run records were inspected, including actual job conclusions:
 
 - **Windows CI, default-branch push:** [run 40351115311](https://github.com/werdscopez7347/PlayniteCmdPal/actions/runs/40351115311) on `main` completed successfully (restore and Release build).
 - **Windows CI, pull request:** [run 40833436815](https://github.com/werdscopez7347/PlayniteCmdPal/actions/runs/40833436815) completed successfully, including restore, Release build, and the core search test.
-- **Windows CI, WERD-64 implementation PR:** [run 40835007856](https://github.com/werdscopez7347/PlayniteCmdPal/actions/runs/40835007856) completed successfully on a GitHub-hosted Windows runner; the shared-script step passed.
+- **Windows CI, shared CI implementation PR:** [run 40835007856](https://github.com/werdscopez7347/PlayniteCmdPal/actions/runs/40835007856) completed successfully on a GitHub-hosted Windows runner; the shared-script step passed.
 - **CodeQL, default-branch push:** [run 40351115315](https://github.com/werdscopez7347/PlayniteCmdPal/actions/runs/40351115315) completed successfully.
 - **CodeQL, scheduled main run:** [run 40490182715](https://github.com/werdscopez7347/PlayniteCmdPal/actions/runs/40490182715) completed successfully.
 - **CodeQL, pull request:** [run 40833436859](https://github.com/werdscopez7347/PlayniteCmdPal/actions/runs/40833436859) completed successfully.
-- **CodeQL, WERD-64 implementation PR:** [run 40835007751](https://github.com/werdscopez7347/PlayniteCmdPal/actions/runs/40835007751) completed successfully; both the shared-script and analysis steps passed.
+- **CodeQL, shared CI implementation PR:** [run 40835007751](https://github.com/werdscopez7347/PlayniteCmdPal/actions/runs/40835007751) completed successfully; both the shared-script and analysis steps passed.
 
-The main/earlier PR runs establish the baseline workflow status. The WERD-64 implementation PR runs executed the new shared script on Windows and completed restore, Release build, core search tests, and CodeQL analysis successfully. This verifies the script in GitHub-hosted Windows CI; the separate local Windows invocation remains unverified because the Agent sandbox is Linux without PowerShell or the .NET SDK. A default-branch run of the new script will occur after merge and remains a follow-up.
+The main/earlier PR runs establish the baseline workflow status. The shared CI implementation PR runs executed the new shared script on Windows and completed restore, Release build, core search tests, and CodeQL analysis successfully. This verifies the script in GitHub-hosted Windows CI; the separate local Windows invocation remains unverified because the Agent sandbox is Linux without PowerShell or the .NET SDK. A default-branch run of the new script will occur after merge and remains a follow-up.
 
 ## Dependabot verification (2026-10-29)
 

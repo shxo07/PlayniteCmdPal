@@ -46,8 +46,6 @@ Provide a keyboard-first route to a user's unified Playnite library: open Comman
 - [Contributing](.github/CONTRIBUTING.md)
 - [Security policy](SECURITY.md)
 - [Code of Conduct](CODE_OF_CONDUCT.md)
-- [Linear project and roadmap](https://linear.app/werdscopez7347/project/playnite-for-command-palette-9103e0746de7)
-- [Implementation Roadmap & Engineering Workflow](https://linear.app/werdscopez7347/document/implementation-roadmap-and-engineering-workflow-aa55b062593b)
 
 ## Project docs
 
