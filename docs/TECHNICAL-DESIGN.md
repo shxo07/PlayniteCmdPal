@@ -1,6 +1,6 @@
 # Technical Design
 
-**Status:** Implementation plan; generated CmdPal template build and local deployment validated on Windows. The running- and closed-instance launch URI smoke tests passed; catalog integration remains to be implemented and verified.
+**Status:** Generated CmdPal template build and local deployment validated on Windows. The running- and closed-instance launch URI smoke tests passed. The WERD-60 catalog adapter/bridge implementation is present, with maintainer-reported Windows build, packaging, and real Playnite library verification; see [Catalog Bridge](CATALOG-BRIDGE.md) for the recorded evidence and remaining gaps.
 **Last reviewed:** 2026-10-30.
 
 ## Current generated-template baseline
@@ -48,8 +48,8 @@ References:
 
 1. **CmdPal presentation:** current-template command provider, search/results, actions, and clear unavailable/error states.
 2. **Core:** game model, query normalization, deterministic ranking, and interfaces. No CmdPal or Playnite SDK types.
-3. **Catalog adapter:** maps the selected read-only catalog transport into the core model.
-4. **Playnite bridge/transport:** a companion Playnite plugin exports an atomic, normalized JSON snapshot for the extension to read. See [ADR-005](DECISIONS.md#adr-005-companion-plugin-json-snapshot-for-catalog-access) for the contract and its limits.
+3. **Catalog adapter:** `PlayniteCmdPal.Playnite` strictly parses the read-only JSON snapshot, maps it into `PlayniteCmdPal.Core.GameEntry`, and owns the in-memory cache policy.
+4. **Playnite bridge/transport:** `PlayniteCmdPal.PlaynitePlugin` exports an atomic, normalized JSON snapshot; `PlayniteCmdPal.Snapshot` holds the shared v1 DTOs, serializer, publisher, and export coordinator without SDK dependencies. See [ADR-005](DECISIONS.md#adr-005-companion-plugin-json-snapshot-for-catalog-access) for the canonical contract and [Catalog Bridge](CATALOG-BRIDGE.md) for implementation details.
 
 Playnite remains the source of truth for game identity, library metadata, and launch configuration. The extension must not independently recreate storefront launch logic.
 
@@ -57,7 +57,7 @@ Playnite remains the source of truth for game identity, library metadata, and la
 
 - Preserve Playnite's stable game ID; never use the display title as identity.
 - Match case-insensitively.
-- Deterministic rank order: exact match, prefix match, word-prefix match, substring match; define stable tie-breaks.
+- Deterministic rank order: exact match, prefix match, word-prefix match, substring match; stable ordinal tie-breaks include source, install state, icon reference, and platform. `GameEntry.Platform` carries the optional platform label separately from source.
 - Handle duplicate display names and empty query/catalog explicitly.
 - Keep search logic independently unit-testable.
 
@@ -88,7 +88,7 @@ Playnite's plugin SDK exposes `PlayniteApi.Database.Games` to an in-process plug
 - https://api.playnite.link/docs/api/Playnite.SDK.IGameDatabase.html
 - https://api.playnite.link/docs/tutorials/extensions/library.html
 
-WERD-56 selects a companion plugin that exports an atomic, normalized JSON snapshot. [ADR-005](DECISIONS.md#adr-005-companion-plugin-json-snapshot-for-catalog-access) is the canonical adapter contract: it specifies identity, schema, path, refresh, size limits, stale data, and error handling. The writer and reader are future implementation work; event availability and runtime behavior still need validation against the supported Playnite version. Do not add named pipes or another IPC protocol without evidence that the snapshot design is insufficient.
+WERD-56 selects a companion plugin that exports an atomic, normalized JSON snapshot. [ADR-005](DECISIONS.md#adr-005-companion-plugin-json-snapshot-for-catalog-access) is the canonical adapter contract: it specifies identity, schema, path, refresh, size limits, stale data, and error handling. WERD-60 implements that contract in `PlayniteCmdPal.Snapshot`, `PlayniteCmdPal.Playnite`, and `PlayniteCmdPal.PlaynitePlugin`; [Catalog Bridge](CATALOG-BRIDGE.md) documents the cache policy, refresh triggers, packaging, and manual verification. The implementation has been built and packaged on Windows by the maintainer, and maintainer-reported real-library checks cover event-driven refresh and missing-file recovery; an automated Windows build/test run and metadata parity for every field still need independent verification. Do not add named pipes or another IPC protocol without evidence that the snapshot design is insufficient.
 
 Rejected for production:
 - Direct database writes.
@@ -96,16 +96,16 @@ Rejected for production:
 - Direct database parsing as the supported integration contract.
 - Arbitrary shell commands or executable paths derived from untrusted catalog data.
 
-## Proposed logical structure
+## Current logical structure
 
-Keep the generated project intact while the core boundary is introduced. Proposed code organization may be folders/projects in this solution or separate projects only when useful:
-- Extension presentation/provider and result actions.
-- Core game model and search.
-- Catalog adapter and serialization contract.
-- Unit/contract tests independent of Playnite.
-- Manual local smoke tests for the actual Playnite launch.
-
-The companion bridge is selected, but implementing it is outside the WERD-56 research spike.
+The generated CmdPal project remains intact. WERD-61 will consume the catalog adapter from the presentation layer; WERD-60 does not implement CmdPal search/launch UI.
+- `PlayniteCmdPal/`: generated CmdPal presentation/hosting template.
+- `PlayniteCmdPal.Core/`: SDK-independent game model and deterministic search.
+- `PlayniteCmdPal.Snapshot/`: shared v1 snapshot contract, allowlisted serializer, atomic publisher, and debounced export coordinator.
+- `PlayniteCmdPal.Playnite/`: strict parser and read-only adapter/cache exposing `IReadOnlyPlayniteCatalog`.
+- `PlayniteCmdPal.PlaynitePlugin/`: Playnite companion plugin projecting the database into the snapshot.
+- `PlayniteCmdPal.Core.Tests/` and `PlayniteCmdPal.Playnite.Tests/`: synthetic unit/contract tests.
+- Manual local smoke tests remain separate from automated CI.
 
 ## Security and reliability
 
@@ -125,10 +125,10 @@ For PR [#10](https://github.com/werdscopez7347/PlayniteCmdPal/pull/10), the fina
 Earlier fork-origin runs reported `action_required`; those were superseded by the successful runs above. PR #10 was squash-merged into `dev` as commit [`7b268d7`](https://github.com/werdscopez7347/PlayniteCmdPal/commit/7b268d79964cb3b83e76826e71b339f076c747a6) on 2026-10-30.
 
 - Core tests: ranking order, case normalization, duplicates, tie-breaks, empty query/catalog.
-- Adapter/contract tests: valid, missing, malformed, stale, and empty catalog data.
+- Adapter/contract tests: valid, missing, malformed, stale, empty, refresh/reconnect, oversized, duplicate/invalid records, cancellation, coalesced reads, and atomic publication using synthetic data only.
 - Manual integration: real Playnite library and launch-by-ID behavior.
 - Normal CI must not require Playnite or personal library data.
-- Windows CI builds the generated solution and runs `PlayniteCmdPal.Core.Tests` on pull requests and default-branch pushes; see [developer setup](DEVELOPER-SETUP.md) for the shared script and current verification evidence.
+- Windows CI builds the generated solution and runs both `PlayniteCmdPal.Core.Tests` and `PlayniteCmdPal.Playnite.Tests` through `scripts/ci.ps1`; see [developer setup](DEVELOPER-SETUP.md). Historical upstream CI success does not by itself validate the WERD-60 branch changes.
 
 ## Developer setup
 
@@ -141,7 +141,7 @@ See [DEVELOPER-SETUP.md](DEVELOPER-SETUP.md). Key loop:
 
 ## Open decisions
 
-- Validate the selected companion-plugin lifecycle and refresh events during implementation.
+- Confirm an independently reviewed Windows build/test run of the catalog bridge, and finish validating companion-plugin lifecycle/refresh events against a real Playnite library.
 - Tested minimum PowerToys/Visual Studio/.NET SDK versions.
 - Optional alias/fuzzy matching beyond title matching.
 - Packaging and gallery submission route.
