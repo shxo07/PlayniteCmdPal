@@ -103,6 +103,12 @@ Then perform a current-user clean reinstall (this removes the installed Command 
 
 Microsoft's extension-development guidance explicitly requires **Build → Deploy** (not Build alone) and a Command Palette extension reload after package changes. The PowerShell package cmdlets are documented by Microsoft. See the links in the repository PR discussion.
 
+### Duplicate-result mitigation in WERD-61
+
+The packaged application's ordinary Windows app identity is now displayed as **Command Palette Extension Host** in both the package-level `Properties/DisplayName` and application `uap:VisualElements/DisplayName`. The actual `uap3:AppExtension` remains named **Playnite**, as does the Command Palette provider and command item. This separates the host application's Start/app-catalog label from the extension's Command Palette label, so searching for Playnite should surface the extension rather than the host app as a second, inert result.
+
+After deploying this change, reload Command Palette extensions and search for `Playnite`. Confirm there is exactly one result and that it opens the dynamic game-search page. Also search for `Command Palette Extension Host` to confirm the host app has only its distinct label if it is surfaced in the palette. This is a targeted mitigation based on the identical package path and differing activation behavior; it still requires the manual Windows check below and should not be described as verified fixed until that check passes.
+
 ### Interpretation
 
 - If the clean reinstall leaves one registered package and one usable entry, the previous duplicate was consistent with stale package registration or discovery state. Record the before/after package records and exact PowerToys version; do not claim the root cause is proven beyond that evidence.
