@@ -5,7 +5,7 @@
 ## Technical findings
 
 - Microsoft documents how to generate, deploy, reload, and develop a Command Palette extension: https://learn.microsoft.com/en-us/windows/powertoys/command-palette/creating-an-extension
-- The current repository contains the generated solution `PlayniteCmdPal.sln` and project `PlayniteCmdPal/PlayniteCmdPal.csproj`; build and local deployment are recorded in WERD-57.
+- The current repository contains the generated solution `PlayniteCmdPal.sln` and project `PlayniteCmdPal/PlayniteCmdPal.csproj`; build and local deployment are recorded in the developer setup guide.
 - Checked-in target framework is `net10.0-windows10.0.26100.0`; minimum supported Windows platform is `10.0.19041.0`; runtime identifiers are `win-x64;win-arm64`.
 - The central package file pins `Microsoft.CommandPalette.Extensions` to `0.9.260303001`, `Microsoft.Windows.CsWinRT` to `2.2.0`, and `Shmuelie.WinRTServer` to `2.1.1`. Source: https://github.com/werdscopez7347/PlayniteCmdPal/blob/main/Directory.Packages.props
 - Playnite documents `--start <gameId>` and `playnite://playnite/start/<gameId>`, plus `showgame` and `search` URI commands: https://api.playnite.link/docs/manual/advanced/cmdlineArguments.html
@@ -19,7 +19,7 @@
 
 Keep Playnite authoritative. Use its documented launch-by-ID URI; real-game smoke tests with Playnite running and fully closed have been reported successful. The selected catalog transport is a companion plugin writing a normalized read-only JSON snapshot; do not use direct database writes, UI automation, or IPC.
 
-The launch mechanism and catalog transport decision are documented. WERD-60 adds the snapshot writer, reader, adapter cache, and companion plugin. Maintainer-reported Windows build, packaging, and real-library verification are recorded in [Catalog Bridge](CATALOG-BRIDGE.md); an independently reviewed automated Windows build/test run is still outstanding.
+The launch mechanism and catalog transport decision are documented. The snapshot writer, reader, adapter cache, and companion plugin are implemented. Windows CI [run 41177945707](https://github.com/werdscopez7347/PlayniteCmdPal/actions/runs/41177945707) and CodeQL [run 41177945516](https://github.com/werdscopez7347/PlayniteCmdPal/actions/runs/41177945516) passed; maintainer-reported packaging and real-library verification are recorded in [Catalog Bridge](CATALOG-BRIDGE.md). Field-by-field metadata parity remains to be independently checked.
 
 ## Market
 
@@ -31,7 +31,7 @@ Validate demand through a working demo and community feedback; do not equate gal
 
 - Record exact installed Visual Studio/PowerToys versions from the successful template validation; the template build/deploy itself was already reported successful.
 - Investigate CLI fallback separately if needed; it was not covered by the URI smoke tests.
-- Build and test the WERD-60 snapshot writer/reader on Windows, then verify the companion plugin against a real Playnite library without committing private exports.
+- Independently compare all exported metadata fields against a real Playnite library without committing private exports.
 - Confirm provider refresh behavior from the current generated code and current Microsoft docs.
 - Check current packaging/gallery requirements before release.
 
@@ -47,7 +47,7 @@ Validate demand through a working demo and community feedback; do not equate gal
 - https://api.playnite.link/docs/tutorials/extensions/library.html
 - https://api.playnite.link/docs/api/Playnite.SDK.Models.Game.html
 
-## WERD-56 decision (2026-10-27)
+## Launch integration decision (2026-10-27)
 
 Selected catalog transport: a companion Playnite plugin exports a normalized JSON snapshot; the out-of-process CmdPal extension reads it read-only. The official references reviewed document in-process database access but do not document a general external-process catalog endpoint. This is a finding about the reviewed documented API, not a claim that no third-party or undocumented interface exists.
 
@@ -61,7 +61,7 @@ Playnite documents --start <gameId> and playnite://playnite/start/<gameId>. Use 
 
 Manual check (user-reported, 2026-10-29): the documented URI launched the intended Steam-installed game on a normal installation of Playnite 10.63 with Playnite already running. The user also reports that, with Playnite fully closed, including its system-tray process, the same URI reopened Playnite and then launched the selected game. CLI fallback was not tested. Steps and scope are in docs/TECHNICAL-DESIGN.md.
 
-## WERD-60 implementation notes (2026-10-30)
+## Catalog bridge implementation notes (2026-10-30)
 
 The implementation follows ADR-005 rather than inventing a new transport. Official Playnite 10.63 source was reviewed for the SDK surface used by the companion plugin: `GenericPlugin` lifecycle methods, `IPlayniteAPI.Database.Games`, `IGameDatabase.IsOpen/DatabaseOpened`, `IItemCollection<T>.ItemCollectionChanged/ItemUpdated`, `ItemUpdateEvent<T>.OldData/NewData`, `Game.IsInstalled/SourceId/PlatformIds`, `IMainViewAPI.UIDispatcher`, and extension manifest fields. Source: https://github.com/JosefNemec/Playnite/tree/10.63/source/PlayniteSDK and https://github.com/JosefNemec/Playnite/tree/10.63/source/Playnite.
 

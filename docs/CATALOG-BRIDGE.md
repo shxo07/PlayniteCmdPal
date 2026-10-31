@@ -1,6 +1,6 @@
 # Playnite Catalog Bridge
 
-This document describes the WERD-60 implementation of the snapshot transport accepted in [ADR-005](DECISIONS.md#adr-005-companion-plugin-json-snapshot-for-catalog-access). It does not change the Command Palette search UI; WERD-61 consumes `IReadOnlyPlayniteCatalog`.
+This document describes the catalog snapshot transport accepted in [ADR-005](DECISIONS.md#adr-005-companion-plugin-json-snapshot-for-catalog-access). It does not change the Command Palette search UI; the presentation layer consumes `IReadOnlyPlayniteCatalog`.
 
 ## Components
 
@@ -92,14 +92,14 @@ dotnet run --project .\tools\CatalogVerifier\CatalogVerifier.csproj --configurat
 
 It checks an initial read, an immediate cached read, and an explicit refresh; valid empty libraries are supported. A differing ID set between the two reads can also mean the library changed concurrently. This check does not compare metadata with Playnite or demonstrate an event-driven refresh.
 
-Before closing WERD-60's real-library acceptance criterion:
+Remaining real-library verification:
 
 1. Install the packaged bridge in Playnite 10.63 or the supported version being tested.
 2. Start Playnite with a small test library containing duplicate display names and at least one installed and one uninstalled game.
 3. Confirm `%LOCALAPPDATA%\PlayniteCmdPal\catalog-v1.json` appears and contains only the allowlisted fields.
-4. Run the verifier above or use the WERD-61 page; compare stable IDs, names, source/platform, and install state locally with Playnite without sharing library data.
+4. Run the verifier above or use the Command Palette page; compare stable IDs, names, source/platform, and install state locally with Playnite without sharing library data.
 5. Add/rename/remove a game and change source/platform metadata; confirm the snapshot refreshes after the debounce and that no partial file is observable.
 6. Close Playnite, delete the snapshot, and confirm the adapter reports unavailable on a fresh process. Restart Playnite and confirm explicit refresh reconnects.
 7. Record the Playnite/Windows versions and observed outcomes without committing game IDs, titles, or library exports.
 
-The existing launch-by-ID URI smoke test is separate evidence from WERD-56; it does not verify this catalog bridge.
+The existing launch-by-ID URI smoke test is separate from catalog bridge verification and does not verify this bridge.

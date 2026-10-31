@@ -1,6 +1,6 @@
 # Technical Design
 
-**Status:** Generated CmdPal template build and local deployment validated on Windows. The running- and closed-instance launch URI smoke tests passed. The WERD-60 catalog adapter/bridge implementation is present, with maintainer-reported Windows build, packaging, and real Playnite library verification; see [Catalog Bridge](CATALOG-BRIDGE.md) for the recorded evidence and remaining gaps.
+**Status:** Generated CmdPal template build and local deployment validated on Windows. The running- and closed-instance launch URI smoke tests passed. The catalog adapter/bridge implementation is present. Windows CI and CodeQL passed, and the maintainer reports successful packaging and real Playnite library checks; see [Catalog Bridge](CATALOG-BRIDGE.md) for the evidence and remaining gaps.
 **Last reviewed:** 2026-10-30.
 
 ## Current generated-template baseline
@@ -88,7 +88,7 @@ Playnite's plugin SDK exposes `PlayniteApi.Database.Games` to an in-process plug
 - https://api.playnite.link/docs/api/Playnite.SDK.IGameDatabase.html
 - https://api.playnite.link/docs/tutorials/extensions/library.html
 
-WERD-56 selects a companion plugin that exports an atomic, normalized JSON snapshot. [ADR-005](DECISIONS.md#adr-005-companion-plugin-json-snapshot-for-catalog-access) is the canonical adapter contract: it specifies identity, schema, path, refresh, size limits, stale data, and error handling. WERD-60 implements that contract in `PlayniteCmdPal.Snapshot`, `PlayniteCmdPal.Playnite`, and `PlayniteCmdPal.PlaynitePlugin`; [Catalog Bridge](CATALOG-BRIDGE.md) documents the cache policy, refresh triggers, packaging, and manual verification. The implementation has been built and packaged on Windows by the maintainer, and maintainer-reported real-library checks cover event-driven refresh and missing-file recovery; an automated Windows build/test run and metadata parity for every field still need independent verification. Do not add named pipes or another IPC protocol without evidence that the snapshot design is insufficient.
+The accepted architecture uses a companion plugin that exports an atomic, normalized JSON snapshot. [ADR-005](DECISIONS.md#adr-005-companion-plugin-json-snapshot-for-catalog-access) is the canonical adapter contract: it specifies identity, schema, path, refresh, size limits, stale data, and error handling. The implementation in `PlayniteCmdPal.Snapshot`, `PlayniteCmdPal.Playnite`, and `PlayniteCmdPal.PlaynitePlugin` follows that contract; [Catalog Bridge](CATALOG-BRIDGE.md) documents the cache policy, refresh triggers, packaging, and manual verification. Windows CI and CodeQL passed, and the maintainer reports successful Windows packaging and real-library checks covering event-driven refresh and missing-file recovery. Field-by-field metadata parity remains to be independently checked. Do not add named pipes or another IPC protocol without evidence that the snapshot design is insufficient.
 
 Rejected for production:
 - Direct database writes.
@@ -98,7 +98,7 @@ Rejected for production:
 
 ## Current logical structure
 
-The generated CmdPal project remains intact. WERD-61 will consume the catalog adapter from the presentation layer; WERD-60 does not implement CmdPal search/launch UI.
+The generated CmdPal project remains intact. The Command Palette presentation layer will consume the catalog adapter; the bridge does not implement search/launch UI.
 - `PlayniteCmdPal/`: generated CmdPal presentation/hosting template.
 - `PlayniteCmdPal.Core/`: SDK-independent game model and deterministic search.
 - `PlayniteCmdPal.Snapshot/`: shared v1 snapshot contract, allowlisted serializer, atomic publisher, and debounced export coordinator.
@@ -128,7 +128,7 @@ Earlier fork-origin runs reported `action_required`; those were superseded by th
 - Adapter/contract tests: valid, missing, malformed, stale, empty, refresh/reconnect, oversized, duplicate/invalid records, cancellation, coalesced reads, and atomic publication using synthetic data only.
 - Manual integration: real Playnite library and launch-by-ID behavior.
 - Normal CI must not require Playnite or personal library data.
-- Windows CI builds the generated solution and runs both `PlayniteCmdPal.Core.Tests` and `PlayniteCmdPal.Playnite.Tests` through `scripts/ci.ps1`; see [developer setup](DEVELOPER-SETUP.md). Historical upstream CI success does not by itself validate the WERD-60 branch changes.
+- Windows CI builds the generated solution and runs both `PlayniteCmdPal.Core.Tests` and `PlayniteCmdPal.Playnite.Tests` through `scripts/ci.ps1`; see [developer setup](DEVELOPER-SETUP.md). The current successful Windows CI run validates these implementation changes.
 
 ## Developer setup
 
@@ -137,7 +137,7 @@ See [DEVELOPER-SETUP.md](DEVELOPER-SETUP.md). Key loop:
 2. Run `dotnet restore .\PlayniteCmdPal.sln` and `dotnet build .\PlayniteCmdPal.sln -c Debug`.
 3. In Visual Studio use **Build > Deploy** to register the generated MSIX package.
 4. Reload Command Palette extensions and debug using the generated launch settings.
-5. Record the successful exact steps in WERD-57.
+5. Record the successful exact steps in this guide.
 
 ## Open decisions
 

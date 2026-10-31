@@ -5,14 +5,14 @@ Contributions to PlayniteCmdPal are accepted under the repository's MIT License.
 ## Before starting
 
 - Read [README](../README.md), [PRD](../docs/PRD.md), [technical design](../docs/TECHNICAL-DESIGN.md), [research](../docs/RESEARCH.md), and [decisions](../docs/DECISIONS.md).
-- Check the linked Linear project and open GitHub issues/pull requests for scope, dependencies, and acceptance criteria.
+- Check open GitHub issues and pull requests for scope, dependencies, and acceptance criteria.
 - For CmdPal provider/page/action work, read `.github/copilot-instructions.md`, `.github/instructions/cmdpal-extension.instructions.md`, and the relevant guidance under `.github/skills/`.
-- Avoid duplicating work already tracked in Linear or in GitHub issues and pull requests.
+- Avoid duplicating work already tracked in GitHub issues and pull requests.
 
 ## Workflow
 
 1. Work from an issue with clear acceptance criteria.
-2. Create a focused branch using the Linear issue branch name where practical, or a short description.
+2. Create a focused branch named after the GitHub issue number or a short description.
 3. Keep each pull request focused on one coherent change.
 4. Add tests for behavior changes and update documentation when decisions or developer workflows change.
 5. Run restore/build and relevant tests locally.
