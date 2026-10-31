@@ -4,7 +4,7 @@ This file is the repository-wide starting point for coding agents and AI-assiste
 
 ## Before changing code
 
-1. Read `README.md`, `docs/PRD.md`, `docs/TECHNICAL-DESIGN.md`, `docs/DECISIONS.md`, and the relevant sections of `docs/RESEARCH.md`.
+1. Read `README.md`, `docs/PRD.md`, `docs/TECHNICAL-DESIGN.md`, `docs/DECISIONS.md`, `docs/TESTING.md`, and the relevant sections of `docs/RESEARCH.md`.
 2. Read `.github/copilot-instructions.md` and `.github/instructions/cmdpal-extension.instructions.md` for CmdPal-specific code.
 3. Read relevant files under `.github/skills/` when working on the corresponding workflow.
 4. Check relevant GitHub issues and pull requests for scope, acceptance criteria, dependencies, and existing decisions.
@@ -24,8 +24,8 @@ This file is the repository-wide starting point for coding agents and AI-assiste
 ## Engineering workflow
 
 - Make focused, issue-linked changes; avoid unrelated refactors.
-- Add or update tests for behavior changes.
-- Run the documented restore/build and relevant tests when possible; report commands and failures accurately.
+- Add or update tests for behavior changes, following the conventions and coverage map in `docs/TESTING.md`.
+- Run the documented restore/build and relevant tests when possible; report commands and failures accurately. A test you could not execute must be reported as unexecuted, never as passing.
 - Never claim a build, test, or manual smoke test passed unless it actually ran.
 - Update `docs/DECISIONS.md` for architectural decisions and `docs/RESEARCH.md` when evidence changes.
 - Keep README status honest until clean build, local deployment, and Playnite integration have been verified.

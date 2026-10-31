@@ -66,7 +66,9 @@ The packaging script first runs a synthetic .NET Framework smoke test against th
 
 ## Validation status
 
-The Linux workspace ran Tree-sitter syntax checks over the C#/PowerShell files and XML/solution consistency checks. It could not run `dotnet build`, `dotnet test`, or `scripts/ci.ps1` because no .NET SDK/PowerShell toolchain is installed. Syntax checks are not compilation or runtime evidence.
+The Linux workspace ran Tree-sitter syntax checks over the C#/PowerShell files and XML/solution consistency checks. It could not run `dotnet build`, `dotnet test`, or `scripts/ci.ps1` because no .NET SDK/PowerShell toolchain is installed, and the sandbox cannot reach Microsoft's SDK/CDN hosts or NuGet, so the toolchain cannot be installed either. Syntax checks are not compilation or runtime evidence.
+
+**Automated contract coverage.** Reduced output-equality assertions were introduced because the exact byte output of the `net462` JSON writer (line endings, separators) is not part of the recorded evidence; tests assert parsed shape and values instead. The suite now covers the allowlist, envelope/property rules, limit boundaries, cancellation, atomic publication and failure cleanup, coordinator lifecycle, and adapter cache-policy behavior; see [Testing](TESTING.md) for the file-by-file map. These tests exercised real code paths but had not been executed in a .NET environment when reviewed here; their first authoritative run is the next Windows CI build of the pull request that adds them.
 
 A maintainer reported that `scripts/ci.ps1` and the packaging script passed on Windows at commit `398044e`. The installed 0.1.0 bridge subsequently loaded, but export failed with an assembly-load exception for `System.Text.Json` 9.0.0.0 or one of its dependencies. Version 0.1.1 removes that dependency from the export path and adds .NET Framework smoke coverage. At `9ece548`, Windows CI reached the new smoke step but PowerShell reflection rejected a wrapped path argument before publication; the smoke invocation was subsequently corrected.
 

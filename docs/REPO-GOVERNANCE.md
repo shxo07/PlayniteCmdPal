@@ -34,7 +34,7 @@ The required checks have successful runs recorded on `main`. The workflow job na
 The Windows CI workflow currently differs between `main` and `dev`:
 
 - On `main`, `.github/workflows/ci.yml` defines the job `Restore and build (Windows)`. It runs `dotnet restore .\testExtension.sln` and `dotnet build .\testExtension.sln --configuration Release --no-restore`. It does **not** run `dotnet test`. Therefore, the required Windows check on `main` currently verifies restore/build only.
-- On `dev`, the workflow defines `Restore, build, and test (Windows)` and delegates to `scripts/ci.ps1`. That script restores and builds the solution, then runs `dotnet test` against `PlayniteCmdPal.Core.Tests/PlayniteCmdPal.Core.Tests.csproj` in Release configuration.
+- On `dev`, the workflow defines `Restore, build, and test (Windows)` and delegates to `scripts/ci.ps1`. That script restores and builds the solution, then runs `dotnet test` against both `PlayniteCmdPal.Core.Tests/PlayniteCmdPal.Core.Tests.csproj` and `PlayniteCmdPal.Playnite.Tests/PlayniteCmdPal.Playnite.Tests.csproj` in Release configuration, and finally runs the synthetic .NET Framework snapshot smoke test.
 
 The integration branch already has automated test execution. When the tested CI workflow is promoted from `dev` to `main`, update the `Protect main` required-check name to the exact resulting job name (if it changes) and verify successful runs on `main`. Until then, do not claim that the main-branch required Windows check runs tests.
 

@@ -15,7 +15,7 @@ Contributions to PlayniteCmdPal are accepted under the repository's MIT License.
 2. Create a focused branch named after the GitHub issue number or a short description.
 3. Keep each pull request focused on one coherent change.
 4. Add tests for behavior changes and update documentation when decisions or developer workflows change.
-5. Run restore/build and relevant tests locally.
+5. Run `.\scripts\ci.ps1` on Windows to restore, build, and run the same checks as CI, or run the individual test projects described in [Testing](../docs/TESTING.md).
 6. Open a pull request using the repository template and link the related GitHub issue, if one exists.
 7. Wait for Windows CI and security checks; address failures before merging.
 
@@ -31,7 +31,9 @@ Contributions to PlayniteCmdPal are accepted under the repository's MIT License.
 
 ## Local build
 
-Use the SDK and commands documented in [Developer Setup](../docs/DEVELOPER-SETUP.md). The checked-in solution is `PlayniteCmdPal.sln`. If the generated template fails to build, report the exact command, SDK version, and sanitized error output rather than silently changing package versions.
+Use the SDK and commands documented in [Developer Setup](../docs/DEVELOPER-SETUP.md). The checked-in solution is `PlayniteCmdPal.sln`; `.\scripts\ci.ps1` is the single entry point for the automated checks. If the generated template fails to build, report the exact command, SDK version, and sanitized error output rather than silently changing package versions.
+
+Tests must stay synthetic and deterministic: no real library data, no environment-gated or skipped tests, and no dependence on a locally installed Playnite or PowerToys. See [Testing](../docs/TESTING.md).
 
 ## Security
 
