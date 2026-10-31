@@ -68,7 +68,7 @@ The packaging script first runs a synthetic .NET Framework smoke test against th
 
 The Linux workspace ran Tree-sitter syntax checks over the C#/PowerShell files and XML/solution consistency checks. It could not run `dotnet build`, `dotnet test`, or `scripts/ci.ps1` because no .NET SDK/PowerShell toolchain is installed. Syntax checks are not compilation or runtime evidence.
 
-A maintainer reported that `scripts/ci.ps1` and the packaging script passed on Windows at commit `398044e`. The installed 0.1.0 bridge subsequently loaded, but export failed with an assembly-load exception for `System.Text.Json` 9.0.0.0 or one of its dependencies. Version 0.1.1 removes that dependency from the export path and adds .NET Framework smoke coverage. At `9ece548`, Windows CI reached the new smoke step but PowerShell reflection rejected a wrapped path argument before publication; the smoke invocation was corrected and needs to be rerun. The updated runtime and real-library checklist remain unverified.
+A maintainer reported that `scripts/ci.ps1` and the packaging script passed on Windows at commit `398044e`. The installed 0.1.0 bridge subsequently loaded, but export failed with an assembly-load exception for `System.Text.Json` 9.0.0.0 or one of its dependencies. Version 0.1.1 removes that dependency from the export path and adds .NET Framework smoke coverage. At `9ece548`, Windows CI reached the new smoke step but PowerShell reflection rejected a wrapped path argument before publication; the smoke invocation was subsequently corrected. A maintainer has now reported that the default snapshot file exists, but its contents, adapter consumption, refresh, and real-library checklist have not yet been verified.
 
 ## Troubleshooting a missing snapshot
 
@@ -78,12 +78,20 @@ Run `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\diagnose-play
 
 ## Manual Playnite verification still required
 
-Automated tests use synthetic snapshots only. Before closing WERD-60's real-library acceptance criterion:
+Automated tests use synthetic snapshots only. The following read-only verifier uses the real `PlayniteCatalogAdapter` and prints aggregate status and counts, not game names, IDs, or file contents:
+
+```powershell
+dotnet run --project .\tools\CatalogVerifier\CatalogVerifier.csproj --configuration Release
+```
+
+It checks an initial read, an immediate cached read, and an explicit refresh; valid empty libraries are supported. A differing ID set between the two reads can also mean the library changed concurrently. This check does not compare metadata with Playnite or demonstrate an event-driven refresh.
+
+Before closing WERD-60's real-library acceptance criterion:
 
 1. Install the packaged bridge in Playnite 10.63 or the supported version being tested.
 2. Start Playnite with a small test library containing duplicate display names and at least one installed and one uninstalled game.
 3. Confirm `%LOCALAPPDATA%\PlayniteCmdPal\catalog-v1.json` appears and contains only the allowlisted fields.
-4. Read it through `PlayniteCatalogAdapter.GetAsync` in a small Windows harness or the WERD-61 page; confirm stable IDs, names, source/platform, and install state match Playnite.
+4. Run the verifier above or use the WERD-61 page; compare stable IDs, names, source/platform, and install state locally with Playnite without sharing library data.
 5. Add/rename/remove a game and change source/platform metadata; confirm the snapshot refreshes after the debounce and that no partial file is observable.
 6. Close Playnite, delete the snapshot, and confirm the adapter reports unavailable on a fresh process. Restart Playnite and confirm explicit refresh reconnects.
 7. Record the Playnite/Windows versions and observed outcomes without committing game IDs, titles, or library exports.
