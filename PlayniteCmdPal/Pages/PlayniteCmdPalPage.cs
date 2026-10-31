@@ -33,8 +33,7 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage
 
     public override void UpdateSearchText(string oldSearch, string newSearch)
     {
-        _searchText = newSearch ?? string.Empty;
-        BeginSearch();
+        BeginSearch(searchText: newSearch ?? string.Empty);
     }
 
     public override IListItem[] GetItems() => _items;
@@ -44,7 +43,7 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage
         BeginSearch(forceRefresh: true);
     }
 
-    private void BeginSearch(bool forceRefresh = false)
+    private void BeginSearch(bool forceRefresh = false, string? searchText = null)
     {
         int version;
         string query;
@@ -52,6 +51,11 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage
 
         lock (_requestGate)
         {
+            if (searchText is not null)
+            {
+                _searchText = searchText;
+            }
+
             _searchCancellation?.Cancel();
             _searchCancellation?.Dispose();
             _searchCancellation = new CancellationTokenSource();
