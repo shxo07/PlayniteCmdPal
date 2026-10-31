@@ -11,7 +11,7 @@
   <Identity
     Name="PlayniteCmdPal"
     Publisher="CN=PlayniteCmdPal"
-    Version="0.0.1.0" />
+    Version="0.0.3.0" />
   <!-- Publisher must match the subject of the certificate used to sign the MSIX. -->
 
   <Properties>
@@ -35,18 +35,19 @@
       EntryPoint="$targetentrypoint$">
       <uap:VisualElements
         DisplayName="PlayniteCmdPal"
-        Description="Search and launch games from your Playnite library using PowerToys Command Palette."
+        Description="Playnite Command Palette extension host."
         BackgroundColor="transparent"
         Square150x150Logo="Assets\Square150x150Logo.png"
-        Square44x44Logo="Assets\Square44x44Logo.png">
+        Square44x44Logo="Assets\Square44x44Logo.png"
+        AppListEntry="none">
         <uap:DefaultTile Wide310x150Logo="Assets\Wide310x150Logo.png" />
         <uap:SplashScreen Image="Assets\SplashScreen.png" />
       </uap:VisualElements>
       <Extensions>
         <com:Extension Category="windows.comServer">
           <com:ComServer>
-            <com:ExeServer Executable="PlayniteCmdPal.exe" Arguments="-RegisterProcessAsComServer" DisplayName="PlayniteCmdPal">
-              <com:Class Id="5fa90ed5-fcab-47c0-bbc0-e0b72f39aa16" DisplayName="PlayniteCmdPal" />
+            <com:ExeServer Executable="PlayniteCmdPal.exe" Arguments="-RegisterProcessAsComServer" DisplayName="Playnite">
+              <com:Class Id="5fa90ed5-fcab-47c0-bbc0-e0b72f39aa16" DisplayName="Playnite" />
             </com:ExeServer>
           </com:ComServer>
         </com:Extension>
@@ -54,7 +55,7 @@
           <uap3:AppExtension Name="com.microsoft.commandpalette"
             Id="ID"
             PublicFolder="Public"
-            DisplayName="PlayniteCmdPal"
+            DisplayName="Playnite"
             Description="Search and launch games from your Playnite library using PowerToys Command Palette.">
             <uap3:Properties>
               <CmdPalProvider>

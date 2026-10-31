@@ -112,4 +112,9 @@
     <Copy SourceFiles="$(_DotNetRuntimeNotices)"
           DestinationFiles="$(PublishDir)dotnet-runtime-THIRD-PARTY-NOTICES.txt" />
   </Target>
+
+  <ItemGroup>
+    <ProjectReference Include="..\PlayniteCmdPal.Core\PlayniteCmdPal.Core.csproj" />
+    <ProjectReference Include="..\PlayniteCmdPal.Playnite\PlayniteCmdPal.Playnite.csproj" />
+  </ItemGroup>
 </Project>
