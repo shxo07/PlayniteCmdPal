@@ -8,7 +8,7 @@ public static class GameSearch
     /// <summary>
     /// Searches a catalog by title. Ranking is exact, prefix, word-prefix, then substring.
     /// Within a rank, earlier match positions come first, followed by stable title and ID
-    /// tie-breaks. A null or whitespace query returns no results. Entries with the same game
+    /// tie-breaks. A null or whitespace query returns the full catalog in stable order. Entries with the same game
     /// ID are represented once; distinct IDs with duplicate titles remain distinct results.
     /// </summary>
     /// <param name="catalog">Catalog entries supplied by the adapter.</param>
@@ -20,12 +20,8 @@ public static class GameSearch
     {
         ArgumentNullException.ThrowIfNull(catalog);
 
-        if (string.IsNullOrWhiteSpace(query))
-        {
-            return Array.Empty<GameEntry>();
-        }
-
-        var normalizedQuery = query.Trim();
+        var hasQuery = !string.IsNullOrWhiteSpace(query);
+        var normalizedQuery = hasQuery ? query!.Trim() : string.Empty;
         var canonicalEntries = catalog
             .Select(entry => (entry ?? throw new ArgumentException("Catalog cannot contain null entries.", nameof(catalog))).Validate())
             .OrderBy(entry => entry.GameId, StringComparer.Ordinal)
@@ -37,6 +33,11 @@ public static class GameSearch
             .ThenBy(entry => entry.Platform, StringComparer.Ordinal)
             .GroupBy(entry => entry.GameId, StringComparer.Ordinal)
             .Select(group => group.First());
+
+        if (!hasQuery)
+        {
+            return canonicalEntries.ToArray();
+        }
 
         return canonicalEntries
             .Select(entry => new SearchResult(entry, GetMatch(entry.Title, normalizedQuery)))
