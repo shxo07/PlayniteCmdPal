@@ -74,7 +74,7 @@ A maintainer subsequently reported that the default snapshot exists and the veri
 
 A later manual Playnite session verified the live bridge behaviours: renaming a game refreshed the snapshot while preserving its ID; adding and removing a temporary game added and removed the corresponding record; changing source/platform metadata refreshed the matching record; and, with Playnite closed and the snapshot moved aside, a fresh verifier process reported `Available: False`, `Game count: 0`, `Skipped records: 0`, `Stale: False`, `Issue: Missing`. Restarting Playnite recreated the snapshot successfully. These are maintainer-reported manual results; the Playnite/Windows versions were not recorded, and no personal library data was committed. This extends real-library evidence to event-driven refresh and missing-file recovery, but does not by itself prove metadata parity for every field or that no partial file can ever be observed.
 
-Windows CI and packaging after the smoke-test correction have not yet been explicitly confirmed.
+A maintainer subsequently ran `scripts/package-playnite-plugin.ps1` on Windows. The published-bridge .NET Framework smoke test passed using synthetic data (with no `System.Text.Json` reference), and the script created `artifacts/playnite-plugin/PlayniteCmdPalBridge.pext`. The complete `dotnet build` and `dotnet test` summaries from that run have not yet been reviewed independently, so their outcomes remain unconfirmed here.
 
 ## Troubleshooting a missing snapshot
 
