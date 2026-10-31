@@ -66,7 +66,15 @@ The script creates `artifacts/playnite-plugin/PlayniteCmdPalBridge.pext`. In Pla
 
 ## Validation status
 
-The Linux workspace ran Tree-sitter syntax checks over the C#/PowerShell files and XML/solution consistency checks. It could not run `dotnet build`, `dotnet test`, or `scripts/ci.ps1` because no .NET SDK/PowerShell toolchain is installed. Those Windows checks and the real-library checklist below remain required; syntax checks are not compilation or runtime evidence.
+The Linux workspace ran Tree-sitter syntax checks over the C#/PowerShell files and XML/solution consistency checks. It could not run `dotnet build`, `dotnet test`, or `scripts/ci.ps1` because no .NET SDK/PowerShell toolchain is installed. Syntax checks are not compilation or runtime evidence.
+
+A maintainer reported that `scripts/ci.ps1` and the packaging script passed on Windows at commit `398044e`. The installed bridge was subsequently loaded by Playnite, but no snapshot appeared; the real-library checklist below therefore remains incomplete.
+
+## Troubleshooting a missing snapshot
+
+Playnite writes host loading errors to `playnite.log`, but messages and exceptions emitted by extension loggers go to `extensions.log`. For a normal per-user installation, both are under `%APPDATA%\Playnite`; portable installations and custom user-data directories use their Playnite data root instead.
+
+Run `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\diagnose-playnite-bridge.ps1` from the repository root to inspect the installed files, snapshot state, and recent bridge log entries. The diagnostic does not print catalog contents, but logs can contain personal information; review and redact them before sharing.
 
 ## Manual Playnite verification still required
 

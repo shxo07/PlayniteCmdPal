@@ -1,8 +1,9 @@
 [CmdletBinding()]
 param ()
 
-# Read-only diagnostic for the WERD-60 Playnite bridge. It intentionally prints only
-# paths, file names/sizes, add-on state, and matching log lines; it does not print game records.
+# Read-only diagnostic for the WERD-60 Playnite bridge. It prints paths, file names/sizes,
+# add-on state, and matching logs (including exception details), but not catalog contents.
+# Review log output for personal information before sharing it.
 
 $ErrorActionPreference = 'Continue'
 $manifestId = 'PlayniteCmdPalBridge_9E4CF37F-EF29-495F-9E83-4EA1A389ABD8'
@@ -286,4 +287,52 @@ if ($latestLog) {
     }
 } else {
     Write-Line 'No playnite.log found in candidate roots.'
+}
+
+# Playnite routes extension loggers (names containing #) to extensions.log, not
+# playnite.log. Preserve exception/stack lines belonging to our logger without
+# printing unrelated extensions' entries.
+$extensionLogs = foreach ($root in $roots) {
+    $extensionLogPath = Join-Path $root 'extensions.log'
+    if (Test-Path -LiteralPath $extensionLogPath -PathType Leaf) {
+        Get-Item -LiteralPath $extensionLogPath
+    }
+}
+
+$latestExtensionLog = $null
+if ($latestLog) {
+    # Prefer the extensions log next to the active host log over an unrelated
+    # installation whose extensions log happened to be modified more recently.
+    $pairedPath = Join-Path $latestLog.DirectoryName 'extensions.log'
+    $latestExtensionLog = $extensionLogs | Where-Object { $_.FullName -eq $pairedPath } | Select-Object -First 1
+}
+if (-not $latestExtensionLog) {
+    $latestExtensionLog = $extensionLogs | Sort-Object LastWriteTimeUtc -Descending | Select-Object -First 1
+}
+Write-Line ''
+if ($latestExtensionLog) {
+    Write-Line "Newest Playnite extensions log: $($latestExtensionLog.FullName)"
+    try {
+        $text = Get-Content -LiteralPath $latestExtensionLog.FullName -Raw -ErrorAction Stop
+        $entries = @()
+        if (-not [string]::IsNullOrEmpty($text)) {
+            $entryStart = '(?m)(?=^\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}\|)'
+            $bridgeLogger = '(?m)^\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}\|[^|]*\|PlayniteCmdPal\.PlaynitePlugin#[^:\r\n]*:'
+            $entries = @([regex]::Split($text, $entryStart) |
+                Where-Object { $_ -match $bridgeLogger } |
+                Select-Object -Last 5)
+        }
+
+        if ($entries.Count -gt 0) {
+            foreach ($entry in $entries) {
+                Write-Line ($entry.TrimEnd())
+            }
+        } else {
+            Write-Line 'No bridge entries found in extensions.log.'
+        }
+    } catch {
+        Write-Line 'Could not read or parse extensions.log.'
+    }
+} else {
+    Write-Line 'No extensions.log found in candidate roots.'
 }
