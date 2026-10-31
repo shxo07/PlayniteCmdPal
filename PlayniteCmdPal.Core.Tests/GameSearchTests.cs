@@ -144,17 +144,27 @@ public sealed class GameSearchTests
     [Theory]
     [InlineData("")]
     [InlineData("   ")]
-    public void EmptyOrWhitespaceQueryReturnsNoResults(string query)
+    public void EmptyOrWhitespaceQueryReturnsFullCatalogInStableOrder(string query)
     {
-        var results = GameSearch.Search(new[] { new GameEntry("1", "Halo") }, query);
+        var catalog = new[]
+        {
+            new GameEntry("z", "Zelda"),
+            new GameEntry("b", "Halo"),
+            new GameEntry("a", "Apex"),
+            new GameEntry("b", "Halo Duplicate"),
+        };
 
-        Assert.Empty(results);
+        var results = GameSearch.Search(catalog, query);
+
+        Assert.Equal(new[] { "a", "b", "z" }, results.Select(game => game.GameId));
     }
 
     [Fact]
-    public void NullQueryReturnsNoResults()
+    public void NullQueryReturnsFullCatalog()
     {
-        Assert.Empty(GameSearch.Search(new[] { new GameEntry("1", "Halo") }, null));
+        var results = GameSearch.Search(new[] { new GameEntry("1", "Halo") }, null);
+
+        Assert.Equal("Halo", Assert.Single(results).Title);
     }
 
     [Fact]
