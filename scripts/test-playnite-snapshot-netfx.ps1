@@ -30,7 +30,6 @@ $snapshotType = $snapshotAssemblyObject.GetType('PlayniteCmdPal.Snapshot.Catalog
 $publisherType = $snapshotAssemblyObject.GetType('PlayniteCmdPal.Snapshot.SnapshotFilePublisher', $true)
 $gameConstructor = $gameType.GetConstructor([type[]]@([string], [string], [bool], [string], [string]))
 $snapshotConstructor = @($snapshotType.GetConstructors())[0]
-$publisher = $publisherType.GetMethod('PublishAsync')
 
 # Purely synthetic data exercises JSON escaping, non-ASCII characters, optional
 # fields, and isolated UTF-16 surrogate replacement without reading any library.
@@ -53,17 +52,18 @@ $snapshot = $snapshotConstructor.Invoke($snapshotArguments)
 $directory = Join-Path ([IO.Path]::GetTempPath()) ('PlayniteCmdPal.NetFxSmoke.' + [guid]::NewGuid().ToString('N'))
 $path = Join-Path $directory 'catalog-v1.json'
 try {
-    $arguments = [object[]]@($path, $snapshot, [Threading.CancellationToken]::None)
     # Exercise both first creation and atomic replacement through the actual
-    # net462 publisher, which was the failing entry point in Playnite.
-    $publisher.Invoke($null, $arguments).GetAwaiter().GetResult()
+    # net462 publisher, which was the failing entry point in Playnite. Calling
+    # the method directly lets PowerShell unwrap Join-Path's PSObject result;
+    # reflection's MethodInfo.Invoke does not unwrap objects inside object[].
+    $publisherType::PublishAsync([string]$path, $snapshot, [Threading.CancellationToken]::None).GetAwaiter().GetResult()
     $firstPublication = [Text.Encoding]::UTF8.GetString([IO.File]::ReadAllBytes($path)) | ConvertFrom-Json
     if ($firstPublication.games[1].name -ne 'Second') { throw 'First publication was invalid.' }
 
     $games[1] = $gameConstructor.Invoke([object[]]@('22222222-2222-4222-8222-222222222222', 'Second updated', $false, $null, $null))
     $snapshotArguments[1] = $games
-    $arguments[1] = $snapshotConstructor.Invoke($snapshotArguments)
-    $publisher.Invoke($null, $arguments).GetAwaiter().GetResult()
+    $replacement = $snapshotConstructor.Invoke($snapshotArguments)
+    $publisherType::PublishAsync([string]$path, $replacement, [Threading.CancellationToken]::None).GetAwaiter().GetResult()
     $bytes = [IO.File]::ReadAllBytes($path)
     if ($bytes.Length -eq 0 -or $bytes[0] -ne [byte][char]'{') {
         throw 'Snapshot is empty or has an unexpected UTF-8 BOM.'
