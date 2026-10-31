@@ -1,0 +1,31 @@
+{
+  "$schema": "../../../.github/schemas/extension.schema.json",
+  "id": "publisher.playnitecmdpal",
+  "title": "PlayniteCmdPal",
+  "shortDescription": "Search your Playnite game library and launch games directly from Command Palette.",
+  "description": "PlayniteCmdPal brings your Playnite library into Microsoft PowerToys Command Palette. Search for installed games, review matching results, and launch a selected game through Playnite so your existing launch configuration remains in control. Requires Playnite and PowerToys with Command Palette enabled.",
+  "author": {
+    "name": "REPLACE WITH FINAL PUBLISHER NAME",
+    "url": "https://github.com/werdscopez7347"
+  },
+  "icon": "icon.png",
+  "homepage": "https://github.com/werdscopez7347/PlayniteCmdPal",
+  "tags": [
+    "playnite",
+    "games",
+    "game-library",
+    "game-search",
+    "launcher"
+  ],
+  "categories": [
+    "entertainment",
+    "utilities-and-tools"
+  ],
+  "listed": false,
+  "installSources": [
+    {
+      "type": "msstore",
+      "id": "REPLACE_WITH_REAL_STORE_PRODUCT_ID"
+    }
+  ]
+}
