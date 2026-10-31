@@ -37,7 +37,7 @@ Provide a keyboard-first route to a user's unified Playnite library: open Comman
 - Repo-specific CmdPal instructions: `.github/copilot-instructions.md` and `.github/instructions/cmdpal-extension.instructions.md`
 - GitHub Actions: Windows build/test workflow and CodeQL workflow; Dependabot is configured for NuGet and Actions.
 - Windows CI and CodeQL have successful runs. Both test projects (`PlayniteCmdPal.Core.Tests` and `PlayniteCmdPal.Playnite.Tests`) run in CI through `scripts/ci.ps1` alongside the .NET Framework snapshot smoke test; see [Testing](docs/TESTING.md) for the coverage map. Do not describe the repository as a working end-to-end extension until local deployment and Playnite integration acceptance criteria pass.
-- **License:** MIT for PlayniteCmdPal-authored material; see [LICENSE](LICENSE). Third-party components and assets retain their own license and attribution requirements. See [licensing and release readiness](docs/LICENSING-AND-RELEASE.md).
+- **License:** MIT for PlayniteCmdPal-authored material; see [LICENSE](LICENSE). Third-party components and assets retain their own license and attribution requirements; distribution artifacts carry [third-party notices](third-party/THIRD-PARTY-NOTICES.md). See [licensing and release readiness](docs/LICENSING-AND-RELEASE.md) for the dependency audit and its open review items.
 
 ## Development and project tracking
 
