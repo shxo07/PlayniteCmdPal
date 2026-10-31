@@ -21,6 +21,7 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage
     private CancellationTokenSource? _searchCancellation;
     private string _searchText = string.Empty;
     private int _requestVersion;
+    private readonly object _requestGate = new();
 
     public PlayniteCmdPalPage()
     {
@@ -45,16 +46,24 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage
 
     private void BeginSearch(bool forceRefresh = false)
     {
-        _searchCancellation?.Cancel();
-        _searchCancellation?.Dispose();
-        _searchCancellation = new CancellationTokenSource();
+        int version;
+        string query;
+        CancellationToken cancellationToken;
 
-        var version = Interlocked.Increment(ref _requestVersion);
-        var query = _searchText;
-        var cancellationToken = _searchCancellation.Token;
+        lock (_requestGate)
+        {
+            _searchCancellation?.Cancel();
+            _searchCancellation?.Dispose();
+            _searchCancellation = new CancellationTokenSource();
 
-        _items = [CreateStatusItem("Searching your Playnite library…")];
-        RaiseItemsChanged();
+            version = ++_requestVersion;
+            query = _searchText;
+            cancellationToken = _searchCancellation.Token;
+
+            _items = [CreateStatusItem("Searching your Playnite library…")];
+            RaiseItemsChanged();
+        }
+
         _ = LoadItemsAsync(version, query, forceRefresh, cancellationToken);
     }
 
@@ -70,9 +79,15 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage
                 ? await _catalog.RefreshAsync(cancellationToken).ConfigureAwait(false)
                 : await _catalog.GetAsync(cancellationToken).ConfigureAwait(false);
 
-            if (version == Volatile.Read(ref _requestVersion))
+            lock (_requestGate)
             {
+                if (version != _requestVersion)
+                {
+                    return;
+                }
+
                 _items = BuildItems(catalog, query);
+                RaiseItemsChanged();
             }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -81,15 +96,14 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage
         }
         catch (Exception)
         {
-            if (version == Volatile.Read(ref _requestVersion))
+            lock (_requestGate)
             {
+                if (version != _requestVersion)
+                {
+                    return;
+                }
+
                 _items = [CreateStatusItem("Couldn't read the Playnite catalog. Check the companion plugin and snapshot permissions, then refresh.")];
-            }
-        }
-        finally
-        {
-            if (version == Volatile.Read(ref _requestVersion))
-            {
                 RaiseItemsChanged();
             }
         }
