@@ -325,13 +325,15 @@ public sealed class GameSearchRankingTests
     }
 
     [Fact]
-    public void BlankQueryReturnsBeforeTheCatalogIsValidated()
+    public void BlankQueryStillValidatesCatalogEntries()
     {
-        // Documented ordering: an unusable query short-circuits and never enumerates the catalog.
+        // Blank queries return the full catalog in stable order, so catalog validation still applies.
         var catalog = new SinglePassCatalog(new GameEntry("1", "Halo"), null!);
 
-        Assert.Empty(GameSearch.Search(catalog, " "));
-        Assert.Equal(0, catalog.EnumerationCount);
+        var error = Assert.Throws<ArgumentException>(() => GameSearch.Search(catalog, " "));
+
+        Assert.Equal("catalog", error.ParamName);
+        Assert.Equal(1, catalog.EnumerationCount);
     }
 
     [Fact]
