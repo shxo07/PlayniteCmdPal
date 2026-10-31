@@ -44,6 +44,7 @@ Provide a keyboard-first route to a user's unified Playnite library: open Comman
 - [Developer setup](docs/DEVELOPER-SETUP.md): clean Windows setup, Visual Studio/`.NET 10` prerequisites, deploy/reload/debug loop, and troubleshooting.
 - [Testing](docs/TESTING.md): what the automated suites cover, which checks run in CI versus requiring a local Playnite/PowerToys install, and how to run one project or one test.
 - [Release packaging](docs/RELEASE-PACKAGING.md): project-specific MSIX distribution decision, Gallery metadata draft, installation/update/uninstall guidance, and release blockers.
+- [Release notes template](docs/RELEASE-NOTES-TEMPLATE.md): checklist-backed template for a future public release.
 - Run the same Windows restore/build/test checks as CI with `.\scripts\ci.ps1` from PowerShell on Windows with the .NET 10 SDK; the script is the single source of truth for the automated steps.
 - [Contributing](.github/CONTRIBUTING.md)
 - [Security policy](SECURITY.md)
