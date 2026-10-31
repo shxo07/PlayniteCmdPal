@@ -58,6 +58,60 @@ Do not upload or commit this file; it contains private library metadata.
 
 For missing/malformed-file tests, use a disposable test profile or back up and restore the snapshot. Never modify or share a real library export. The adapter's explicit refresh bypasses its normal 30-second read interval.
 
-## 6. Report results
+
+## 6. Duplicate extension-entry investigation (blocking until manually verified)
+
+The maintainer-reported symptom is two **extension entries** when searching for `Playnite` in Command Palette: one has no description and opens the working extension; the other has a description but does nothing. This is not a duplicate-game/catalog-record issue.
+
+### Checked-in registration facts
+
+The current source has one `uap3:Extension` with one `uap3:AppExtension` named `com.microsoft.commandpalette` (ID `ID`), one COM class registration, and one `CommandItem` returned by `PlayniteCmdPalCommandsProvider.TopLevelCommands()`. The manifest identity is `Name=PlayniteCmdPal`, `Publisher=CN=PlayniteCmdPal`, `Version=0.0.1.0`. The manifest app-extension `DisplayName`, `CommandProvider.DisplayName`, and `CommandItem.Title` are all `Playnite`. The description is present; there is no source evidence that it creates a second registration.
+
+The `dev` baseline uses the same package identity and version and also declares one Command Palette app extension and one command item; its visible names are `PlayniteCmdPal`. The WERD-61 branch changes the visible names to `Playnite`, not the package identity, version, AppExtension count, or command count. This source inspection does **not** prove what Windows has registered or what Command Palette has cached. The duplicate has not yet been reproduced or cleared on a clean Windows install.
+
+### Reproduce, record, and cleanly reinstall
+
+Before changing the installation, record the PowerToys/Command Palette version (PowerToys Settings → General → About), the screenshot of both results, and the installed package records:
+
+```powershell
+Get-AppxPackage -Name PlayniteCmdPal |
+    Select-Object Name, PackageFullName, PackageFamilyName, Publisher, Version, InstallLocation |
+    Format-List
+```
+
+If elevated access is available, also check whether the package is registered for other users:
+
+```powershell
+Get-AppxPackage -AllUsers -Name PlayniteCmdPal |
+    Select-Object Name, PackageFullName, PackageFamilyName, Publisher, Version, InstallLocation |
+    Format-List
+```
+
+Then perform a current-user clean reinstall (this removes the installed Command Palette extension package; it does not remove the separate Playnite companion plugin or the Playnite library):
+
+1. Exit PowerToys from its notification-area menu so Command Palette is no longer running.
+2. In PowerShell, inspect the matching package records again. If more than one record is returned, record each full package name before removal.
+3. Remove the current-user registration:
+   ```powershell
+   Get-AppxPackage -Name PlayniteCmdPal | Remove-AppxPackage
+   ```
+4. Confirm that `Get-AppxPackage -Name PlayniteCmdPal` returns no current-user package.
+5. In Visual Studio, select the `x64` / `Debug` configuration and use **Build → Deploy** for the packaged project. Do not use the unpackaged launch profile.
+6. Confirm that exactly one current-user package is registered and record its full identity, publisher, version, and install location with the first command above.
+7. Start PowerToys and Command Palette. Run **Reload → Reload Command Palette extensions**.
+8. Search for `Playnite`. Record the number of extension entries, whether each has a description, and whether the single remaining entry opens the search page and returns results.
+
+Microsoft's extension-development guidance explicitly requires **Build → Deploy** (not Build alone) and a Command Palette extension reload after package changes. The PowerShell package cmdlets are documented by Microsoft. See the links in the repository PR discussion.
+
+### Interpretation
+
+- If the clean reinstall leaves one registered package and one usable entry, the previous duplicate was consistent with stale package registration or discovery state. Record the before/after package records and exact PowerToys version; do not claim the root cause is proven beyond that evidence.
+- If one registered package still produces two entries after the explicit extension reload, preserve the screenshot and package records. Investigate Command Palette's package-catalog discovery/cache behavior and extension activation logs before changing manifest descriptions or filtering catalog results.
+- If multiple package identities or publishers are present, compare their full names, publishers, versions, and install locations before removing any remaining package. Do not delete unrelated packages.
+
+The clean reinstall sequence above is a reproducible diagnostic procedure, **not a completed verification**. Do not mark the duplicate-entry blocker fixed until the observed two-entry state is reproduced and the post-cleanup state is verified on Windows.
+
+## 7. Report results
+
 
 Record Windows, .NET SDK, Visual Studio, PowerToys Command Palette, and Playnite versions, plus the exact commands and outcomes. Separate automated results from manual integration checks. Do not claim the real launch path works until a game has been launched through the installed Playnite URI handler.
