@@ -34,6 +34,38 @@ public sealed class LastActivitySnapshotTests
     }
 
     [Fact]
+    public async Task LocalDateTimeRoundTripsWithItsLocalKindAndOffset()
+    {
+        var activity = DateTime.SpecifyKind(new DateTime(2026, 10, 30, 14, 25, 0), DateTimeKind.Local);
+        var bytes = await SerializeAsync(activity);
+        var parsed = CatalogSnapshotParser.Parse(bytes);
+        Assert.Null(parsed.Issue);
+        var actual = Assert.Single(parsed.Snapshot!.Games).LastActivity!.Value;
+        Assert.Equal(DateTimeKind.Local, actual.Kind);
+        Assert.Equal(activity, actual);
+    }
+
+    [Fact]
+    public async Task UtcDateTimeRoundTripsAsUtc()
+    {
+        var activity = new DateTime(2026, 10, 30, 14, 25, 0, DateTimeKind.Utc);
+        var bytes = await SerializeAsync(activity);
+        var parsed = CatalogSnapshotParser.Parse(bytes);
+        Assert.Null(parsed.Issue);
+        var actual = Assert.Single(parsed.Snapshot!.Games).LastActivity!.Value;
+        Assert.Equal(DateTimeKind.Utc, actual.Kind);
+        Assert.Equal(activity, actual);
+    }
+
+    private static async Task<byte[]> SerializeAsync(DateTime activity)
+    {
+        var snapshot = new CatalogSnapshot(GeneratedAt, new[] { new SnapshotGame(GameId, "Synthetic game", true, lastActivity: activity) });
+        using var stream = new MemoryStream();
+        await CatalogSnapshotSerializer.SerializeAsync(stream, snapshot);
+        return stream.ToArray();
+    }
+
+    [Fact]
     public void MissingLastActivityRemainsNullAndMalformedValuesSkipOnlyTheirRecord()
     {
         var json = $$"""{"schemaVersion":1,"generatedAtUtc":"2026-10-30T00:00:00Z","games":[{"id":"{{GameId}}","name":"No history","isInstalled":false},{"id":"22222222-2222-4222-8222-222222222222","name":"Bad date","isInstalled":false,"lastActivity":"yesterday"}]}""";
