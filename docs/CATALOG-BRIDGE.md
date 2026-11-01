@@ -1,17 +1,15 @@
-# Playnite Catalog Bridge
-
-> Artwork transport and the schema v2 trust boundary are specified in [Artwork transport](ARTWORK-TRANSPORT.md). The v1 contract below remains unchanged for existing catalogs.
+# Playnite Catalog Bridge\n\n> Artwork transport and the schema v2 trust boundary are specified in [Artwork transport](ARTWORK-TRANSPORT.md). The v1 contract below remains unchanged for existing catalogs.
 
 This document describes the catalog snapshot transport accepted in [ADR-005](DECISIONS.md#adr-005-companion-plugin-json-snapshot-for-catalog-access). It does not change the Command Palette search UI; the presentation layer consumes `IReadOnlyPlayniteCatalog`.
 
 ## Components
 
-- `PlayniteCmdPal.Snapshot` (`net462` and `net10.0`): shared versioned v1/v2 contract, allowlisted serializer, atomic file publisher, and debounced export coordinator. It has no Playnite or CmdPal SDK dependency.
+- `PlayniteCmdPal.Snapshot` (`net462` and `net10.0`): shared v1 contract, allowlisted serializer, atomic file publisher, and debounced export coordinator. It has no Playnite or CmdPal SDK dependency.
 - `PlayniteCmdPal.Playnite` (`net10.0`): strict parser and read-only adapter/cache mapping snapshots to `PlayniteCmdPal.Core.GameEntry`.
 - `PlayniteCmdPal.PlaynitePlugin` (`net462`): companion Playnite generic plugin that projects `PlayniteApi.Database.Games` and publishes the snapshot.
 - `PlayniteCmdPal.Playnite.Tests`: synthetic-file adapter/protocol tests. `scripts/test-playnite-snapshot-netfx.ps1` additionally exercises the actual `net462` writer/publisher in Windows PowerShell 5.1. Neither requires Playnite, PowerToys, or a personal library.
 
-The current canonical file is `%LOCALAPPDATA%\PlayniteCmdPal\catalog-v2.json`. The adapter falls back to the legacy `%LOCALAPPDATA%\PlayniteCmdPal\catalog-v1.json` only when v2 is missing. The plugin creates the directory with inherited per-user permissions. The adapter opens the file read-only with `FileShare.ReadWrite | FileShare.Delete`; it never creates, repairs, or deletes the snapshot.
+The canonical file is `%LOCALAPPDATA%\PlayniteCmdPal\catalog-v1.json`. The plugin creates the directory with inherited per-user permissions. The adapter opens the file read-only with `FileShare.ReadWrite | FileShare.Delete`; it never creates, repairs, or deletes the snapshot.
 
 ## Schema v1
 
@@ -34,10 +32,6 @@ The current canonical file is `%LOCALAPPDATA%\PlayniteCmdPal\catalog-v2.json`. T
 `generatedAtUtc` is an ISO-8601 UTC timestamp; fractional seconds are optional, and non-UTC offsets are rejected. `id` is Playnite's stable GUID in lowercase canonical D format and is the only identity key. Empty GUIDs, non-canonical IDs, blank names, missing required fields, wrong field types, duplicate JSON properties, and unknown v1 fields are invalid. `source` and `platform` are optional strings or null; the plugin joins multiple platform names with `, ` in ordinal order. No executable paths, launch actions, icons, or full SDK models are exported.
 
 The parser rejects input over 32 MiB, JSON deeper than 16 levels, unsupported schema versions, malformed envelopes, and arrays over 100,000 records. Invalid individual records and later duplicate IDs are skipped and counted; the first valid record for an ID wins. An empty `games` array is a valid empty library.
-
-## Schema v2 and migration
-
-The companion plugin now writes schema v2 to `catalog-v2.json`. It preserves the v1 envelope and game fields, adding optional `coverArtworkId` and `iconArtworkId` SHA-256 identifiers. Schema v1 remains immutable and readable; v1 records map both artwork references to null. The adapter reads v2 first and uses `catalog-v1.json` only if v2 is missing. A malformed or unsupported v2 file is reported instead of being hidden by a fallback to stale v1 data. The artwork identifiers are resolved only within the bridge-owned cache; see [Artwork transport](ARTWORK-TRANSPORT.md) for the trust boundary and cache transaction details.
 
 ## Publication and refresh
 
@@ -96,7 +90,7 @@ Remaining real-library verification:
 
 1. Install the packaged bridge in Playnite 10.63 or the supported version being tested.
 2. Start Playnite with a small test library containing duplicate display names and at least one installed and one uninstalled game.
-3. Confirm `%LOCALAPPDATA%\PlayniteCmdPal\catalog-v2.json` appears and contains only the allowlisted v2 fields.
+3. Confirm `%LOCALAPPDATA%\PlayniteCmdPal\catalog-v1.json` appears and contains only the allowlisted fields.
 4. Run the verifier above or use the Command Palette page; compare stable IDs, names, source/platform, and install state locally with Playnite without sharing library data.
 5. Add/rename/remove a game and change source/platform metadata; confirm the snapshot refreshes after the debounce and that no partial file is observable.
 6. Close Playnite, delete the snapshot, and confirm the adapter reports unavailable on a fresh process. Restart Playnite and confirm explicit refresh reconnects.

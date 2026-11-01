@@ -240,7 +240,7 @@ public sealed class ArtworkCacheGeneration : IDisposable
                 if (Directory.Exists(root)) throw new IOException("The incomplete artwork cache could not be removed during recovery.");
             }
         }
-        catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is ArgumentException)
+        catch (Exception ex) when (ex is IOException || ex is InvalidDataException || ex is UnauthorizedAccessException || ex is ArgumentException)
         {
             // Do not start a new generation while the previous transaction is unresolved.
             throw new IOException("The previous artwork cache transaction could not be recovered; the existing cache was left untouched.", ex);
