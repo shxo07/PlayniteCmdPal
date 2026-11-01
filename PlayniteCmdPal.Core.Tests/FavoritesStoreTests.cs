@@ -126,7 +126,12 @@ public sealed class FavoritesStoreTests : IDisposable
         Directory.CreateDirectory(FilePath);
         var store = new FavoritesStore(FilePath);
 
-        Assert.ThrowsAny<IOException>(() => store.Toggle("game-id"));
+        var exception = Record.Exception(() => store.Toggle("game-id"));
+
+        Assert.NotNull(exception);
+        Assert.True(
+            exception is IOException or UnauthorizedAccessException,
+            $"Expected a file-system write failure, but got {exception.GetType().Name}.");
 
         Assert.False(store.IsFavorite("game-id"));
         Assert.Empty(Directory.GetFiles(_directory, "favorites-v1.json.*.tmp"));
