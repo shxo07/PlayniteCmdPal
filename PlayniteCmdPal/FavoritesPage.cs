@@ -34,17 +34,26 @@ internal sealed partial class FavoritesPage : DynamicListPage
 
     public override IListItem[] GetItems() => _requestGate.Synchronize(() => _items);
 
-    private void OnFavoritesChanged(object? sender, EventArgs e) => LoadItems();
+    // Never refresh a Command Palette page inline inside the command's Invoke call.
+    // A page notification here can re-enter the extension while it is dispatching the
+    // command result, suppressing the toast and leaving the page in a stale loading state.
+    private void OnFavoritesChanged(object? sender, EventArgs e)
+    {
+        _ = Task.Run(() =>
+        {
+            try { LoadItems(); }
+            catch { /* A refresh must not turn a successful pin/unpin into a failed command. */ }
+        });
+    }
 
     private void LoadItems()
     {
         var request = _requestGate.BeginRequest(() =>
         {
             _items = [CreateStatusItem("Loading your favorites…")];
-            RaiseItemsChanged();
             return _searchText;
         });
-
+        RaiseItemsChanged();
         _ = LoadItemsAsync(request.Version, request.State);
     }
 
@@ -98,15 +107,12 @@ internal sealed partial class FavoritesPage : DynamicListPage
         }
     }
 
-    // Request ownership and publication share one lock. An older request can finish its
-    // catalog read or filtering after a newer query, but it can never publish over that query.
+    // Keep the gate around ownership/state mutation only. Never call the Command Palette
+    // notification API while holding its lock.
     private void PublishIfCurrent(int version, IListItem[] items)
     {
-        _requestGate.TryPublish(version, () =>
-        {
-            _items = items;
-            RaiseItemsChanged();
-        });
+        var published = _requestGate.TryPublish(version, () => _items = items);
+        if (published) RaiseItemsChanged();
     }
 
     private static string BuildMetadata(GameEntry game)
