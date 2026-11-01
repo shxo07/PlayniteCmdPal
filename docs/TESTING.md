@@ -152,19 +152,15 @@ and **183** for the snapshot contract, publication, refresh, and adapter policy.
 
 How that number is established, so it can be re-derived rather than trusted:
 
-| Source | Core | Adapter | Total |
+| Source | Core | Command | Adapter | Total |
 |---|---|---|---|
 | Count of `[Fact]` plus `[InlineData]` rows in each project in this commit | 66 | 2 | 183 | 251 |
 | `dotnet test` totals in Windows CI run [41184115994](https://github.com/werdscopez7347/PlayniteCmdPal/actions/runs/41184115994) (pre-command-suite baseline) | 66 | n/a | 183 | 249 |
 | `dotnet test` totals for the new command suite | pending latest Windows CI | 2 authored cases | n/a | pending latest Windows CI |
 
-All three agree. The count was previously stated here and in an earlier pull-request description
-as 251; that figure was produced by an editing-time estimate before any test had executed, not by
-`dotnet test`, and it was wrong. It has been corrected to 249.
+Before adding the command-result suite, Windows CI reported 249 passing cases across the core and adapter projects. The two new command-result cases bring the authored total to 251; their executed result is pending the updated Windows CI run.
 
-Counts drift as tests change. The new command-result suite has two authored cases; its executed count remains pending until the updated Windows CI run reports it. Treat the per-file table above as the authoritative map and re-read each `Passed!` line rather than trusting a number written here. If the written count and
-`dotnet test` disagree, the `dotnet test` output wins: it is the only measurement that actually
-executed the tests.
+Counts drift as tests change. Treat the per-file table above as the authoritative map and re-read each `Passed!` line rather than trusting a number written here. If the written count and `dotnet test` disagree, the `dotnet test` output wins: it is the only measurement that actually executed the tests.
 
 ### Expected outcome
 
