@@ -67,11 +67,27 @@ self-contained build of the extension may copy into the package. The package dec
 a **Microsoft Windows SDK (preview) license** (`https://aka.ms/WinSDKPreviewLicenseURL`)
 and sets `requireLicenseAcceptance`; it is not MIT-licensed.
 
-Status: public redistribution of this component is blocked until authoritative confirmation that the projection
-assemblies may be redistributed as part of the extension, and a decision on shipping a
-stable (non-preview) Windows SDK targeting pack before the first public release. See
-the open items in `docs/LICENSING-AND-RELEASE.md`. Until that review is complete, a
-public binary release containing these assemblies is not approved by this audit.
+Microsoft's official [Windows SDK REDIST.TXT](https://learn.microsoft.com/en-us/legal/windows-sdk/redist)
+(updated 2024-10-21) has a dedicated `Microsoft.Windows.SDK.NET.Ref` entry. It permits
+the files in that package to be distributed unmodified either as a NuGet package or as
+part of a program to enable WinRT API calls. The listed files include
+`Microsoft.Windows.SDK.NET.dll`, `Microsoft.Windows.UI.Xaml.dll` and
+`WinRT.Runtime.dll` (for the net8.0 package group), as well as the net6.0 projection
+and runtime assemblies, WinRT source generator and WinMD metadata.
+
+The project's configured package is `10.0.26100.68-preview`; its NuGet metadata points
+to the preview-specific `https://aka.ms/WinSDKPreviewLicenseURL` and requires license
+acceptance. The preview license could not be retrieved and compared with the standard
+Windows SDK license referenced by REDIST.TXT. The Windows SDK distribution conditions
+also require unmodified files, significant primary functionality, a valid copyright
+notice, end-user/distributor terms at least as protective as the SDK terms, and the
+specified indemnification. The project has not yet demonstrated those end-user terms.
+
+The package list is not evidence of which files survived trimming/publishing. Exact
+x64 and ARM64 publish/MSIX file lists and their assembly/package versions must be
+recorded from the actual release outputs. Until the preview-license applicability,
+conditions and per-RID output inventory are reviewed, public binary redistribution
+remains blocked. See `docs/LICENSING-AND-RELEASE.md`.
 
 ## .NET runtime and library components
 
