@@ -29,7 +29,7 @@ A missing, unresolvable, malformed, unsupported, or inaccessible reference produ
 
 - Accepted formats: PNG, JPEG, GIF, and WebP, based on file signatures rather than filename extensions.
 - Maximum source file size: 5 MiB. Empty, larger, truncated, or unrecognized files are skipped.
-- Maximum cache size: 256 MiB. If importing another image would exceed the limit, that image is omitted; catalog export continues.
+- Maximum active cache generation size: 256 MiB. If importing another image would exceed the limit, that image is omitted; catalog export continues. During atomic replacement, the previous generation is temporarily retained for rollback, so transient disk use can approach two generations; the backup is removed immediately after commit or recovery.
 - Only regular files are accepted; reparse-point source files are rejected.
 - Copying reads no more than the configured per-file limit plus one byte, so a changing or misleading file length cannot bypass the limit.
 - The snapshot parser validates opaque IDs independently of the filesystem. Traversal strings, rooted paths, separators, alternate data stream syntax, and malformed identifiers are rejected before path construction.
