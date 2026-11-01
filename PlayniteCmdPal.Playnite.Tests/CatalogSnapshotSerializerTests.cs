@@ -91,7 +91,7 @@ public sealed class CatalogSnapshotSerializerTests
         const string digest = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc";
         var name = new string('x', 1450);
         var games = Enumerable.Range(0, 21_000)
-            .Select(index => new SnapshotGame(DeterministicGuid(index), name, false, coverArtworkId: digest, iconArtworkId: digest))
+            .Select(index => new SnapshotGame(Guid.NewGuid().ToString("D"), name, false, coverArtworkId: digest, iconArtworkId: digest))
             .ToArray();
         var withArtwork = new CatalogSnapshot(Timestamp, games, SnapshotLimits.SchemaVersion);
         using var oversized = new MemoryStream();
