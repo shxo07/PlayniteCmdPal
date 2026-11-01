@@ -72,7 +72,7 @@ internal sealed partial class PlayniteCatalogFilters : Filters
 
     public GameSearchFilters ToSearchFilters()
     {
-        var selected = CurrentFilterIds ?? [];
+        var selected = string.IsNullOrEmpty(CurrentFilterId) ? Array.Empty<string>() : [CurrentFilterId];
         bool? installed = null;
         if (selected.Contains(InstalledId, StringComparer.Ordinal))
         {
