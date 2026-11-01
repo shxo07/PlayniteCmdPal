@@ -118,6 +118,15 @@ public sealed partial class FavoritesStore
             // Inspect the version before deserializing the v1 payload. A newer schema may
             // intentionally change favoriteGameIds' shape, and must never be mistaken for
             // corrupt v1 data (which could otherwise be overwritten on the next mutation).
+            // JSON permits scalar and array roots as well as objects. Only object
+            // documents can carry our schema envelope; recover every other root kind as
+            // malformed preferences before calling TryGetProperty (which throws otherwise).
+            if (envelope.RootElement.ValueKind != JsonValueKind.Object)
+            {
+                _favoriteIds = new HashSet<string>(StringComparer.Ordinal);
+                return;
+            }
+
             if (!envelope.RootElement.TryGetProperty("schemaVersion", out var schemaVersion)
                 || !schemaVersion.TryGetInt32(out var version)
                 || version < CurrentSchemaVersion)
