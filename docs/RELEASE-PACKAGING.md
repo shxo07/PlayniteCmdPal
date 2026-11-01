@@ -81,7 +81,7 @@ Do not copy a generic `dotnet publish` or Inno Setup command into release instru
 The current audit in [Licensing and release readiness](LICENSING-AND-RELEASE.md) identifies these unresolved gates:
 
 1. **Windows SDK projection redistribution:** `Microsoft.Windows.SDK.NET.Ref` is a preview package with a Microsoft license that requires acceptance. Public redistribution permission for the projection assemblies has not been established. This is a release blocker.
-2. **Stable Windows SDK targeting pack:** the project currently targets `10.0.26100.68-preview`. Evaluate a compatible stable targeting pack and run Windows build/deploy tests before switching. This is a release blocker until resolved.
+2. **Stable Windows SDK targeting pack:** stable candidate `Microsoft.Windows.SDK.NET.Ref 10.0.26100.87` is now selected on the WERD-77 branch. The migration remains unvalidated until Windows restore/build/deploy and x64/ARM64 package checks pass; see the WERD-77 checklist below. This remains a release gate until evidence is recorded.
 3. **Runtime notices:** the MSBuild copy target exists, but the exact runtime notice file still needs verification in both `win-x64` and `win-arm64` publish outputs.
 4. **Dependency inventory:** run `scripts/licensing/New-DependencyInventory.ps1` after a clean restore on the supported Windows build machine and review every item flagged for manual review.
 5. **Signing and Store identity:** reserve the Store identity and validate a certificate whose subject matches the final manifest publisher. The current provisional identity is not proof of Store ownership or signing readiness.
