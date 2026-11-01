@@ -91,6 +91,29 @@ public sealed class FavoritesStoreTests : IDisposable
         Assert.Equal(new[] { "recovered-game" }, reopened.GetFavoriteIds());
     }
 
+    [Theory]
+    [InlineData("[]")]
+    [InlineData("null")]
+    [InlineData("\"preferences\"")]
+    [InlineData("42")]
+    public void NonObjectJsonRootsRecoverOnReadAndAreReplacedByValidVersionOneDocument(string malformedRoot)
+    {
+        Directory.CreateDirectory(_directory);
+        File.WriteAllText(FilePath, malformedRoot);
+        var store = new FavoritesStore(FilePath);
+
+        Assert.Empty(store.GetFavoriteIds());
+        Assert.False(store.IsFavorite("existing-game"));
+
+        Assert.True(store.Toggle("recovered-game"));
+
+        using var document = JsonDocument.Parse(File.ReadAllText(FilePath));
+        Assert.Equal(JsonValueKind.Object, document.RootElement.ValueKind);
+        Assert.Equal(FavoritesStore.CurrentSchemaVersion, document.RootElement.GetProperty("schemaVersion").GetInt32());
+        Assert.Equal(new[] { "recovered-game" }, document.RootElement.GetProperty("favoriteGameIds").EnumerateArray().Select(value => value.GetString()));
+        Assert.Equal(new[] { "recovered-game" }, new FavoritesStore(FilePath).GetFavoriteIds());
+    }
+
     [Fact]
     public void MissingGamesCanBeFilteredWithoutDeletingTheirSavedIds()
     {
