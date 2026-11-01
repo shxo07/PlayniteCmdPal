@@ -42,6 +42,17 @@ public sealed class FavoritesStoreTests : IDisposable
     }
 
     [Fact]
+    public void ObserverFailureDoesNotFailMutationOrUndoDurablePreference()
+    {
+        var store = new FavoritesStore(FilePath);
+        store.FavoritesChanged += (_, _) => throw new InvalidOperationException("Simulated page refresh failure.");
+
+        Assert.True(store.Toggle("game-id"));
+        Assert.True(store.IsFavorite("game-id"));
+        Assert.True(new FavoritesStore(FilePath).IsFavorite("game-id"));
+    }
+
+    [Fact]
     public void FavoritesSurviveStoreRecreation()
     {
         var first = new FavoritesStore(FilePath);
