@@ -6,7 +6,7 @@ using Xunit;
 namespace PlayniteCmdPal.Playnite.Tests;
 
 /// <summary>
-/// Output-shape and failure-path tests for the allowlisted v1 writer, using synthetic data only.
+/// Output-shape and failure-path tests for the versioned allowlisted writer, using synthetic data only.
 /// </summary>
 public sealed class CatalogSnapshotSerializerContractTests
 {

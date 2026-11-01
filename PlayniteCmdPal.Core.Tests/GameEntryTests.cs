@@ -24,6 +24,7 @@ public sealed class GameEntryTests
         Assert.Null(entry.IsInstalled);
         Assert.Null(entry.IconReference);
         Assert.Null(entry.Platform);
+        Assert.Null(entry.CoverArtworkReference);
     }
 
     [Theory]
@@ -58,6 +59,7 @@ public sealed class GameEntryTests
         Assert.NotEqual(baseline, baseline with { IsInstalled = null });
         Assert.NotEqual(baseline, baseline with { IconReference = null });
         Assert.NotEqual(baseline, baseline with { Platform = "Switch" });
+        Assert.NotEqual(baseline, baseline with { CoverArtworkReference = new string('a', 64) });
     }
 
     [Fact]

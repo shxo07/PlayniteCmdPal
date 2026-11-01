@@ -6,7 +6,7 @@ using Xunit;
 namespace PlayniteCmdPal.Playnite.Tests;
 
 /// <summary>
-/// Protocol and trust-boundary tests for the v1 snapshot parser. Every payload below is synthetic
+/// Protocol and trust-boundary tests for the v1/v2 snapshot parser. Every payload below is synthetic
 /// and the parser never touches Playnite storage, so these run in normal CI.
 /// </summary>
 public sealed class CatalogSnapshotParserProtocolTests
@@ -263,7 +263,7 @@ public sealed class CatalogSnapshotParserProtocolTests
         Array.Clear(bytes, 0, bytes.Length);
 
         Assert.Equal("Halo", Assert.Single(result.Snapshot!.Games).Name);
-        Assert.Equal(SnapshotLimits.SchemaVersion, result.Snapshot.SchemaVersion);
+        Assert.Equal(SnapshotLimits.LegacySchemaVersion, result.Snapshot.SchemaVersion);
     }
 
     [Fact]

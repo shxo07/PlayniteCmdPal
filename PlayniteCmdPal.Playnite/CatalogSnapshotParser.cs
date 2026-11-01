@@ -43,7 +43,7 @@ public sealed class CatalogSnapshotParseResult
         new(null, new CatalogIssue(code, message), 0);
 }
 
-/// <summary>Strict, bounded parser for the v1 snapshot contract. It never touches Playnite storage.</summary>
+/// <summary>Strict bounded parser for immutable v1 and artwork-enabled v2 catalog contracts.</summary>
 public static class CatalogSnapshotParser
 {
     private static readonly JsonDocumentOptions DocumentOptions = new()
@@ -53,7 +53,6 @@ public static class CatalogSnapshotParser
         CommentHandling = JsonCommentHandling.Disallow,
     };
 
-    // Accept ISO-8601 UTC with or without fractional seconds. A non-zero offset is still rejected below.
     private static readonly string[] TimestampFormats =
     {
         "yyyy-MM-dd'T'HH:mm:sszzz",
@@ -64,7 +63,9 @@ public static class CatalogSnapshotParser
     {
         if (utf8Json.Length > SnapshotLimits.MaxBytes)
         {
-            return CatalogSnapshotParseResult.Failure(CatalogErrorCode.TooLarge, "The Playnite catalog snapshot exceeds the 32 MiB limit.");
+            return CatalogSnapshotParseResult.Failure(
+                CatalogErrorCode.TooLarge,
+                "The Playnite catalog snapshot exceeds the 32 MiB limit.");
         }
 
         JsonDocument document;
@@ -74,38 +75,45 @@ public static class CatalogSnapshotParser
         }
         catch (JsonException)
         {
-            return CatalogSnapshotParseResult.Failure(CatalogErrorCode.Malformed, "The Playnite catalog snapshot is not valid JSON.");
+            return CatalogSnapshotParseResult.Failure(
+                CatalogErrorCode.Malformed,
+                "The Playnite catalog snapshot is not valid JSON.");
         }
 
         using (document)
         {
             var root = document.RootElement;
-            if (root.ValueKind != JsonValueKind.Object || HasDuplicateProperties(root) ||
+            if (root.ValueKind != JsonValueKind.Object ||
+                HasDuplicateProperties(root) ||
                 HasUnexpectedProperties(root, "schemaVersion", "generatedAtUtc", "games"))
             {
                 return InvalidEnvelope();
             }
 
-            if (!TryGetProperty(root, "schemaVersion", out var version) ||
-                version.ValueKind != JsonValueKind.Number ||
-                !version.TryGetInt32(out var schemaVersion))
+            if (!TryGetProperty(root, "schemaVersion", out var versionElement) ||
+                versionElement.ValueKind != JsonValueKind.Number ||
+                !versionElement.TryGetInt32(out var schemaVersion))
             {
                 return InvalidEnvelope();
             }
 
-            if (schemaVersion != SnapshotLimits.SchemaVersion)
+            if (schemaVersion != SnapshotLimits.LegacySchemaVersion &&
+                schemaVersion != SnapshotLimits.SchemaVersion)
             {
-                return CatalogSnapshotParseResult.Failure(CatalogErrorCode.UnsupportedSchema, "The Playnite catalog snapshot uses an unsupported schema version.");
+                return CatalogSnapshotParseResult.Failure(
+                    CatalogErrorCode.UnsupportedSchema,
+                    "The Playnite catalog snapshot uses an unsupported schema version.");
             }
 
-            if (!TryGetProperty(root, "generatedAtUtc", out var timestamp) ||
-                timestamp.ValueKind != JsonValueKind.String ||
-                !TryParseTimestamp(timestamp.GetString(), out var generatedAt))
+            if (!TryGetProperty(root, "generatedAtUtc", out var timestampElement) ||
+                timestampElement.ValueKind != JsonValueKind.String ||
+                !TryParseTimestamp(timestampElement.GetString(), out var generatedAtUtc))
             {
                 return InvalidEnvelope();
             }
 
-            if (!TryGetProperty(root, "games", out var gamesElement) || gamesElement.ValueKind != JsonValueKind.Array)
+            if (!TryGetProperty(root, "games", out var gamesElement) ||
+                gamesElement.ValueKind != JsonValueKind.Array)
             {
                 return InvalidEnvelope();
             }
@@ -113,78 +121,123 @@ public static class CatalogSnapshotParser
             var gameCount = gamesElement.GetArrayLength();
             if (gameCount > SnapshotLimits.MaxGames)
             {
-                return CatalogSnapshotParseResult.Failure(CatalogErrorCode.TooManyGames, "The Playnite catalog snapshot exceeds the 100,000 game limit.");
+                return CatalogSnapshotParseResult.Failure(
+                    CatalogErrorCode.TooManyGames,
+                    "The Playnite catalog snapshot exceeds the 100,000 game limit.");
             }
 
             var games = new List<SnapshotGame>(gameCount);
-            var ids = new HashSet<string>(StringComparer.Ordinal);
-            var skipped = 0;
+            var gameIds = new HashSet<string>(StringComparer.Ordinal);
+            var skippedRecordCount = 0;
             foreach (var element in gamesElement.EnumerateArray())
             {
-                if (TryParseGame(element, out var game) && ids.Add(game!.Id))
+                if (TryParseGame(element, schemaVersion, out var game) && gameIds.Add(game!.Id))
                 {
                     games.Add(game);
                 }
                 else
                 {
-                    skipped++;
+                    skippedRecordCount++;
                 }
             }
 
-            return new CatalogSnapshotParseResult(new CatalogSnapshot(generatedAt, games), null, skipped);
+            return new CatalogSnapshotParseResult(
+                new CatalogSnapshot(generatedAtUtc, games, schemaVersion),
+                null,
+                skippedRecordCount);
         }
     }
 
-    private static bool TryParseTimestamp(string? value, out DateTimeOffset generatedAt)
+    private static bool TryParseTimestamp(string? value, out DateTimeOffset generatedAtUtc)
     {
-        generatedAt = default;
+        generatedAtUtc = default;
         if (string.IsNullOrWhiteSpace(value))
         {
             return false;
         }
 
-        var text = value!;
-        if (text.EndsWith("Z", StringComparison.Ordinal))
+        var timestamp = value!;
+        if (timestamp.EndsWith("Z", StringComparison.Ordinal))
         {
-            text = text.Substring(0, text.Length - 1) + "+00:00";
+            timestamp = timestamp.Substring(0, timestamp.Length - 1) + "+00:00";
         }
 
-        return DateTimeOffset.TryParseExact(text, TimestampFormats, CultureInfo.InvariantCulture, DateTimeStyles.None, out generatedAt) &&
-               generatedAt.Offset == TimeSpan.Zero;
+        return DateTimeOffset.TryParseExact(
+                   timestamp,
+                   TimestampFormats,
+                   CultureInfo.InvariantCulture,
+                   DateTimeStyles.None,
+                   out generatedAtUtc) &&
+               generatedAtUtc.Offset == TimeSpan.Zero;
     }
 
-    private static bool TryParseGame(JsonElement element, out SnapshotGame? game)
+    private static bool TryParseGame(JsonElement element, int schemaVersion, out SnapshotGame? game)
     {
         game = null;
-        if (element.ValueKind != JsonValueKind.Object || HasDuplicateProperties(element) ||
-            HasUnexpectedProperties(element, "id", "name", "isInstalled", "source", "platform"))
+        var allowedProperties = schemaVersion == SnapshotLimits.LegacySchemaVersion
+            ? new[] { "id", "name", "isInstalled", "source", "platform" }
+            : new[] { "id", "name", "isInstalled", "source", "platform", "coverArtworkId", "iconArtworkId" };
+
+        if (element.ValueKind != JsonValueKind.Object ||
+            HasDuplicateProperties(element) ||
+            HasUnexpectedProperties(element, allowedProperties))
         {
             return false;
         }
 
-        if (!TryGetProperty(element, "id", out var id) || id.ValueKind != JsonValueKind.String ||
-            !TryGetProperty(element, "name", out var name) || name.ValueKind != JsonValueKind.String ||
-            !TryGetProperty(element, "isInstalled", out var installed) ||
-            (installed.ValueKind != JsonValueKind.True && installed.ValueKind != JsonValueKind.False))
+        if (!TryGetProperty(element, "id", out var idElement) ||
+            idElement.ValueKind != JsonValueKind.String ||
+            !TryGetProperty(element, "name", out var nameElement) ||
+            nameElement.ValueKind != JsonValueKind.String ||
+            !TryGetProperty(element, "isInstalled", out var installedElement) ||
+            (installedElement.ValueKind != JsonValueKind.True &&
+             installedElement.ValueKind != JsonValueKind.False))
         {
             return false;
         }
 
         string? source = null;
-        if (TryGetProperty(element, "source", out var sourceElement) && !TryReadOptionalString(sourceElement, ref source))
+        string? platform = null;
+        string? coverArtworkId = null;
+        string? iconArtworkId = null;
+
+        if (TryGetProperty(element, "source", out var sourceElement) &&
+            !TryReadOptionalString(sourceElement, ref source))
         {
             return false;
         }
 
-        string? platform = null;
-        if (TryGetProperty(element, "platform", out var platformElement) && !TryReadOptionalString(platformElement, ref platform))
+        if (TryGetProperty(element, "platform", out var platformElement) &&
+            !TryReadOptionalString(platformElement, ref platform))
         {
             return false;
+        }
+
+        if (schemaVersion == SnapshotLimits.SchemaVersion)
+        {
+            if (TryGetProperty(element, "coverArtworkId", out var coverElement) &&
+                !TryReadOptionalArtworkId(coverElement, ref coverArtworkId))
+            {
+                return false;
+            }
+
+            if (TryGetProperty(element, "iconArtworkId", out var iconElement) &&
+                !TryReadOptionalArtworkId(iconElement, ref iconArtworkId))
+            {
+                return false;
+            }
         }
 
         try
         {
-            game = new SnapshotGame(id.GetString()!, name.GetString()!, installed.GetBoolean(), source, platform);
+            game = new SnapshotGame(
+                idElement.GetString()!,
+                nameElement.GetString()!,
+                installedElement.GetBoolean(),
+                source,
+                platform,
+                coverArtworkId,
+                iconArtworkId);
             return true;
         }
         catch (ArgumentException)
@@ -209,6 +262,9 @@ public static class CatalogSnapshotParser
         value = element.GetString();
         return true;
     }
+
+    private static bool TryReadOptionalArtworkId(JsonElement element, ref string? value) =>
+        TryReadOptionalString(element, ref value) && SnapshotValidation.IsArtworkIdOrNull(value);
 
     private static bool TryGetProperty(JsonElement element, string name, out JsonElement value)
     {
@@ -237,17 +293,7 @@ public static class CatalogSnapshotParser
     {
         foreach (var property in element.EnumerateObject())
         {
-            var found = false;
-            foreach (var name in allowed)
-            {
-                if (property.NameEquals(name))
-                {
-                    found = true;
-                    break;
-                }
-            }
-
-            if (!found)
+            if (!allowed.Any(name => property.NameEquals(name)))
             {
                 return true;
             }
@@ -271,5 +317,7 @@ public static class CatalogSnapshotParser
     }
 
     private static CatalogSnapshotParseResult InvalidEnvelope() =>
-        CatalogSnapshotParseResult.Failure(CatalogErrorCode.Malformed, "The Playnite catalog snapshot has an invalid v1 envelope.");
+        CatalogSnapshotParseResult.Failure(
+            CatalogErrorCode.Malformed,
+            "The Playnite catalog snapshot has an invalid envelope.");
 }

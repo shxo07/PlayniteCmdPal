@@ -14,7 +14,7 @@ using PlayniteCmdPal.Snapshot;
 
 namespace PlayniteCmdPal.PlaynitePlugin;
 
-/// <summary>Read-only companion plugin. It projects Playnite's library into the accepted v1 JSON snapshot.</summary>
+/// <summary>Read-only companion plugin exporting schema v2 catalog data and bridge-owned artwork.</summary>
 public sealed class PlayniteCmdPalPlugin : GenericPlugin
 {
     public static readonly Guid PluginId = Guid.Parse("9E4CF37F-EF29-495F-9E83-4EA1A389ABD8");
@@ -23,6 +23,7 @@ public sealed class PlayniteCmdPalPlugin : GenericPlugin
     private readonly CatalogExportCoordinator _coordinator;
     private readonly Dispatcher _dispatcher;
     private readonly string _snapshotPath;
+    private readonly string _artworkCacheRoot;
     private readonly object _subscriptionGate = new();
     private bool _subscribed;
     private bool _disposed;
@@ -32,10 +33,9 @@ public sealed class PlayniteCmdPalPlugin : GenericPlugin
     {
         Properties = new GenericPluginProperties { HasSettings = false };
         _dispatcher = api.MainView.UIDispatcher;
-        _snapshotPath = System.IO.Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "PlayniteCmdPal",
-            "catalog-v1.json");
+        var dataRoot = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "PlayniteCmdPal");
+        _snapshotPath = System.IO.Path.Combine(dataRoot, "catalog-v2.json");
+        _artworkCacheRoot = System.IO.Path.Combine(dataRoot, "artwork-v2");
         _coordinator = new CatalogExportCoordinator(ExportAsync, Debounce, exception =>
             Logger.Error(exception, "PlayniteCmdPal catalog export failed; the previous snapshot was preserved."));
     }
@@ -152,7 +152,9 @@ public sealed class PlayniteCmdPalPlugin : GenericPlugin
         return !string.Equals(oldGame.Name, newGame.Name, StringComparison.Ordinal) ||
                oldGame.IsInstalled != newGame.IsInstalled ||
                oldGame.SourceId != newGame.SourceId ||
-               !SameIds(oldGame.PlatformIds, newGame.PlatformIds);
+               !SameIds(oldGame.PlatformIds, newGame.PlatformIds) ||
+               !string.Equals(oldGame.CoverImage, newGame.CoverImage, StringComparison.Ordinal) ||
+               !string.Equals(oldGame.Icon, newGame.Icon, StringComparison.Ordinal);
     }
 
     private static bool SameIds(List<Guid>? left, List<Guid>? right) =>
@@ -167,50 +169,114 @@ public sealed class PlayniteCmdPalPlugin : GenericPlugin
 
         // Playnite's database objects are affinity-sensitive. Project on its dispatcher,
         // then serialize/flush/replace the file on a background thread.
-        var snapshot = await _dispatcher.InvokeAsync(() => CreateSnapshot(cancellationToken), DispatcherPriority.Background, cancellationToken).Task.ConfigureAwait(false);
-        await SnapshotFilePublisher.PublishAsync(_snapshotPath, snapshot, cancellationToken).ConfigureAwait(false);
+        using (var artwork = new ArtworkCacheGeneration(_artworkCacheRoot, snapshotPath: _snapshotPath))
+        {
+            var projection = await _dispatcher.InvokeAsync(() => CreateProjection(cancellationToken), DispatcherPriority.Background, cancellationToken).Task.ConfigureAwait(false);
+            var snapshot = await Task.Run(() => CreateSnapshot(projection, artwork, cancellationToken), cancellationToken).ConfigureAwait(false);
+            artwork.Activate(snapshot.GeneratedAtUtc.UtcDateTime.ToString("O", CultureInfo.InvariantCulture));
+            var snapshotPublished = false;
+            try
+            {
+                try
+                {
+                    await SnapshotFilePublisher.PublishAsync(_snapshotPath, snapshot, cancellationToken).ConfigureAwait(false);
+                }
+                catch (InvalidDataException)
+                {
+                    var withoutArtwork = new CatalogSnapshot(snapshot.GeneratedAtUtc,
+                        snapshot.Games.Select(g => new SnapshotGame(g.Id, g.Name, g.IsInstalled, g.Source, g.Platform)).ToArray(),
+                        SnapshotLimits.SchemaVersion);
+                    await SnapshotFilePublisher.PublishAsync(_snapshotPath, withoutArtwork, cancellationToken).ConfigureAwait(false);
+                    artwork.ClearActiveCache();
+                }
+
+                snapshotPublished = true;
+                artwork.MarkPublished();
+                artwork.Complete();
+            }
+            catch
+            {
+                if (snapshotPublished) artwork.PreserveForRecovery();
+                else artwork.Rollback();
+                throw;
+            }
+        }
     }
 
-    private CatalogSnapshot CreateSnapshot(CancellationToken cancellationToken)
+    private CatalogProjection CreateProjection(CancellationToken cancellationToken)
     {
-        var games = new List<SnapshotGame>();
-        var skipped = 0;
+        var database = PlayniteApi.Database;
+        var filesRoot = System.IO.Path.Combine(database.DatabasePath, "files");
+        var games = new List<GameProjection>();
         var seen = 0;
-        foreach (var game in PlayniteApi.Database.Games)
+        foreach (var game in database.Games)
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (++seen > SnapshotLimits.MaxGames)
-            {
                 throw new InvalidDataException("The Playnite library exceeds the snapshot game limit; the previous snapshot was preserved.");
-            }
-
-            if (game == null)
-            {
-                skipped++;
-                continue;
-            }
-
+            if (game == null) continue;
             try
             {
-                games.Add(new SnapshotGame(
-                    game.Id.ToString("D", CultureInfo.InvariantCulture),
-                    game.Name,
-                    game.IsInstalled,
-                    GetSourceName(game.SourceId),
-                    GetPlatformNames(game.PlatformIds)));
+                var id = game.Id.ToString("D", CultureInfo.InvariantCulture);
+                games.Add(new GameProjection(id, game.Name, game.IsInstalled, GetSourceName(game.SourceId),
+                    GetPlatformNames(game.PlatformIds), game.CoverImage, ResolveArtworkPath(id, game.CoverImage),
+                    game.Icon, ResolveArtworkPath(id, game.Icon)));
             }
-            catch (ArgumentException)
-            {
-                skipped++;
-            }
+            catch (ArgumentException) { }
         }
+        return new CatalogProjection(filesRoot, games);
+    }
 
-        if (skipped > 0)
+    private CatalogSnapshot CreateSnapshot(CatalogProjection projection, ArtworkCacheGeneration artwork, CancellationToken cancellationToken)
+    {
+        var games = new List<SnapshotGame>(projection.Games.Count);
+        foreach (var game in projection.Games)
         {
-            Logger.Warn($"PlayniteCmdPal skipped {skipped} invalid or over-limit library record(s) during export.");
+            cancellationToken.ThrowIfCancellationRequested();
+            var cover = artwork.TryImport(game.Id, game.CoverReference, game.CoverPath, projection.FilesRoot);
+            var icon = artwork.TryImport(game.Id, game.IconReference, game.IconPath, projection.FilesRoot);
+            try
+            {
+                games.Add(new SnapshotGame(game.Id, game.Name, game.IsInstalled, game.Source, game.Platform, cover, icon));
+            }
+            catch (ArgumentException) { }
         }
+        return new CatalogSnapshot(DateTimeOffset.UtcNow, games, SnapshotLimits.SchemaVersion);
+    }
 
-        return new CatalogSnapshot(DateTimeOffset.UtcNow, games);
+    private string? ResolveArtworkPath(string gameId, string? reference)
+    {
+        if (!ArtworkCacheGeneration.TryValidateReference(gameId, reference, out _)) return null;
+        try { return PlayniteApi.Database.GetFullFilePath(reference!); }
+        catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException ||
+                                   ex is ArgumentException || ex is NotSupportedException ||
+                                   ex is System.Security.SecurityException) { return null; }
+    }
+
+    private sealed class CatalogProjection
+    {
+        public CatalogProjection(string filesRoot, List<GameProjection> games) { FilesRoot = filesRoot; Games = games; }
+        public string FilesRoot { get; }
+        public List<GameProjection> Games { get; }
+    }
+
+    private sealed class GameProjection
+    {
+        public GameProjection(string id, string name, bool installed, string? source, string? platform,
+            string? coverReference, string? coverPath, string? iconReference, string? iconPath)
+        {
+            Id = id; Name = name; IsInstalled = installed; Source = source; Platform = platform;
+            CoverReference = coverReference; CoverPath = coverPath; IconReference = iconReference; IconPath = iconPath;
+        }
+        public string Id { get; }
+        public string Name { get; }
+        public bool IsInstalled { get; }
+        public string? Source { get; }
+        public string? Platform { get; }
+        public string? CoverReference { get; }
+        public string? CoverPath { get; }
+        public string? IconReference { get; }
+        public string? IconPath { get; }
     }
 
     private string? GetSourceName(Guid sourceId) =>

@@ -3,7 +3,7 @@ using Xunit;
 
 namespace PlayniteCmdPal.Playnite.Tests;
 
-/// <summary>Contract tests for the shared v1 snapshot model that runs without Playnite.</summary>
+/// <summary>Contract tests for the shared versioned snapshot model that run without Playnite.</summary>
 public sealed class CatalogSnapshotContractTests
 {
     private const string GameA = "11111111-1111-4111-8111-111111111111";
@@ -203,10 +203,59 @@ public sealed class CatalogSnapshotContractTests
     public void SchemaConstantsAreStable()
     {
         // Changing any of these values changes the v1 transport contract and needs a new schema.
-        Assert.Equal(1, SnapshotLimits.SchemaVersion);
+        Assert.Equal(1, SnapshotLimits.LegacySchemaVersion);
+        Assert.Equal(2, SnapshotLimits.SchemaVersion);
         Assert.Equal(32 * 1024 * 1024, SnapshotLimits.MaxBytes);
         Assert.Equal(100_000, SnapshotLimits.MaxGames);
         Assert.Equal(16, SnapshotLimits.MaxJsonDepth);
+    }
+
+
+    [Theory]
+    [InlineData("""11111111-1111-4111-8111-111111111111\\22222222-2222-4222-8222-222222222222.png""", true)]
+    [InlineData("11111111-1111-4111-8111-111111111111/22222222-2222-4222-8222-222222222222.webp", true)]
+    [InlineData("C:\\\\games\\\\cover.png", false)]
+    [InlineData("https://example.invalid/cover.png", false)]
+    [InlineData("..\\\\22222222-2222-4222-8222-222222222222.png", false)]
+    [InlineData("33333333-3333-4333-8333-333333333333\\\\22222222-2222-4222-8222-222222222222.png", false)]
+    [InlineData("11111111-1111-4111-8111-111111111111\\\\22222222-2222-4222-8222-222222222222.bmp", false)]
+    public void PlayniteArtworkReferencesMustBeCanonicalGameOwnedDatabaseRefs(string reference, bool expected)
+    {
+        Assert.Equal(expected, ArtworkReferenceValidator.TryValidate(GameA, reference, out _));
+    }
+
+    [Fact]
+    public void ArtworkSignatureValidationRejectsTruncatedAndUnknownFiles()
+    {
+        Assert.False(ArtworkFileSignature.TryGetExtension(new byte[] { 0xFF, 0xD8 }, out _));
+        Assert.False(ArtworkFileSignature.TryGetExtension(new byte[] { 1, 2, 3, 4 }, out _));
+        Assert.False(ArtworkFileSignature.TryGetExtension(new byte[32], out _));
+    }
+
+    [Fact]
+    public void ArtworkSignatureValidationRecognizesSupportedCompleteContainers()
+    {
+        var png = new byte[24];
+        byte[] pngHeader = { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A };
+        Array.Copy(pngHeader, png, pngHeader.Length);
+        png[16] = (byte)'I'; png[17] = (byte)'E'; png[18] = (byte)'N'; png[19] = (byte)'D';
+        Assert.True(ArtworkFileSignature.TryGetExtension(png, out var pngExtension));
+        Assert.Equal(".png", pngExtension);
+
+        var jpeg = new byte[] { 0xFF, 0xD8, 0xFF, 0xD9 };
+        Assert.True(ArtworkFileSignature.TryGetExtension(jpeg, out var jpegExtension));
+        Assert.Equal(".jpg", jpegExtension);
+
+        var gif = new byte[14];
+        gif[0] = (byte)'G'; gif[1] = (byte)'I'; gif[2] = (byte)'F'; gif[13] = 0x3B;
+        Assert.True(ArtworkFileSignature.TryGetExtension(gif, out var gifExtension));
+        Assert.Equal(".gif", gifExtension);
+
+        var webp = new byte[16];
+        webp[0] = (byte)'R'; webp[1] = (byte)'I'; webp[2] = (byte)'F'; webp[3] = (byte)'F';
+        webp[4] = 8; webp[8] = (byte)'W'; webp[9] = (byte)'E'; webp[10] = (byte)'B'; webp[11] = (byte)'P';
+        Assert.True(ArtworkFileSignature.TryGetExtension(webp, out var webpExtension));
+        Assert.Equal(".webp", webpExtension);
     }
 
     private static string DeterministicGuid(int index)

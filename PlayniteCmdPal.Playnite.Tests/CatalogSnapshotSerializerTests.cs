@@ -52,6 +52,61 @@ public sealed class CatalogSnapshotSerializerTests
         Assert.Equal(GameB, parsed.Snapshot.Games[1].Id);
     }
 
+
+    [Fact]
+    public async Task V2WriterIncludesOnlyValidOptionalArtworkIdentifiers()
+    {
+        const string digest = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+        var snapshot = new CatalogSnapshot(Timestamp, new[]
+        {
+            new SnapshotGame(GameA, "Halo", true, coverArtworkId: digest, iconArtworkId: digest),
+        }, SnapshotLimits.SchemaVersion);
+        using var stream = new MemoryStream();
+
+        await CatalogSnapshotSerializer.SerializeAsync(stream, snapshot);
+
+        using var json = JsonDocument.Parse(stream.ToArray());
+        var root = json.RootElement;
+        Assert.Equal(2, root.GetProperty("schemaVersion").GetInt32());
+        var game = root.GetProperty("games")[0];
+        Assert.Equal(digest, game.GetProperty("coverArtworkId").GetString());
+        Assert.Equal(digest, game.GetProperty("iconArtworkId").GetString());
+        Assert.Null(CatalogSnapshotParser.Parse(stream.ToArray()).Issue);
+    }
+
+    [Fact]
+    public void V1ModelRejectsArtworkFieldsInsteadOfChangingItsWireMeaning()
+    {
+        const string digest = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+        Assert.Throws<ArgumentException>(() => new CatalogSnapshot(Timestamp, new[]
+        {
+            new SnapshotGame(GameA, "Halo", true, iconArtworkId: digest),
+        }, SnapshotLimits.LegacySchemaVersion));
+    }
+
+
+    [Fact]
+    public async Task RemovingOptionalArtworkAllowsAnOtherwiseValidLargeCatalogToFitTheSnapshotLimit()
+    {
+        const string digest = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc";
+        var name = new string('x', 1450);
+        var games = Enumerable.Range(0, 21_000)
+            .Select(index => new SnapshotGame(DeterministicGuid(index), name, false, coverArtworkId: digest, iconArtworkId: digest))
+            .ToArray();
+        var withArtwork = new CatalogSnapshot(Timestamp, games, SnapshotLimits.SchemaVersion);
+        using var oversized = new MemoryStream();
+
+        await Assert.ThrowsAsync<InvalidDataException>(() => CatalogSnapshotSerializer.SerializeAsync(oversized, withArtwork));
+
+        var withoutArtwork = new CatalogSnapshot(Timestamp,
+            games.Select(game => new SnapshotGame(game.Id, game.Name, game.IsInstalled, game.Source, game.Platform)).ToArray(),
+            SnapshotLimits.SchemaVersion);
+        using var fallback = new MemoryStream();
+        await CatalogSnapshotSerializer.SerializeAsync(fallback, withoutArtwork);
+        Assert.True(fallback.Length <= SnapshotLimits.MaxBytes);
+        Assert.Null(CatalogSnapshotParser.Parse(fallback.ToArray()).Issue);
+    }
+
     [Fact]
     public async Task WritesAnEmptyLibrary()
     {

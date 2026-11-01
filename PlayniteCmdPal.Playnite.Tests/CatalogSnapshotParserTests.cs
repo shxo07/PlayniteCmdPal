@@ -130,7 +130,7 @@ public sealed class CatalogSnapshotParserTests
     [Fact]
     public void RejectsUnsupportedSchema()
     {
-        var result = CatalogSnapshotParser.Parse(Json("""{"schemaVersion":2,"generatedAtUtc":"2026-10-30T00:00:00Z","games":[]}"""));
+        var result = CatalogSnapshotParser.Parse(Json("""{"schemaVersion":3,"generatedAtUtc":"2026-10-30T00:00:00Z","games":[]}"""));
         Assert.Equal(CatalogErrorCode.UnsupportedSchema, result.Issue!.Code);
     }
 
@@ -172,6 +172,36 @@ public sealed class CatalogSnapshotParserTests
         var result = CatalogSnapshotParser.Parse(stream.ToArray());
         Assert.Null(result.Issue);
         Assert.Equal("Halo", result.Snapshot!.Games[0].Name);
+    }
+
+
+    [Fact]
+    public void ParsesV2ArtworkIdentifiersAndKeepsV1ArtworkAbsent()
+    {
+        const string digest = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+        var v2 = CatalogSnapshotParser.Parse(Json($$"""{"schemaVersion":2,"generatedAtUtc":"2026-10-30T00:00:00Z","games":[{"id":"{{GameA}}","name":"Halo","isInstalled":true,"coverArtworkId":"{{digest}}","iconArtworkId":"{{digest}}"}]}"""));
+        Assert.Null(v2.Issue);
+        Assert.Equal(digest, Assert.Single(v2.Snapshot!.Games).CoverArtworkId);
+        Assert.Equal(digest, v2.Snapshot.Games[0].IconArtworkId);
+
+        var v1 = CatalogSnapshotParser.Parse(Json($$"""{"schemaVersion":1,"generatedAtUtc":"2026-10-30T00:00:00Z","games":[{"id":"{{GameA}}","name":"Halo","isInstalled":true}]}"""));
+        Assert.Null(v1.Issue);
+        Assert.Null(Assert.Single(v1.Snapshot!.Games).CoverArtworkId);
+        Assert.Null(v1.Snapshot.Games[0].IconArtworkId);
+    }
+
+    [Theory]
+    [InlineData("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")]
+    [InlineData("../aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")]
+    [InlineData("C:\\\\temp\\\\art.png")]
+    [InlineData("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")]
+    public void SkipsV2RecordsWithUnsafeArtworkIdentifiers(string artworkId)
+    {
+        var json = $$"""{"schemaVersion":2,"generatedAtUtc":"2026-10-30T00:00:00Z","games":[{"id":"{{GameA}}","name":"Halo","isInstalled":true,"iconArtworkId":"{{artworkId}}"}]}""";
+        var result = CatalogSnapshotParser.Parse(Json(json));
+        Assert.Null(result.Issue);
+        Assert.Empty(result.Snapshot!.Games);
+        Assert.Equal(1, result.SkippedRecordCount);
     }
 
     private static byte[] Json(string value) => Encoding.UTF8.GetBytes(value);

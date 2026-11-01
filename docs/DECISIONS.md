@@ -55,7 +55,7 @@ Use Semantic Versioning; before 1.0.0, use `0.y.z` and increment the minor versi
 
 
 ## ADR-008: Bridge-owned artwork cache and schema v2
-**Status:** Proposed for WERD-71
+**Status:** Accepted
 
 Use a bridge-owned local cache populated only from Playnite database file references resolved through the documented SDK. Export only content-derived opaque SHA-256 identifiers; never export original image references, URLs, or filesystem paths. The cache is bounded, validates image signatures, and is pruned only after a successful atomic catalog publication. Schema v1 remains immutable and readable; schema v2 adds optional coverArtworkId and iconArtworkId fields. The complete trust boundary, limits, migration, refresh, cleanup, and failure contract is recorded in [Artwork transport](ARTWORK-TRANSPORT.md).
 

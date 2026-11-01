@@ -1,0 +1,313 @@
+using System;
+using System.IO;
+using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
+namespace PlayniteCmdPal.Snapshot;
+
+/// <summary>
+/// Builds a bounded, content-addressed artwork generation. Only canonical Playnite database
+/// references for the owning game are resolved; arbitrary paths never reach the SDK resolver.
+/// </summary>
+public sealed class ArtworkCacheGeneration : IDisposable
+{
+    private static readonly string[] Extensions = { ".png", ".jpg", ".jpeg", ".gif", ".webp" };
+    private readonly string _root;
+    private readonly string _staging;
+    private readonly string _marker;
+    private readonly string? _snapshotPath;
+    private string _publicationToken = string.Empty;
+    private string? _backup;
+    private long _bytes;
+    private readonly long _maxCacheBytes;
+    private readonly int _maxArtworkBytes;
+    private bool _hadPreviousRoot;
+    private bool _activated;
+    private bool _published;
+    private bool _completed;
+
+    public ArtworkCacheGeneration(string root, long maxCacheBytes = SnapshotLimits.MaxArtworkCacheBytes, int maxArtworkBytes = SnapshotLimits.MaxArtworkBytes, string? snapshotPath = null)
+    {
+        if (maxCacheBytes < 0) throw new ArgumentOutOfRangeException(nameof(maxCacheBytes));
+        if (maxArtworkBytes <= 0) throw new ArgumentOutOfRangeException(nameof(maxArtworkBytes));
+        _maxCacheBytes = maxCacheBytes;
+        _maxArtworkBytes = maxArtworkBytes;
+        _snapshotPath = snapshotPath;
+        _root = Path.GetFullPath(root);
+        var parent = Path.GetDirectoryName(_root) ?? throw new ArgumentException("Cache root needs a parent directory.", nameof(root));
+        Directory.CreateDirectory(parent);
+        _marker = _root + ".transaction";
+        RecoverInterruptedGeneration(_root, _marker, _snapshotPath);
+        _staging = _root + ".staging-" + Guid.NewGuid().ToString("N");
+        Directory.CreateDirectory(_staging);
+    }
+
+    public string? TryImport(string gameId, string? databaseReference, string? resolvedPath, string databaseFilesRoot)
+    {
+        if (!TryValidateReference(gameId, databaseReference, out var fileName) || string.IsNullOrWhiteSpace(resolvedPath))
+            return null;
+        try
+        {
+            var filesRoot = Path.GetFullPath(databaseFilesRoot);
+            var expected = Path.GetFullPath(Path.Combine(filesRoot, gameId, fileName));
+            var actual = Path.GetFullPath(resolvedPath);
+            if (!string.Equals(expected, actual, StringComparison.OrdinalIgnoreCase)) return null;
+
+            var gameDirectory = new DirectoryInfo(Path.Combine(filesRoot, gameId));
+            var source = new FileInfo(actual);
+            var filesDirectory = new DirectoryInfo(filesRoot);
+            if (!filesDirectory.Exists || (filesDirectory.Attributes & FileAttributes.ReparsePoint) != 0 ||
+                !gameDirectory.Exists || (gameDirectory.Attributes & FileAttributes.ReparsePoint) != 0 ||
+                !source.Exists || (source.Attributes & FileAttributes.ReparsePoint) != 0 ||
+                source.Length <= 0 || source.Length > _maxArtworkBytes) return null;
+
+            byte[] bytes;
+            using (var input = new FileStream(actual, FileMode.Open, FileAccess.Read, FileShare.Read))
+            using (var output = new MemoryStream())
+            {
+                if ((File.GetAttributes(actual) & FileAttributes.ReparsePoint) != 0) return null;
+                var buffer = new byte[16 * 1024];
+                while (true)
+                {
+                    var read = input.Read(buffer, 0, buffer.Length);
+                    if (read == 0) break;
+                    if (output.Length + read > _maxArtworkBytes) return null;
+                    output.Write(buffer, 0, read);
+                }
+                bytes = output.ToArray();
+            }
+
+            if (!TryDetectFormat(bytes, out var extension)) return null;
+            string digest;
+            using (var sha = SHA256.Create())
+                digest = string.Concat(sha.ComputeHash(bytes).Select(b => b.ToString("x2")));
+            var destination = Path.Combine(_staging, digest + extension);
+            if (!Extensions.Any(ext => File.Exists(Path.Combine(_staging, digest + ext))))
+            {
+                if (_bytes + bytes.Length > _maxCacheBytes) return null;
+                var temporary = destination + "." + Guid.NewGuid().ToString("N") + ".tmp";
+                try
+                {
+                    using (var output = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+                    {
+                        output.Write(bytes, 0, bytes.Length);
+                        output.Flush();
+                    }
+                    File.Move(temporary, destination);
+                    _bytes += bytes.Length;
+                }
+                catch
+                {
+                    TryDeleteFile(temporary);
+                    TryDeleteFile(destination);
+                    throw;
+                }
+            }
+            return digest;
+        }
+        catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException ||
+                                   ex is ArgumentException || ex is NotSupportedException ||
+                                   ex is System.Security.SecurityException)
+        {
+            return null;
+        }
+    }
+
+    public static bool TryValidateReference(string gameId, string? reference, out string fileName) =>
+        ArtworkReferenceValidator.TryValidate(gameId, reference, out fileName);
+
+    public void Activate(string? publicationToken = null)
+    {
+        if (_activated) throw new InvalidOperationException("Artwork generation is already active.");
+        _backup = _root + ".backup-" + Guid.NewGuid().ToString("N");
+        var rootInfo = new DirectoryInfo(_root);
+        if (rootInfo.Exists && (rootInfo.Attributes & FileAttributes.ReparsePoint) != 0)
+            throw new InvalidDataException("The artwork cache root cannot be a reparse point.");
+        _hadPreviousRoot = Directory.Exists(_root);
+        _publicationToken = publicationToken ?? string.Empty;
+        if (_publicationToken.IndexOfAny(new[] { '\r', '\n' }) >= 0)
+            throw new ArgumentException("The publication token cannot contain line breaks.", nameof(publicationToken));
+        WriteMarker("pending");
+        try
+        {
+            if (_hadPreviousRoot) Directory.Move(_root, _backup);
+            Directory.Move(_staging, _root);
+            _activated = true;
+        }
+        catch
+        {
+            if (_hadPreviousRoot && Directory.Exists(_backup) && !Directory.Exists(_root))
+            {
+                // If restoration fails, keep the marker so startup recovery can retry it.
+                Directory.Move(_backup, _root);
+            }
+
+            if (Directory.Exists(_root) || !_hadPreviousRoot) TryDeleteFile(_marker);
+            throw;
+        }
+    }
+
+    public void MarkPublished()
+    {
+        if (!_activated) throw new InvalidOperationException("Artwork generation has not been activated.");
+        WriteMarker("published");
+        _published = true;
+    }
+
+    public void PreserveForRecovery()
+    {
+        // Leave the transaction marker and backup intact. Startup compares the v2 snapshot
+        // timestamp token to decide whether the atomic snapshot replace already committed.
+        _completed = true;
+        _activated = false;
+    }
+
+    public void ClearActiveCache()
+    {
+        if (!_activated || !Directory.Exists(_root)) return;
+        foreach (var file in Directory.GetFiles(_root)) TryDeleteFile(file);
+    }
+
+    public void Complete()
+    {
+        if (!_published) throw new InvalidOperationException("Artwork generation cannot complete before snapshot publication.");
+        TryDeleteDirectory(_backup);
+        TryDeleteFile(_marker);
+        _completed = true;
+    }
+
+    public void Rollback()
+    {
+        if (_activated)
+        {
+            TryDeleteDirectory(_root);
+            if (!string.IsNullOrEmpty(_backup) && Directory.Exists(_backup)) Directory.Move(_backup, _root);
+            TryDeleteFile(_marker);
+            _activated = false;
+        }
+        else TryDeleteDirectory(_staging);
+    }
+
+    public void Dispose()
+    {
+        if (!_completed) Rollback();
+    }
+
+    private static void RecoverInterruptedGeneration(string root, string marker, string? snapshotPath)
+    {
+        var parent = Path.GetDirectoryName(root)!;
+        var prefix = Path.GetFileName(root) + ".staging-";
+        foreach (var stagingPath in Directory.GetDirectories(parent, prefix + "*"))
+            TryDeleteDirectory(stagingPath);
+        foreach (var markerTemporary in Directory.GetFiles(parent, Path.GetFileName(marker) + ".*.tmp"))
+            TryDeleteFile(markerTemporary);
+        if (!File.Exists(marker))
+        {
+            var orphanedBackups = Directory.GetDirectories(parent, Path.GetFileName(root) + ".backup-*");
+            if (!Directory.Exists(root) && orphanedBackups.Length > 0)
+            {
+                var recoveryBackup = orphanedBackups.OrderByDescending(Directory.GetCreationTimeUtc).First();
+                Directory.Move(recoveryBackup, root);
+            }
+
+            foreach (var orphanedBackup in Directory.GetDirectories(parent, Path.GetFileName(root) + ".backup-*"))
+                TryDeleteDirectory(orphanedBackup);
+            return;
+        }
+        try
+        {
+            var lines = File.ReadAllText(marker, Encoding.UTF8).Split(new[] { Environment.NewLine }, StringSplitOptions.None);
+            if (lines.Length < 4) throw new InvalidDataException("The artwork cache transaction marker is incomplete.");
+            var token = lines[3];
+            var published = lines[0] == "published" || HasPublishedSnapshot(snapshotPath, token);
+            var backup = lines[1];
+            var hadPrevious = lines[2] == "1";
+            if (string.IsNullOrWhiteSpace(backup) || !backup.StartsWith(root + ".backup-", StringComparison.Ordinal))
+                throw new InvalidDataException("The artwork cache transaction marker contains an invalid backup path.");
+            if (published) TryDeleteDirectory(backup);
+            else if (Directory.Exists(backup))
+            {
+                var backupInfo = new DirectoryInfo(backup);
+                if ((backupInfo.Attributes & FileAttributes.ReparsePoint) != 0)
+                    throw new InvalidDataException("The artwork cache backup cannot be a reparse point.");
+                TryDeleteDirectory(root);
+                if (Directory.Exists(root)) throw new IOException("The interrupted artwork cache could not be replaced during recovery.");
+                Directory.Move(backup, root);
+            }
+            else if (!hadPrevious)
+            {
+                TryDeleteDirectory(root);
+                if (Directory.Exists(root)) throw new IOException("The incomplete artwork cache could not be removed during recovery.");
+            }
+        }
+        catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is ArgumentException)
+        {
+            // Do not start a new generation while the previous transaction is unresolved.
+            throw new IOException("The previous artwork cache transaction could not be recovered; the existing cache was left untouched.", ex);
+        }
+        TryDeleteFile(marker);
+        foreach (var backupPath in Directory.GetDirectories(parent, Path.GetFileName(root) + ".backup-*"))
+            TryDeleteDirectory(backupPath);
+    }
+
+    private void WriteMarker(string state)
+    {
+        var temporary = _marker + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        try
+        {
+            var content = state + Environment.NewLine + (_backup ?? string.Empty) + Environment.NewLine +
+                (_hadPreviousRoot ? "1" : "0") + Environment.NewLine + _publicationToken;
+            using (var stream = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+            using (var writer = new StreamWriter(stream, Encoding.UTF8))
+            {
+                writer.Write(content);
+                writer.Flush();
+                stream.Flush(true);
+            }
+
+            if (File.Exists(_marker)) File.Replace(temporary, _marker, null);
+            else File.Move(temporary, _marker);
+        }
+        finally
+        {
+            TryDeleteFile(temporary);
+        }
+    }
+
+    private static bool HasPublishedSnapshot(string? snapshotPath, string token)
+    {
+        if (string.IsNullOrWhiteSpace(snapshotPath) || string.IsNullOrEmpty(token) || !File.Exists(snapshotPath)) return false;
+        try
+        {
+            var info = new FileInfo(snapshotPath);
+            if (info.Length > SnapshotLimits.MaxBytes) return false;
+            var json = File.ReadAllText(snapshotPath, Encoding.UTF8);
+            return json.StartsWith("{\\"schemaVersion\\":2,\\"generatedAtUtc\\":\\"" + token + "\\",\\"games\\":", StringComparison.Ordinal);
+        }
+        catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is ArgumentException)
+        {
+            return false;
+        }
+    }
+
+    private static bool TryDetectFormat(byte[] data, out string extension) =>
+        ArtworkFileSignature.TryGetExtension(data, out extension);
+
+    private static void TryDeleteDirectory(string? path)
+    {
+        if (string.IsNullOrEmpty(path)) return;
+        try
+        {
+            if (!Directory.Exists(path)) return;
+            var info = new DirectoryInfo(path);
+            Directory.Delete(path, (info.Attributes & FileAttributes.ReparsePoint) == 0);
+        }
+        catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException) { }
+    }
+
+    private static void TryDeleteFile(string path)
+    {
+        try { if (File.Exists(path)) File.Delete(path); }
+        catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException) { }
+    }
+}
