@@ -5,6 +5,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.CommandPalette.Extensions;
 using Microsoft.CommandPalette.Extensions.Toolkit;
@@ -16,7 +17,9 @@ namespace PlayniteCmdPal;
 internal sealed partial class PlayniteCmdPalRecentlyPlayedPage : DynamicListPage
 {
     private readonly IReadOnlyPlayniteCatalog _catalog = new PlayniteCatalogAdapter();
+    private IListItem[] _allItems = [CreateStatusItem("Loading recently played games…")];
     private IListItem[] _items = [CreateStatusItem("Loading recently played games…")];
+    private string _searchText = string.Empty;
 
     public PlayniteCmdPalRecentlyPlayedPage()
     {
@@ -27,6 +30,22 @@ internal sealed partial class PlayniteCmdPalRecentlyPlayedPage : DynamicListPage
     }
 
     public override IListItem[] GetItems() => _items;
+
+    public override void UpdateSearchText(string oldSearch, string newSearch)
+    {
+        _searchText = newSearch;
+        ApplySearch();
+    }
+
+    private void ApplySearch()
+    {
+        _items = string.IsNullOrWhiteSpace(_searchText)
+            ? _allItems
+            : _allItems
+                .Where(item => item.Title.Contains(_searchText, StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+        RaiseItemsChanged();
+    }
 
     private async Task LoadItemsAsync(bool forceRefresh = false)
     {
@@ -41,8 +60,8 @@ internal sealed partial class PlayniteCmdPalRecentlyPlayedPage : DynamicListPage
             {
                 items.Add(CreateRefreshItem(catalog.Issue?.Message
                     ?? "The Playnite catalog is unavailable. Install and start the companion plugin, then refresh."));
-                _items = items.ToArray();
-                RaiseItemsChanged();
+                _allItems = items.ToArray();
+                ApplySearch();
                 return;
             }
 
@@ -60,8 +79,8 @@ internal sealed partial class PlayniteCmdPalRecentlyPlayedPage : DynamicListPage
                 items.Add(CreateRefreshItem(catalog.Games.Count == 0
                     ? "Your Playnite library is empty. Add games in Playnite, then refresh."
                     : "No games have a recorded last-played date yet."));
-                _items = items.ToArray();
-                RaiseItemsChanged();
+                _allItems = items.ToArray();
+                ApplySearch();
                 return;
             }
 
@@ -81,8 +100,8 @@ internal sealed partial class PlayniteCmdPalRecentlyPlayedPage : DynamicListPage
                 });
             }
 
-            _items = items.ToArray();
-            RaiseItemsChanged();
+            _allItems = items.ToArray();
+            ApplySearch();
         }
         catch (OperationCanceledException)
         {
@@ -90,8 +109,8 @@ internal sealed partial class PlayniteCmdPalRecentlyPlayedPage : DynamicListPage
         }
         catch (Exception)
         {
-            _items = [CreateStatusItem("Couldn't read the Playnite catalog. Check the companion plugin and snapshot permissions, then refresh.")];
-            RaiseItemsChanged();
+            _allItems = [CreateStatusItem("Couldn't read the Playnite catalog. Check the companion plugin and snapshot permissions, then refresh.")];
+            ApplySearch();
         }
     }
 
