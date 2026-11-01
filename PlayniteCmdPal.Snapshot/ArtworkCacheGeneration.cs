@@ -282,7 +282,7 @@ public sealed class ArtworkCacheGeneration : IDisposable
             var info = new FileInfo(snapshotPath);
             if (info.Length > SnapshotLimits.MaxBytes) return false;
             var json = File.ReadAllText(snapshotPath, Encoding.UTF8);
-            return json.StartsWith("{\\"schemaVersion\\":2,\\"generatedAtUtc\\":\\"" + token + "\\",\\"games\\":", StringComparison.Ordinal);
+            return json.StartsWith("{\"schemaVersion\":2,\"generatedAtUtc\":\"" + token + "\",\"games\":", StringComparison.Ordinal);
         }
         catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is ArgumentException)
         {
