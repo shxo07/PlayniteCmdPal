@@ -154,9 +154,15 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage
         var matches = GameSearch.Search(catalog.Games, query, _filters.ToSearchFilters());
         if (matches.Count == 0)
         {
-            var message = string.IsNullOrWhiteSpace(query)
-                ? "No games match the selected filters. Clear one or more filters to see more games."
-                : $"No games match “{query.Trim()}” with the selected filters. Clear a filter or change your search.";
+            var activeFilters = _filters.ToSearchFilters();
+            var hasActiveFilters = activeFilters.IsInstalled.HasValue
+                || activeFilters.Sources?.Count > 0
+                || activeFilters.Platforms?.Count > 0;
+            var message = hasActiveFilters
+                ? string.IsNullOrWhiteSpace(query)
+                    ? "No games match the selected filters. Clear one or more filters to see more games."
+                    : $"No games match “{query.Trim()}” with the selected filters. Clear a filter or change your search."
+                : $"No games match “{query.Trim()}”.";
             items.Add(CreateStatusItem(message));
             return items.ToArray();
         }
