@@ -152,3 +152,29 @@ Until every required item is checked, the project remains **prepared for review,
 - [Gallery contribution guide](https://github.com/microsoft/CmdPal-Extensions/blob/main/docs/CONTRIBUTING.md)
 - [Gallery extension schema](https://github.com/microsoft/CmdPal-Extensions/blob/main/.github/schemas/extension.schema.json)
 - [Gallery sample extension](https://github.com/microsoft/CmdPal-Extensions/tree/main/extensions/microsoft/sample-extension)
+
+
+## Windows SDK targeting-pack migration (WERD-77, 2026-11-01)
+
+The project previously pinned preview `Microsoft.Windows.SDK.NET.Ref 10.0.26100.68-preview`. That project-level override has been removed. The stable Microsoft-published candidate `10.0.26100.87` is now selected centrally by `WindowsSdkPackageVersion` in [Directory.Build.props](../Directory.Build.props).
+
+Compatibility rationale:
+
+- NuGet identifies this as the Windows SDK .NET targeting pack and reports compatibility with .NET 9 and later, including .NET 10: https://www.nuget.org/packages/Microsoft.Windows.SDK.NET.Ref/10.0.26100.87
+- Version 10.0.26100.87 is a stable servicing release in the 26100 SDK family matching `net10.0-windows10.0.26100.0`; the minimum OS target remains Windows 10 build 19041: https://learn.microsoft.com/en-us/windows/apps/windows-sdk/downloads and https://learn.microsoft.com/en-us/windows/apps/get-started/versioning-overview
+- The targeting pack is independent of `Microsoft.CommandPalette.Extensions` and is shared by the project's x64 and ARM64 runtime targets.
+
+The targeting pack is a development-time compile reference. Its use is governed by Microsoft's Windows SDK license terms; the SDK package itself is not to be redistributed as application payload. Review the [Microsoft SDK license](https://github.com/microsoft/win32metadata/blob/main/licenses/sdk_license.txt). This package-selection evidence does not establish redistribution rights for Windows SDK projection assemblies that may be shipped at runtime; that remains a separate licensing gate tracked by WERD-76.
+
+### Migration validation checklist
+
+- [ ] Clean Windows restore resolves `Microsoft.Windows.SDK.NET.Ref 10.0.26100.87` and no preview version.
+- [ ] Release solution build succeeds.
+- [ ] All automated tests and the .NET Framework smoke test pass.
+- [ ] Visual Studio **Build > Deploy** registers the MSIX and Command Palette reload/activation succeeds.
+- [ ] x64 Release package/publish succeeds.
+- [ ] ARM64 Release package/publish succeeds.
+- [ ] Inspect evaluated MSBuild properties and restore assets to confirm no preview targeting pack remains.
+- [ ] Compare x64/ARM64 runtime notices and package contents; record API/behavior differences.
+
+Run `.\scripts\ci.ps1` for the repository's automated baseline, then perform the Visual Studio and package checks above on Windows. Do not mark WERD-77 complete until evidence is attached. The existing maintainer-reported Windows 10 validation and CI results predate this targeting-pack migration and do not validate the new package version. Windows 11 clean-machine validation remains separately deferred as documented in [Developer Setup](DEVELOPER-SETUP.md).
