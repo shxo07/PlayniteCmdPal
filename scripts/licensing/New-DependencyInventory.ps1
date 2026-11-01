@@ -383,8 +383,8 @@ foreach ($target in $targetProjects) {
 
         $projectFrameworks.Add([ordered]@{
                 framework = $framework
-                rids      = @($frameworkRids | Sort-Object)
-                packages  = @($frameworkPackages | Sort-Object)
+                rids      = @($frameworkRids.ToArray() | Sort-Object)
+                packages  = @($frameworkPackages.ToArray() | Sort-Object)
             })
     }
 
@@ -394,7 +394,7 @@ foreach ($target in $targetProjects) {
             shipped           = $target.Shipped
             artifact          = $target.Artifact
             directPackages    = @($directPackageIds | Sort-Object)
-            targetFrameworks  = @($projectFrameworks)
+            targetFrameworks  = $projectFrameworks.ToArray()
             restoreOutputPath = (ConvertTo-RepoRelativePath -Path $assetsPath)
         })
 }
@@ -452,11 +452,11 @@ foreach ($recordKey in ($packageRecords.Keys | Sort-Object)) {
             classification    = $record.classification
             direct            = $record.direct
             runtimeAssets     = $record.runtimeAssets
-            assetKinds        = @($record.assetKinds | Sort-Object)
+            assetKinds        = @($record.assetKinds.ToArray() | Sort-Object)
             license           = $license
             reviewStatus      = $record.reviewStatus
-            reviewNotes       = @($notes)
-            usedBy            = @($record.usedBy)
+            reviewNotes       = $notes.ToArray()
+            usedBy            = $record.usedBy.ToArray()
         })
 }
 
@@ -478,8 +478,8 @@ $inventory = [ordered]@{
     dotnetSdkVersion    = if ([string]::IsNullOrWhiteSpace($sdkVersion)) { $null } else { $sdkVersion }
     nugetPackagesFolder = $NuGetPackagesPath
     allowedLicenses     = $allowedLicenseExpressions
-    projects            = @($projectRecords)
-    packages            = @($orderedPackages)
+    projects            = $projectRecords.ToArray()
+    packages            = $orderedPackages.ToArray()
     summary             = $summary
     limitations         = @(
         'Reflects the resolved NuGet graph recorded in obj/project.assets.json; it does not inspect a published MSIX or .pext layout.',
