@@ -28,7 +28,7 @@ foreach ($assembly in @($snapshotAssemblyObject, $pluginMetadata)) {
 $gameType = $snapshotAssemblyObject.GetType('PlayniteCmdPal.Snapshot.SnapshotGame', $true)
 $snapshotType = $snapshotAssemblyObject.GetType('PlayniteCmdPal.Snapshot.CatalogSnapshot', $true)
 $publisherType = $snapshotAssemblyObject.GetType('PlayniteCmdPal.Snapshot.SnapshotFilePublisher', $true)
-$gameConstructor = $gameType.GetConstructor([type[]]@([string], [string], [bool], [string], [string]))
+$gameConstructor = $gameType.GetConstructor([type[]]@([string], [string], [bool], [string], [string], [Nullable[DateTime]]))
 $snapshotConstructor = @($snapshotType.GetConstructors())[0]
 
 # Purely synthetic data exercises JSON escaping, non-ASCII characters, optional
@@ -36,8 +36,9 @@ $snapshotConstructor = @($snapshotType.GetConstructors())[0]
 $prefix = 'Example "quoted" \ path ' + [char]10 + [char]0x00e9 + [char]::ConvertFromUtf32(0x1f3ae)
 $name = $prefix + [char]0xd800 + ' end'
 $expectedName = $prefix + [char]0xfffd + ' end'
-$firstGame = $gameConstructor.Invoke([object[]]@('11111111-1111-4111-8111-111111111111', $name, $true, 'Source', 'PC'))
-$secondGame = $gameConstructor.Invoke([object[]]@('22222222-2222-4222-8222-222222222222', 'Second', $false, $null, $null))
+$lastActivity = [DateTime]::SpecifyKind([DateTime]::Parse('2026-10-29T18:45:00', [Globalization.CultureInfo]::InvariantCulture), [DateTimeKind]::Unspecified)
+$firstGame = $gameConstructor.Invoke([object[]]@('11111111-1111-4111-8111-111111111111', $name, $true, 'Source', 'PC', $lastActivity))
+$secondGame = $gameConstructor.Invoke([object[]]@('22222222-2222-4222-8222-222222222222', 'Second', $false, $null, $null, $null))
 $listType = [type]::GetType('System.Collections.Generic.List`1').MakeGenericType($gameType)
 $games = [Activator]::CreateInstance($listType)
 [void]$games.Add($firstGame)
@@ -60,7 +61,7 @@ try {
     $firstPublication = [Text.Encoding]::UTF8.GetString([IO.File]::ReadAllBytes($path)) | ConvertFrom-Json
     if ($firstPublication.games[1].name -ne 'Second') { throw 'First publication was invalid.' }
 
-    $games[1] = $gameConstructor.Invoke([object[]]@('22222222-2222-4222-8222-222222222222', 'Second updated', $false, $null, $null))
+    $games[1] = $gameConstructor.Invoke([object[]]@('22222222-2222-4222-8222-222222222222', 'Second updated', $false, $null, $null, $null))
     $snapshotArguments[1] = $games
     $replacement = $snapshotConstructor.Invoke($snapshotArguments)
     $publisherType::PublishAsync([string]$path, $replacement, [Threading.CancellationToken]::None).GetAwaiter().GetResult()
@@ -79,7 +80,32 @@ try {
     }
     if ($json.games[0].id -ne '11111111-1111-4111-8111-111111111111' -or
         $json.games[0].name -cne $expectedName -or $json.games[0].isInstalled -ne $true -or
-        $json.games[0].source -ne 'Source' -or $json.games[0].platform -ne 'PC') {
+        $json.games[0].source -ne 'Source' -or $json.games[0].platform -ne 'PC' -or
+        $json.games[0].lastActivity -notmatch '^2026-10-29T18:45:00(\.0{1,7})?
+        throw 'First synthetic game did not round-trip.'
+    }
+    if ($json.games[1].id -ne '22222222-2222-4222-8222-222222222222' -or
+        $json.games[1].name -ne 'Second updated' -or $json.games[1].isInstalled -ne $false -or
+        $null -ne $json.games[1].PSObject.Properties['source'] -or
+        $null -ne $json.games[1].PSObject.Properties['platform']) {
+        throw 'Second synthetic game did not round-trip or optional fields were emitted.'
+    }
+    if (@($json.PSObject.Properties.Name).Count -ne 3 -or
+        @($json.games[0].PSObject.Properties.Name).Count -ne 6 -or
+        @($json.games[1].PSObject.Properties.Name).Count -ne 3) {
+        throw 'The snapshot contained unexpected fields.'
+    }
+    if (@(Get-ChildItem -LiteralPath $directory -Force).Count -ne 1) {
+        throw 'The publisher left an unexpected file behind.'
+    }
+
+    Write-Host 'Playnite bridge .NET Framework snapshot smoke passed (synthetic data, no System.Text.Json reference).'
+} finally {
+    if (Test-Path -LiteralPath $directory) {
+        Remove-Item -LiteralPath $directory -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+) {
         throw 'First synthetic game did not round-trip.'
     }
     if ($json.games[1].id -ne '22222222-2222-4222-8222-222222222222' -or
