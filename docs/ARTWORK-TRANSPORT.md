@@ -1,6 +1,6 @@
 # Artwork transport and trust boundary
 
-Status: Implemented for WERD-71; automated and Windows verification are pending.
+Status: Implemented for WERD-71; automated Windows CI and CodeQL checks pass. Live Playnite verification remains pending.
 
 ## Decision
 

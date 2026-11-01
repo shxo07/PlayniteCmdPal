@@ -215,6 +215,24 @@ public sealed class ArtworkCacheGenerationTests : IDisposable
         Assert.True(File.Exists(Path.Combine(_cacheRoot, Digest(newBytes) + ".jpg")));
     }
 
+    [Fact]
+    public void StartupRecoveryRejectsBackupMarkerPathTraversal()
+    {
+        var parent = Path.GetDirectoryName(_cacheRoot)!;
+        Directory.CreateDirectory(parent);
+        var outside = Path.Combine(parent, "outside-cache");
+        Directory.CreateDirectory(outside);
+        var sentinel = Path.Combine(outside, "keep.txt");
+        File.WriteAllText(sentinel, "keep");
+        var traversalBackup = _cacheRoot + ".backup-" + Guid.NewGuid().ToString("N") +
+            Path.DirectorySeparatorChar + ".." + Path.DirectorySeparatorChar + "outside-cache";
+        File.WriteAllText(_cacheRoot + ".transaction",
+            "pending" + Environment.NewLine + traversalBackup + Environment.NewLine + "1" + Environment.NewLine);
+
+        Assert.Throws<IOException>(() => new ArtworkCacheGeneration(_cacheRoot));
+        Assert.Equal("keep", File.ReadAllText(sentinel));
+    }
+
     private string WriteSource(string fileId, byte[] bytes)
     {
         var directory = Path.Combine(_filesRoot, GameId);

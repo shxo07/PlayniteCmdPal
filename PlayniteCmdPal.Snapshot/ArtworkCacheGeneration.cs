@@ -222,7 +222,7 @@ public sealed class ArtworkCacheGeneration : IDisposable
             var published = lines[0] == "published" || HasPublishedSnapshot(snapshotPath, token);
             var backup = lines[1];
             var hadPrevious = lines[2] == "1";
-            if (string.IsNullOrWhiteSpace(backup) || !backup.StartsWith(root + ".backup-", StringComparison.Ordinal))
+            if (!IsValidBackupPath(root, backup))
                 throw new InvalidDataException("The artwork cache transaction marker contains an invalid backup path.");
             if (published) TryDeleteDirectory(backup);
             else if (Directory.Exists(backup))
@@ -248,6 +248,27 @@ public sealed class ArtworkCacheGeneration : IDisposable
         TryDeleteFile(marker);
         foreach (var backupPath in Directory.GetDirectories(parent, Path.GetFileName(root) + ".backup-*"))
             TryDeleteDirectory(backupPath);
+    }
+
+    private static bool IsValidBackupPath(string root, string backup)
+    {
+        var prefix = root + ".backup-";
+        if (!backup.StartsWith(prefix, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var suffix = backup.Substring(prefix.Length);
+        if (!Guid.TryParseExact(suffix, "N", out var id) ||
+            !string.Equals(suffix, id.ToString("N"), StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var expected = Path.GetFullPath(prefix + suffix);
+        var actual = Path.GetFullPath(backup);
+        return string.Equals(actual, expected, StringComparison.OrdinalIgnoreCase) &&
+               string.Equals(Path.GetDirectoryName(actual), Path.GetDirectoryName(root), StringComparison.OrdinalIgnoreCase);
     }
 
     private void WriteMarker(string state)
