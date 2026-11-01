@@ -9,9 +9,10 @@ This page explains what is tested, where each check runs, and how to run it. For
 | Project | Target | References | Needs Playnite installed? |
 |---|---|---|---|
 | `PlayniteCmdPal.Core.Tests` | `net10.0` | `PlayniteCmdPal.Core` | No |
+| `PlayniteCmdPal.Command.Tests` | `net10.0-windows10.0.26100.0` | `PlayniteCmdPal.Core`, linked production `ToggleFavoriteCommand.cs`, Command Palette SDK | No (Windows CI required) |
 | `PlayniteCmdPal.Playnite.Tests` | `net10.0` | `PlayniteCmdPal.Playnite`, `PlayniteCmdPal.Snapshot` | No |
 
-Neither test project references `PlayniteCmdPal/` (the CmdPal host) or `PlayniteCmdPal.PlaynitePlugin/` (the `net462` companion plugin). The companion plugin is only compiled; its SDK usage is exercised indirectly by the behavior it delegates to the shared snapshot assembly.
+`PlayniteCmdPal.Core.Tests` and `PlayniteCmdPal.Playnite.Tests` do not reference `PlayniteCmdPal/` (the CmdPal host) or `PlayniteCmdPal.PlaynitePlugin/` (the `net462` companion plugin). `PlayniteCmdPal.Command.Tests` compiles the production `ToggleFavoriteCommand.cs` into a focused Windows test assembly so it can assert the actual SDK command-result and toast-follow-up values without loading the full WinUI host. The companion plugin is only compiled; its SDK usage is exercised indirectly by the behavior it delegates to the shared snapshot assembly.
 
 Test data is generated in the test process and written to a temporary directory (`%TEMP%\PlayniteCmdPal.Tests\<guid>`). Each test class that touches disk owns and deletes its directory. No test reads `%LOCALAPPDATA%`, Playnite storage, `playnite.log`, or any real library export.
 
@@ -27,17 +28,23 @@ Test data is generated in the test process and written to a temporary directory 
 | `GameSearchTests` | Baseline ranking order (exact, prefix, word-prefix, substring), case-insensitivity, duplicate titles, tie-breaks, blank/null query, empty catalog, invalid entries. |
 | `GameSearchRankingTests` | Query trimming versus untrimmed stored titles, multi-word and partial queries, word-boundary rules (only non-alphanumeric characters start a word), earliest-match index ordering, ordinal ID ordering for duplicate titles, canonical duplicate-ID selection independent of input order, returned collection immutability, single enumeration of the catalog, argument precedence (blank query short-circuits), and a 5,000-entry determinism check. |
 
+### Favorites command results (`PlayniteCmdPal.Command.Tests`)
+
+| File | Covers |
+|---|---|
+| `ToggleFavoriteCommandTests` | Both successful and failed pin/unpin invocations return a `ShowToast` result whose `ToastArgs.Result` is explicitly `KeepOpen`, preserving the current page stack and query. |
+
 ### Favorites UI smoke test (manual)
 
 Run with a local Playnite library and the PowerToys Command Palette extension:
 
-1. Open **Search games**, open a game's More actions, and choose **Pin to favorites**. Confirm the toast appears and the game is still launchable.
+1. Open **Search games**, open a game's More actions, and choose **Pin to favorites**. Confirm the toast appears, **Command Palette stays visible on the same Search Games page with the same query**, and the game is still launchable.
 2. Open **Favorites** without changing its query. Confirm the newly pinned game appears immediately.
-3. Unpin the game from **Favorites**. Confirm it disappears immediately; pin it again from **Search games** and confirm it reappears.
+3. Unpin the game from **Favorites**. Confirm the toast appears while **Favorites remains visible with its existing query**, and the game disappears immediately; pin it again from **Search games** and confirm it reappears without closing the palette.
 4. Search Favorites for a non-matching title and confirm the no-match state; clear the query and confirm the pinned game returns.
 5. Restart the Command Palette extension and Playnite, then confirm the favorite remains.
 6. Remove a favorited game from the current Playnite library (or test with a known missing ID) and confirm it is hidden from Favorites without deleting its saved preference.
-7. With an unsupported future-schema or unreadable preferences file, confirm normal Search results still appear and can still launch; the Favorites action should report that preferences are unavailable rather than breaking the result list.
+7. With an unsupported future-schema or unreadable preferences file, confirm normal Search results still appear and can still launch; the Favorites action should report that preferences are unavailable rather than breaking the result list. Confirm its error toast also leaves the current page/query open.
 
 Capture screenshots of Search actions, populated Favorites, and empty/no-match states. A short before/after capture of pinning and unpinning without editing the query is useful evidence.
 
@@ -68,6 +75,7 @@ Capture screenshots of Search actions, populated Favorites, and empty/no-match s
 |---|---|---|---|---|---|
 | `dotnet restore` / `dotnet build` (Release) | Yes, via `scripts/ci.ps1` | Yes | Yes | Yes (MSIX/WinUI targets) | No |
 | `PlayniteCmdPal.Core.Tests` | Yes | Yes | Yes | No (runs on any OS with the .NET 10 SDK, but the repository's shared script is Windows-only) | No |
+| `PlayniteCmdPal.Command.Tests` | Yes (Windows) | Yes | Yes | Yes (Command Palette SDK target) | No |
 | `PlayniteCmdPal.Playnite.Tests` | Yes | Yes | Yes | No for the unit/contract tests; the shared script itself is Windows-only | No |
 | .NET Framework snapshot smoke test (`scripts/test-playnite-snapshot-netfx.ps1`) | Yes | Yes | Yes | Yes (Windows PowerShell 5.1 / .NET Framework CLR) | No |
 | CodeQL C# analysis | No | n/a | Yes | Yes (workflow runs on `windows-latest`) | No |
@@ -116,6 +124,7 @@ It prints the exact `dotnet` command it runs before each step, stops at the firs
 
 ```powershell
 dotnet test .\PlayniteCmdPal.Core.Tests\PlayniteCmdPal.Core.Tests.csproj
+dotnet test .\PlayniteCmdPal.Command.Tests\PlayniteCmdPal.Command.Tests.csproj
 dotnet test .\PlayniteCmdPal.Playnite.Tests\PlayniteCmdPal.Playnite.Tests.csproj
 ```
 
@@ -136,25 +145,24 @@ dotnet test .\PlayniteCmdPal.Core.Tests\PlayniteCmdPal.Core.Tests.csproj --logge
 
 ### Coverage at a glance
 
-The suites hold **249 test cases** (facts plus `[InlineData]` rows) split across the two
-projects: **66** for domain/search and **183** for the snapshot contract, publication, refresh,
-and adapter policy. Of those, 148 were added for
+The suites hold **251 test cases** (facts plus `[InlineData]` rows) split across three
+test projects: **66** for domain/search, **2** for Command Palette favorite command results,
+and **183** for the snapshot contract, publication, refresh, and adapter policy. Of those, 148 were added for
 [WERD-62](https://linear.app/werdscopez7347/issue/WERD-62/expand-automated-tests-and-finalize-the-developer-setup-guide).
 
 How that number is established, so it can be re-derived rather than trusted:
 
 | Source | Core | Adapter | Total |
 |---|---|---|---|
-| Count of `[Fact]` plus `[InlineData]` rows in each project in this commit | 66 | 183 | 249 |
-| `dotnet test` totals in Windows CI run [41184115994](https://github.com/werdscopez7347/PlayniteCmdPal/actions/runs/41184115994) | 66 | 183 | 249 |
-| `dotnet test` totals re-captured on commit `82d5afa` | 66 | 183 | 249 |
+| Count of `[Fact]` plus `[InlineData]` rows in each project in this commit | 66 | 2 | 183 | 251 |
+| `dotnet test` totals in Windows CI run [41184115994](https://github.com/werdscopez7347/PlayniteCmdPal/actions/runs/41184115994) (pre-command-suite baseline) | 66 | n/a | 183 | 249 |
+| `dotnet test` totals for the new command suite | pending latest Windows CI | 2 authored cases | n/a | pending latest Windows CI |
 
 All three agree. The count was previously stated here and in an earlier pull-request description
 as 251; that figure was produced by an editing-time estimate before any test had executed, not by
 `dotnet test`, and it was wrong. It has been corrected to 249.
 
-Counts drift as tests change, so treat the per-file table above as the authoritative map and
-re-read the `Passed!` line rather than trusting a number written here. If the written count and
+Counts drift as tests change. The new command-result suite has two authored cases; its executed count remains pending until the updated Windows CI run reports it. Treat the per-file table above as the authoritative map and re-read each `Passed!` line rather than trusting a number written here. If the written count and
 `dotnet test` disagree, the `dotnet test` output wins: it is the only measurement that actually
 executed the tests.
 
