@@ -13,10 +13,9 @@ internal sealed partial class FavoritesPage : DynamicListPage
 {
     private readonly IReadOnlyPlayniteCatalog _catalog = new PlayniteCatalogAdapter();
     private readonly FavoritesStore _favorites = FavoritesPreferences.Store;
-    private readonly object _requestGate = new();
+    private readonly LatestRequestGate _requestGate = new();
     private IListItem[] _items = [CreateStatusItem("Loading your favorites…")];
     private string _searchText = string.Empty;
-    private int _requestVersion;
 
     public FavoritesPage()
     {
@@ -29,37 +28,24 @@ internal sealed partial class FavoritesPage : DynamicListPage
 
     public override void UpdateSearchText(string oldSearch, string newSearch)
     {
-        lock (_requestGate)
-        {
-            _searchText = newSearch ?? string.Empty;
-        }
-
+        _requestGate.Synchronize(() => _searchText = newSearch ?? string.Empty);
         LoadItems();
     }
 
-    public override IListItem[] GetItems()
-    {
-        lock (_requestGate)
-        {
-            return _items;
-        }
-    }
+    public override IListItem[] GetItems() => _requestGate.Synchronize(() => _items);
 
     private void OnFavoritesChanged(object? sender, EventArgs e) => LoadItems();
 
     private void LoadItems()
     {
-        int version;
-        string query;
-        lock (_requestGate)
+        var request = _requestGate.BeginRequest(() =>
         {
-            version = ++_requestVersion;
-            query = _searchText;
             _items = [CreateStatusItem("Loading your favorites…")];
             RaiseItemsChanged();
-        }
+            return _searchText;
+        });
 
-        _ = LoadItemsAsync(version, query);
+        _ = LoadItemsAsync(request.Version, request.State);
     }
 
     private async Task LoadItemsAsync(int version, string query)
@@ -116,16 +102,11 @@ internal sealed partial class FavoritesPage : DynamicListPage
     // catalog read or filtering after a newer query, but it can never publish over that query.
     private void PublishIfCurrent(int version, IListItem[] items)
     {
-        lock (_requestGate)
+        _requestGate.TryPublish(version, () =>
         {
-            if (version != _requestVersion)
-            {
-                return;
-            }
-
             _items = items;
             RaiseItemsChanged();
-        }
+        });
     }
 
     private static string BuildMetadata(GameEntry game)
