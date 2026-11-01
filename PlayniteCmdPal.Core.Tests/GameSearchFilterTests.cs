@@ -20,7 +20,7 @@ public sealed class GameSearchFilterTests
     {
         var results = GameSearch.Search(Catalog, null, new GameSearchFilters(IsInstalled: true));
 
-        Assert.Equal(new[] { "gog-installed", "steam-installed", "xbox-installed", "other" },
+        Assert.Equal(new[] { "gog-installed", "other", "steam-installed", "xbox-installed" },
             results.Select(game => game.GameId));
     }
 
@@ -42,7 +42,7 @@ public sealed class GameSearchFilterTests
 
         var results = GameSearch.Search(Catalog, "halo", filters);
 
-        Assert.Equal(new[] { "gog-installed", "steam-installed" }, results.Select(game => game.GameId));
+        Assert.Equal(new[] { "steam-installed", "gog-installed" }, results.Select(game => game.GameId));
     }
 
     [Fact]
@@ -54,7 +54,7 @@ public sealed class GameSearchFilterTests
 
         var results = GameSearch.Search(Catalog, "halo", filters);
 
-        Assert.Equal(new[] { "steam-installed", "steam-not-installed", "xbox-installed" },
+        Assert.Equal(new[] { "steam-not-installed", "steam-installed", "xbox-installed" },
             results.Select(game => game.GameId));
     }
 
@@ -99,7 +99,7 @@ public sealed class GameSearchFilterTests
             "   ",
             new GameSearchFilters(Platforms: new[] { "PC" }));
 
-        Assert.Equal(new[] { "other", "gog-installed", "steam-installed", "steam-not-installed" },
+        Assert.Equal(new[] { "gog-installed", "other", "steam-installed", "steam-not-installed" },
             results.Select(game => game.GameId));
     }
 
@@ -125,7 +125,7 @@ public sealed class GameSearchFilterTests
     }
 
     [Fact]
-    public void ContradictoryInstalledSelectionReturnsNoResults()
+    public void InstalledFilterExcludesNotInstalledEntries()
     {
         var results = GameSearch.Search(
             Catalog,
