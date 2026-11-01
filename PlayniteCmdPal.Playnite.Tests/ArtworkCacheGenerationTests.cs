@@ -207,7 +207,7 @@ public sealed class ArtworkCacheGenerationTests : IDisposable
         var interrupted = new ArtworkCacheGeneration(_cacheRoot, snapshotPath: snapshotPath);
         interrupted.TryImport(GameId, Reference(FileIdB), newSource, _filesRoot);
         interrupted.Activate(token);
-        File.WriteAllText(snapshotPath, "{\\"schemaVersion\\":2,\\"generatedAtUtc\\":\\"" + token + "\\",\\"games\\":[]}");
+        File.WriteAllText(snapshotPath, "{\"schemaVersion\":2,\"generatedAtUtc\":\"" + token + "\",\"games\":[]}");
 
         using (var recovery = new ArtworkCacheGeneration(_cacheRoot, snapshotPath: snapshotPath)) { }
 
