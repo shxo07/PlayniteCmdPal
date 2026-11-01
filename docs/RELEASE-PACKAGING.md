@@ -80,7 +80,7 @@ Do not copy a generic `dotnet publish` or Inno Setup command into release instru
 
 The current audit in [Licensing and release readiness](LICENSING-AND-RELEASE.md) identifies these unresolved gates:
 
-1. **Windows SDK projection redistribution:** `Microsoft.Windows.SDK.NET.Ref` is a preview package with a Microsoft license that requires acceptance. Public redistribution permission for the projection assemblies has not been established. This is a release blocker.
+1. **Windows SDK projection redistribution:** Microsoft's [Windows SDK REDIST.TXT](https://learn.microsoft.com/en-us/legal/windows-sdk/redist) expressly lists `Microsoft.Windows.SDK.NET.Ref` and permits its package files unmodified as a NuGet package or as part of a program to enable WinRT API calls. The project uses preview package `10.0.26100.68-preview`, whose declared license URL is the preview-specific `https://aka.ms/WinSDKPreviewLicenseURL`; applicability of the published REDIST terms to that preview license, required end-user terms/notices, and the exact x64/ARM64 output inventory remain unverified. This remains a release blocker pending that evidence.
 2. **Stable Windows SDK targeting pack:** the project currently targets `10.0.26100.68-preview`. Evaluate a compatible stable targeting pack and run Windows build/deploy tests before switching. This is a release blocker until resolved.
 3. **Runtime notices:** the MSBuild copy target exists, but the exact runtime notice file still needs verification in both `win-x64` and `win-arm64` publish outputs.
 4. **Dependency inventory:** run `scripts/licensing/New-DependencyInventory.ps1` after a clean restore on the supported Windows build machine and review every item flagged for manual review.
@@ -133,7 +133,7 @@ The repository maintainer owns the release decision and must explicitly approve 
 
 Before the first public release, the maintainer must confirm:
 
-- [ ] Windows SDK projection redistribution has authoritative clearance, and the targeting-pack decision is recorded.
+- [ ] Windows SDK projection redistribution is cleared for the exact package/version and distribution model; preview-license applicability, Microsoft's end-user terms, required notices and the actual x64/ARM64 output file lists are recorded; the targeting-pack decision is recorded.
 - [ ] The dependency inventory has been regenerated and all review items resolved.
 - [ ] Runtime notices are present in both architecture outputs.
 - [ ] Store identity and signing certificate are final and verified (or a separately validated WinGet route is approved).
