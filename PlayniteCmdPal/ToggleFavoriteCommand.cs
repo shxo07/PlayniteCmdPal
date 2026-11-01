@@ -18,12 +18,34 @@ internal sealed partial class ToggleFavoriteCommand : InvokableCommand
         _onChanged = onChanged;
     }
 
-    public override string Name => _store.IsFavorite(_gameId) ? "Unpin from favorites" : "Pin to favorites";
+    // Command item construction reads Name. Keep an unreadable or future-version preferences
+    // file from breaking construction of otherwise valid game search results.
+    public override string Name
+    {
+        get
+        {
+            try
+            {
+                return _store.IsFavorite(_gameId) ? "Unpin from favorites" : "Pin to favorites";
+            }
+            catch (Exception)
+            {
+                return "Favorites unavailable";
+            }
+        }
+    }
 
     public override CommandResult Invoke()
     {
-        var isFavorite = _store.Toggle(_gameId);
-        _onChanged?.Invoke();
-        return CommandResult.ShowToast(isFavorite ? "Game pinned to Favorites." : "Game removed from Favorites.");
+        try
+        {
+            var isFavorite = _store.Toggle(_gameId);
+            _onChanged?.Invoke();
+            return CommandResult.ShowToast(isFavorite ? "Game pinned to Favorites." : "Game removed from Favorites.");
+        }
+        catch (Exception)
+        {
+            return CommandResult.ShowToast("Favorites could not be changed. Check the local preferences file.");
+        }
     }
 }

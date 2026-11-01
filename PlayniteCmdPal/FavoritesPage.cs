@@ -13,6 +13,7 @@ internal sealed partial class FavoritesPage : DynamicListPage
 {
     private readonly IReadOnlyPlayniteCatalog _catalog = new PlayniteCatalogAdapter();
     private readonly FavoritesStore _favorites = FavoritesPreferences.Store;
+    private readonly object _requestGate = new();
     private IListItem[] _items = [CreateStatusItem("Loading your favorites…")];
     private string _searchText = string.Empty;
     private int _requestVersion;
@@ -28,20 +29,37 @@ internal sealed partial class FavoritesPage : DynamicListPage
 
     public override void UpdateSearchText(string oldSearch, string newSearch)
     {
-        _searchText = newSearch ?? string.Empty;
+        lock (_requestGate)
+        {
+            _searchText = newSearch ?? string.Empty;
+        }
+
         LoadItems();
     }
 
-    public override IListItem[] GetItems() => _items;
+    public override IListItem[] GetItems()
+    {
+        lock (_requestGate)
+        {
+            return _items;
+        }
+    }
 
     private void OnFavoritesChanged(object? sender, EventArgs e) => LoadItems();
 
     private void LoadItems()
     {
-        var version = ++_requestVersion;
-        _items = [CreateStatusItem("Loading your favorites…")];
-        RaiseItemsChanged();
-        _ = LoadItemsAsync(version, _searchText);
+        int version;
+        string query;
+        lock (_requestGate)
+        {
+            version = ++_requestVersion;
+            query = _searchText;
+            _items = [CreateStatusItem("Loading your favorites…")];
+            RaiseItemsChanged();
+        }
+
+        _ = LoadItemsAsync(version, query);
     }
 
     private async Task LoadItemsAsync(int version, string query)
@@ -49,15 +67,13 @@ internal sealed partial class FavoritesPage : DynamicListPage
         try
         {
             var catalog = await _catalog.GetAsync().ConfigureAwait(false);
-            if (version != _requestVersion)
-            {
-                return;
-            }
-
             if (!catalog.IsAvailable)
             {
-                _items = [CreateStatusItem(catalog.Issue?.Message ?? "The Playnite catalog is unavailable. Start Playnite and refresh.")];
-                RaiseItemsChanged();
+                PublishIfCurrent(version,
+                [
+                    CreateStatusItem(catalog.Issue?.Message
+                        ?? "The Playnite catalog is unavailable. Start Playnite and refresh.")
+                ]);
                 return;
             }
 
@@ -70,12 +86,11 @@ internal sealed partial class FavoritesPage : DynamicListPage
                 var message = favoriteIds.Count == 0
                     ? "No favorites yet. Pin a game from its search result actions."
                     : "No saved favorites match this search in the current Playnite library.";
-                _items = [CreateStatusItem(message)];
-                RaiseItemsChanged();
+                PublishIfCurrent(version, [CreateStatusItem(message)]);
                 return;
             }
 
-            _items = matches.Select(game => new ListItem(new LaunchGameCommand(game.GameId))
+            var items = matches.Select(game => new ListItem(new LaunchGameCommand(game.GameId))
             {
                 Title = game.Title,
                 Subtitle = BuildMetadata(game),
@@ -85,15 +100,31 @@ internal sealed partial class FavoritesPage : DynamicListPage
                     new CommandContextItem(new ToggleFavoriteCommand(_favorites, game.GameId)),
                 ],
             }).ToArray();
-            RaiseItemsChanged();
+
+            PublishIfCurrent(version, items);
         }
         catch (Exception)
         {
-            if (version == _requestVersion)
+            PublishIfCurrent(version,
+            [
+                CreateStatusItem("Couldn't load Favorites. Check the local preferences file and Playnite catalog, then try again.")
+            ]);
+        }
+    }
+
+    // Request ownership and publication share one lock. An older request can finish its
+    // catalog read or filtering after a newer query, but it can never publish over that query.
+    private void PublishIfCurrent(int version, IListItem[] items)
+    {
+        lock (_requestGate)
+        {
+            if (version != _requestVersion)
             {
-                _items = [CreateStatusItem("Couldn't load Favorites. Check the local preferences file and Playnite catalog, then try again.")];
-                RaiseItemsChanged();
+                return;
             }
+
+            _items = items;
+            RaiseItemsChanged();
         }
     }
 

@@ -96,16 +96,30 @@ public sealed partial class FavoritesStore
         try
         {
             using var stream = new FileStream(_filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
-            var document = JsonSerializer.Deserialize(stream, PreferencesJsonContext.Default.PreferencesDocument);
-            if (document is null || document.SchemaVersion < CurrentSchemaVersion)
+            using var envelope = JsonDocument.Parse(stream);
+
+            // Inspect the version before deserializing the v1 payload. A newer schema may
+            // intentionally change favoriteGameIds' shape, and must never be mistaken for
+            // corrupt v1 data (which could otherwise be overwritten on the next mutation).
+            if (!envelope.RootElement.TryGetProperty("schemaVersion", out var schemaVersion)
+                || !schemaVersion.TryGetInt32(out var version)
+                || version < CurrentSchemaVersion)
             {
                 _favoriteIds = new HashSet<string>(StringComparer.Ordinal);
                 return;
             }
 
-            if (document.SchemaVersion > CurrentSchemaVersion)
+            if (version > CurrentSchemaVersion)
             {
                 throw new InvalidDataException("The favorites preferences use an unsupported future schema version.");
+            }
+
+            stream.Position = 0;
+            var document = JsonSerializer.Deserialize(stream, PreferencesJsonContext.Default.PreferencesDocument);
+            if (document is null)
+            {
+                _favoriteIds = new HashSet<string>(StringComparer.Ordinal);
+                return;
             }
 
             if (document.FavoriteGameIds is null)

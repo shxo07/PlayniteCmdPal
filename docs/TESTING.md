@@ -22,9 +22,23 @@ Test data is generated in the test process and written to a temporary directory 
 | File | Covers |
 |---|---|
 | `GameEntryTests` | Required-field validation and parameter names, optional fields defaulting to unknown, record value equality/hashing, `with` expressions preserving identity, display text not being normalized by the model. |
-| `FavoritesStoreTests` | Missing-file behavior, pin/unpin by stable ID, persistence after store recreation, versioned JSON, atomic temporary-file cleanup, malformed JSON recovery, missing-game filtering without deleting saved IDs, and protection against overwriting a future schema. |
+| `FavoritesStoreTests` | Missing-file behavior, pin/unpin by stable ID, persistence after store recreation, versioned JSON, successful-write temporary-file cleanup, malformed JSON recovery, missing-game filtering without deleting saved IDs, future-schema preservation before payload deserialization, and failed-write rollback plus temporary-file cleanup. |
 | `GameSearchTests` | Baseline ranking order (exact, prefix, word-prefix, substring), case-insensitivity, duplicate titles, tie-breaks, blank/null query, empty catalog, invalid entries. |
 | `GameSearchRankingTests` | Query trimming versus untrimmed stored titles, multi-word and partial queries, word-boundary rules (only non-alphanumeric characters start a word), earliest-match index ordering, ordinal ID ordering for duplicate titles, canonical duplicate-ID selection independent of input order, returned collection immutability, single enumeration of the catalog, argument precedence (blank query short-circuits), and a 5,000-entry determinism check. |
+
+### Favorites UI smoke test (manual)
+
+Run with a local Playnite library and the PowerToys Command Palette extension:
+
+1. Open **Search games**, open a game's More actions, and choose **Pin to favorites**. Confirm the toast appears and the game is still launchable.
+2. Open **Favorites** without changing its query. Confirm the newly pinned game appears immediately.
+3. Unpin the game from **Favorites**. Confirm it disappears immediately; pin it again from **Search games** and confirm it reappears.
+4. Search Favorites for a non-matching title and confirm the no-match state; clear the query and confirm the pinned game returns.
+5. Restart the Command Palette extension and Playnite, then confirm the favorite remains.
+6. Remove a favorited game from the current Playnite library (or test with a known missing ID) and confirm it is hidden from Favorites without deleting its saved preference.
+7. With an unsupported future-schema or unreadable preferences file, confirm normal Search results still appear and can still launch; the Favorites action should report that preferences are unavailable rather than breaking the result list.
+
+Capture screenshots of Search actions, populated Favorites, and empty/no-match states. A short before/after capture of pinning and unpinning without editing the query is useful evidence.
 
 ### Snapshot contract (`PlayniteCmdPal.Playnite.Tests`)
 

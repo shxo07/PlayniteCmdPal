@@ -107,14 +107,29 @@ public sealed class FavoritesStoreTests : IDisposable
     }
 
     [Fact]
-    public void RejectsUnsupportedSchemaWithoutOverwritingIt()
+    public void RejectsFutureSchemaBeforeDeserializingItsChangedPayloadAndPreservesOriginalBytes()
     {
         Directory.CreateDirectory(_directory);
-        File.WriteAllText(FilePath, """{"schemaVersion":2,"favoriteGameIds":["future-game"]}""");
+        const string futureDocument = """{"schemaVersion":2,"favoriteGameIds":{"ids":["future-game"]}}""";
+        File.WriteAllText(FilePath, futureDocument);
         var store = new FavoritesStore(FilePath);
 
-        Assert.Throws<InvalidDataException>(() => store.GetFavoriteIds());
-        Assert.Contains("future-game", File.ReadAllText(FilePath));
+        Assert.Throws<InvalidDataException>(() => store.Toggle("new-game"));
+
+        Assert.Equal(futureDocument, File.ReadAllText(FilePath));
+    }
+
+    [Fact]
+    public void FailedWriteRollsBackMemoryAndCleansTemporaryFile()
+    {
+        Directory.CreateDirectory(_directory);
+        Directory.CreateDirectory(FilePath);
+        var store = new FavoritesStore(FilePath);
+
+        Assert.ThrowsAny<IOException>(() => store.Toggle("game-id"));
+
+        Assert.False(store.IsFavorite("game-id"));
+        Assert.Empty(Directory.GetFiles(_directory, "favorites-v1.json.*.tmp"));
     }
 
     public void Dispose()
