@@ -41,11 +41,20 @@ internal sealed partial class ToggleFavoriteCommand : InvokableCommand
         {
             var isFavorite = _store.Toggle(_gameId);
             _onChanged?.Invoke();
-            return CommandResult.ShowToast(isFavorite ? "Game pinned to Favorites." : "Game removed from Favorites.");
+            return ShowToast(isFavorite ? "Game pinned to Favorites." : "Game removed from Favorites.");
         }
         catch (Exception)
         {
-            return CommandResult.ShowToast("Favorites could not be changed. Check the local preferences file.");
+            return ShowToast("Favorites could not be changed. Check the local preferences file.");
         }
+    }
+
+    private static CommandResult ShowToast(string message)
+    {
+        return CommandResult.ShowToast(new ToastArgs
+        {
+            Message = message,
+            Result = CommandResult.KeepOpen(),
+        });
     }
 }
