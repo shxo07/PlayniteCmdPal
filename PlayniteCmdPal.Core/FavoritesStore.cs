@@ -20,6 +20,9 @@ public sealed partial class FavoritesStore
         _filePath = Path.GetFullPath(filePath);
     }
 
+    /// <summary>Raised after a favorite has been durably added or removed.</summary>
+    public event EventHandler? FavoritesChanged;
+
     public IReadOnlyList<string> GetFavoriteIds()
     {
         lock (_gate)
@@ -43,6 +46,7 @@ public sealed partial class FavoritesStore
     public bool Toggle(string gameId)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(gameId);
+        bool isFavorite;
         lock (_gate)
         {
             EnsureLoaded();
@@ -68,8 +72,12 @@ public sealed partial class FavoritesStore
                 throw;
             }
 
-            return !wasFavorite;
+            isFavorite = !wasFavorite;
         }
+
+        // Notify only after persistence succeeds and the store lock has been released.
+        FavoritesChanged?.Invoke(this, EventArgs.Empty);
+        return isFavorite;
     }
 
     private void EnsureLoaded()

@@ -28,6 +28,20 @@ public sealed class FavoritesStoreTests : IDisposable
     }
 
     [Fact]
+    public void ToggleRaisesFavoritesChangedAfterEachSuccessfulMutation()
+    {
+        var store = new FavoritesStore(FilePath);
+        var notifications = 0;
+        store.FavoritesChanged += (_, _) => notifications++;
+
+        Assert.True(store.Toggle("game-id"));
+        Assert.Equal(1, notifications);
+
+        Assert.False(store.Toggle("game-id"));
+        Assert.Equal(2, notifications);
+    }
+
+    [Fact]
     public void FavoritesSurviveStoreRecreation()
     {
         var first = new FavoritesStore(FilePath);

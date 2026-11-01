@@ -9,9 +9,9 @@ internal sealed partial class ToggleFavoriteCommand : InvokableCommand
 {
     private readonly FavoritesStore _store;
     private readonly string _gameId;
-    private readonly Action _onChanged;
+    private readonly Action? _onChanged;
 
-    public ToggleFavoriteCommand(FavoritesStore store, string gameId, Action onChanged)
+    public ToggleFavoriteCommand(FavoritesStore store, string gameId, Action? onChanged = null)
     {
         _store = store;
         _gameId = gameId;
@@ -23,7 +23,7 @@ internal sealed partial class ToggleFavoriteCommand : InvokableCommand
     public override CommandResult Invoke()
     {
         var isFavorite = _store.Toggle(_gameId);
-        _onChanged();
+        _onChanged?.Invoke();
         return CommandResult.ShowToast(isFavorite ? "Game pinned to Favorites." : "Game removed from Favorites.");
     }
 }

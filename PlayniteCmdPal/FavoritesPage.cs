@@ -22,6 +22,7 @@ internal sealed partial class FavoritesPage : DynamicListPage
         Icon = IconHelpers.FromRelativePath("Assets\\StoreLogo.png");
         Title = "Favorites";
         Name = "Pinned games";
+        _favorites.FavoritesChanged += OnFavoritesChanged;
         LoadItems();
     }
 
@@ -32,6 +33,8 @@ internal sealed partial class FavoritesPage : DynamicListPage
     }
 
     public override IListItem[] GetItems() => _items;
+
+    private void OnFavoritesChanged(object? sender, EventArgs e) => LoadItems();
 
     private void LoadItems()
     {
@@ -79,7 +82,7 @@ internal sealed partial class FavoritesPage : DynamicListPage
                 MoreCommands =
                 [
                     new CommandContextItem(new ShowGameDetailsCommand(game.GameId)),
-                    new CommandContextItem(new ToggleFavoriteCommand(_favorites, game.GameId, LoadItems)),
+                    new CommandContextItem(new ToggleFavoriteCommand(_favorites, game.GameId)),
                 ],
             }).ToArray();
             RaiseItemsChanged();
