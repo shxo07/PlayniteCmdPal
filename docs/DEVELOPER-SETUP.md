@@ -2,7 +2,7 @@
 
 This guide takes a clean Windows machine to a running build, an automated test run, a deployed Command Palette extension, and an optional real Playnite library check.
 
-**Status (2026-10-31):** Windows CI and CodeQL pass restore, Release build, both test projects (66 core and 183 adapter cases), and the .NET Framework snapshot smoke test on GitHub-hosted runners; see the evidence table below for the exact runs. The maintainer has additionally reported a successful Windows walkthrough: .NET SDK 10.0.403 on Windows 10 build 19044, x64 and ARM64 builds with and without `-p:DefaultLanguage=en-US`, Visual Studio package deployment, and a Command Palette placeholder-page load. The sections below separate **checked-in facts** from **verified on a real machine** so a reader can tell what has actually been exercised. The maintainer develops and tests on **Windows 10 build 19041**, and a full replay of this page on a freshly imaged machine by someone other than the maintainer has **not** been done — that acceptance step is deferred, not passed (see [Operating-system requirements and what has actually been tested](#operating-system-requirements-and-what-has-actually-been-tested)). This page is not evidence that it was done. Do not regenerate the CmdPal template.
+**Status (2026-11-01):** The maintainer's latest local Windows validation used .NET SDK 10.0.403 on Windows 10 build 19044. `scripts/ci.ps1` completed successfully: Release build, 75 core tests, 183 adapter tests, and the .NET Framework snapshot smoke test all passed. The catalog verifier also passed against the installed Playnite bridge: 16 games, zero skipped records, a non-stale snapshot, no issue, and a successful refresh with identical game IDs. Earlier manual integration testing verified searching for and launching a real library item through Command Palette with Playnite both already running and initially closed. These checks do not replace the deferred clean-machine Windows 11 validation or public-package release gates. The sections below separate **checked-in facts** from **verified on a real machine** so a reader can tell what has actually been exercised. The maintainer develops and tests on **Windows 10 build 19041**, and a full replay of this page on a freshly imaged machine by someone other than the maintainer has **not** been done — that acceptance step is deferred, not passed (see [Operating-system requirements and what has actually been tested](#operating-system-requirements-and-what-has-actually-been-tested)). This page is not evidence that it was done. Do not regenerate the CmdPal template.
 
 Related pages: [Testing](TESTING.md) (what runs where, and how to run it), [Catalog Bridge](CATALOG-BRIDGE.md) (snapshot transport and real-library checklist), [Troubleshooting](#troubleshooting).
 
@@ -31,7 +31,7 @@ Six different claims get conflated in reviews. Keep them apart when reporting a 
 | Windows 11 compatibility of this project has been **independently validated** | Not validated independently. The maintainer's environment is Windows 10, so Windows 11 behaviour is unverified beyond what CI shows. |
 | This page has been **replayed on a clean machine** by an independent contributor | **Deferred.** Not done, not passed. See the note below. |
 
-> **Deferred validation: clean-machine setup walkthrough.** Following this page from a freshly imaged Windows machine, by someone other than the maintainer, has not been performed. The reason is environmental rather than technical: the maintainer's development and test machine is the Windows 10 build 19041 environment described here, and no separate clean Windows machine was available for the acceptance test. This step is **deferred**, not completed, and nothing in this repository should be read as a record of a passing clean-machine run. What it would cover: Developer Mode, Visual Studio workloads, .NET 10 SDK, `scripts/ci.ps1`, deploy/reload, and the placeholder-page runtime check, all on a machine that has never built this project. Until then, treat every step as "documented and partly exercised by the maintainer", not "independently verified".
+> **Deferred validation: clean-machine setup walkthrough.** Following this page from a freshly imaged Windows machine, by someone other than the maintainer, has not been performed. The reason is environmental rather than technical: the maintainer's development and test machine is the Windows 10 build 19041 environment described here, and no separate clean Windows machine was available for the acceptance test. This step is **deferred**, not completed, and nothing in this repository should be read as a record of a passing clean-machine run. What it would cover: Developer Mode, Visual Studio workloads, .NET 10 SDK, `scripts/ci.ps1`, deploy/reload, and the real-library search, metadata display, and game-launch flow, all on a machine that has never built this project. Until then, treat every step as "documented and partly exercised by the maintainer", not "independently verified".
 
 ## 2. Enable Developer Mode
 
@@ -114,9 +114,9 @@ Both should return exit code 0 and produce `win-x64` / `win-arm64` output. `-p:D
 4. Select the `PlayniteCmdPal (Package)` launch profile. It sets `doNotLaunchApp: true` because Command Palette activates the extension as an out-of-process COM server; launching it directly does nothing useful.
 5. Start PowerToys and make sure Command Palette is enabled.
 6. In Command Palette, type `Reload` and choose **Reload Command Palette extensions** (the entry whose subtitle mentions extensions).
-7. Scroll to the bottom of the command list and open `PlayniteCmdPal`. The unmodified template shows `TODO: Implement your extension here`.
+7. Scroll to the bottom of the command list and open `PlayniteCmdPal`. Enter a title or partial title from the Playnite library, inspect the matching game result and its metadata, then activate the result to launch the game.
 
-**Verified:** package deployment, extension reload, and the placeholder-page load succeeded once on the maintainer's machine. From this point the repository's search/launch page is still the template placeholder; see the README status for the current UI scope.
+**Verified:** package deployment, extension reload, and the search/launch page have been exercised on the maintainer's machine. Manual integration testing launched a real Playnite library item both with Playnite already running and with Playnite initially closed. The independent clean-machine validation remains deferred as described above.
 
 ### The debug loop
 
@@ -369,7 +369,7 @@ For Playnite-side diagnostics, Playnite writes host loading errors to `playnite.
 - [x] Deterministic manifest language fix applied.
 - [x] Windows restore succeeded after the fix (`dotnet restore .\PlayniteCmdPal.sln`, exit code 0).
 - [x] x64 and ARM64 builds succeeded with and without the `DefaultLanguage=en-US` override (all four builds exit code 0).
-- [x] Visual Studio package deployment succeeded; Command Palette extension reload and placeholder-page runtime check succeeded.
+- [x] Visual Studio package deployment succeeded; Command Palette extension reload and search/launch page runtime check succeeded.
 - [ ] Exact Windows build recorded. The Windows 10 build 19041 environment is the documented development and test environment, but earlier notes on this page also mention `10.0.19044`, and the two have not been reconciled. Both are Windows 10 2004-family builds; re-check with `winver` before citing a specific build as verified.
 - [x] Shared script, both test projects, and the .NET Framework smoke test pass in Windows CI and the CodeQL workflow.
 - [ ] Exact installed Visual Studio version/workloads and PowerToys version recorded.
