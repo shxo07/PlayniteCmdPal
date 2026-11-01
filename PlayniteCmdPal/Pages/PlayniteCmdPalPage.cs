@@ -17,6 +17,7 @@ namespace PlayniteCmdPal;
 internal sealed partial class PlayniteCmdPalPage : DynamicListPage
 {
     private readonly IReadOnlyPlayniteCatalog _catalog = new PlayniteCatalogAdapter();
+    private readonly PlayniteCatalogFilters _filters = new();
     private IListItem[] _items = [CreateStatusItem("Loading your Playnite library…")];
     private CancellationTokenSource? _searchCancellation;
     private string _searchText = string.Empty;
@@ -28,6 +29,8 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage
         Icon = IconHelpers.FromRelativePath("Assets\\StoreLogo.png");
         Title = "Playnite";
         Name = "Search games";
+        _filters.PropChanged += Filters_PropChanged;
+        Filters = _filters;
         BeginSearch();
     }
 
@@ -37,6 +40,8 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage
     }
 
     public override IListItem[] GetItems() => _items;
+
+    private void Filters_PropChanged(object sender, IPropChangedEventArgs args) => BeginSearch();
 
     internal void RefreshCatalog()
     {
@@ -90,6 +95,8 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage
                     return;
                 }
 
+                _filters.UpdateCatalog(catalog.Games);
+                Filters = _filters;
                 _items = BuildItems(catalog, query);
                 RaiseItemsChanged();
             }
@@ -144,10 +151,13 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage
             return items.ToArray();
         }
 
-        var matches = GameSearch.Search(catalog.Games, query);
+        var matches = GameSearch.Search(catalog.Games, query, _filters.ToSearchFilters());
         if (matches.Count == 0)
         {
-            items.Add(CreateStatusItem($"No games match “{query.Trim()}”."));
+            var message = string.IsNullOrWhiteSpace(query)
+                ? "No games match the selected filters. Clear one or more filters to see more games."
+                : $"No games match “{query.Trim()}” with the selected filters. Clear a filter or change your search.";
+            items.Add(CreateStatusItem(message));
             return items.ToArray();
         }
 
