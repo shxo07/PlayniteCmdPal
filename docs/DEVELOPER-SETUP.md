@@ -47,7 +47,7 @@ The solution targets .NET 10 with Windows App SDK and MSIX packaging. The curren
 1. Install [Visual Studio](https://visualstudio.microsoft.com/downloads/) (2026 release or a version that ships the .NET 10 tooling).
 2. In the **Visual Studio Installer**, choose **Modify** and select:
    - **WinUI application development** (this is the documented workload for WinUI / Windows App SDK projects).
-   - On the **Individual components** tab, confirm the **Windows 10/11 SDK** matching the project's target (the project requests SDK package `10.0.26100.68-preview`, so a 26100 SDK or newer).
+   - On the **Individual components** tab, confirm the **Windows 10/11 SDK** matching the project's target (the project restores stable targeting pack `Microsoft.Windows.SDK.NET.Ref 10.0.26100.87`; install the matching stable 26100 SDK or newer).
 3. Finish the install and confirm `dotnet --version` reports 10.x in a new terminal.
 
 Alternatives and shortcuts:
