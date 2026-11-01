@@ -23,6 +23,7 @@ Test data is generated in the test process and written to a temporary directory 
 |---|---|
 | `GameEntryTests` | Required-field validation and parameter names, optional fields defaulting to unknown, record value equality/hashing, `with` expressions preserving identity, display text not being normalized by the model. |
 | `FavoritesStoreTests` | Missing-file behavior, pin/unpin by stable ID, persistence after store recreation, versioned JSON, successful-write temporary-file cleanup, malformed JSON recovery, missing-game filtering without deleting saved IDs, future-schema preservation before payload deserialization, and failed-write rollback plus temporary-file cleanup. |
+| `LatestRequestGateTests` | Deterministic overlapping-request ordering: a stale request cannot publish after a newer query takes ownership. |
 | `GameSearchTests` | Baseline ranking order (exact, prefix, word-prefix, substring), case-insensitivity, duplicate titles, tie-breaks, blank/null query, empty catalog, invalid entries. |
 | `GameSearchRankingTests` | Query trimming versus untrimmed stored titles, multi-word and partial queries, word-boundary rules (only non-alphanumeric characters start a word), earliest-match index ordering, ordinal ID ordering for duplicate titles, canonical duplicate-ID selection independent of input order, returned collection immutability, single enumeration of the catalog, argument precedence (blank query short-circuits), and a 5,000-entry determinism check. |
 
