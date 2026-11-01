@@ -147,3 +147,14 @@ See [DEVELOPER-SETUP.md](DEVELOPER-SETUP.md). Key loop:
 - Optional alias/fuzzy matching beyond title matching.
 - Packaging and gallery submission route.
 - Repository license.
+
+
+## Stable Windows SDK targeting-pack decision (WERD-77, 2026-11-01)
+
+The earlier preview property recorded in the historical template-validation notes above has been superseded. The project now selects stable `Microsoft.Windows.SDK.NET.Ref 10.0.26100.87` through the shared `WindowsSdkPackageVersion` property in [Directory.Build.props](../Directory.Build.props); the project file no longer pins `10.0.26100.68-preview`.
+
+The candidate is a Microsoft-published stable servicing release in the same 26100 Windows 11 24H2 SDK family as `net10.0-windows10.0.26100.0`. NuGet package metadata identifies the targeting pack as compatible with .NET 9 and later, including .NET 10. The project's minimum OS remains build 19041; this compile-time targeting-pack selection does not raise that minimum. The CmdPal extension package version is independent, and the same targeting pack serves both x64 and ARM64 runtime targets.
+
+Official references: [NuGet package](https://www.nuget.org/packages/Microsoft.Windows.SDK.NET.Ref/10.0.26100.87), [Windows SDK downloads](https://learn.microsoft.com/en-us/windows/apps/windows-sdk/downloads), [Windows SDK versioning](https://learn.microsoft.com/en-us/windows/apps/get-started/versioning-overview), and [Microsoft Windows SDK license terms](https://github.com/microsoft/win32metadata/blob/main/licenses/sdk_license.txt). The SDK/targeting pack is a development-time dependency, not an app payload to redistribute; applicable Microsoft SDK license terms govern its use.
+
+This decision establishes a stable candidate and removes the preview pin. It does not complete WERD-77 validation: Windows restore, Release build/tests, Visual Studio deployment, x64/ARM64 package/publish, evaluated MSBuild property/restore-asset inspection, and runtime-notice comparison remain required. See [Release Packaging](RELEASE-PACKAGING.md).
