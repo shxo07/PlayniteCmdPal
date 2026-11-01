@@ -51,6 +51,12 @@ public static class CatalogSnapshotSerializer
                     WriteString(writer, "platform", game.Platform, cancellationToken);
                 }
 
+                if (game.LastActivity.HasValue)
+                {
+                    // Preserve Playnite's DateTime kind/offset semantics; this SDK value is not guaranteed to be UTC.
+                    WriteString(writer, "lastActivity", game.LastActivity.Value.ToString("O", CultureInfo.InvariantCulture), cancellationToken);
+                }
+
                 writer.WriteEndElement();
             }
 

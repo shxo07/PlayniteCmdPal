@@ -9,13 +9,15 @@ namespace PlayniteCmdPal.Core;
 /// <param name="IsInstalled">Optional installation state, when available.</param>
 /// <param name="IconReference">Optional transport-provided icon reference; its format is adapter-defined.</param>
 /// <param name="Platform">Optional platform label supplied by the catalog transport.</param>
+/// <param name="LastActivity">Playnite's nullable last-played date, retaining its original DateTime kind.</param>
 public sealed record GameEntry(
     string GameId,
     string Title,
     string? Source = null,
     bool? IsInstalled = null,
     string? IconReference = null,
-    string? Platform = null)
+    string? Platform = null,
+    DateTime? LastActivity = null)
 {
     /// <summary>Validates required identity and display fields.</summary>
     /// <exception cref="ArgumentException">Thrown when the game ID or title is null, empty, or whitespace.</exception>

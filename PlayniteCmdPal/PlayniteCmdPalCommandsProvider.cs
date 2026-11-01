@@ -17,6 +17,7 @@ public partial class PlayniteCmdPalCommandsProvider : CommandProvider
         Icon = IconHelpers.FromRelativePath("Assets\\StoreLogo.png");
         _commands = [
             new CommandItem(new PlayniteCmdPalPage()) { Title = DisplayName },
+            new CommandItem(new PlayniteCmdPalRecentlyPlayedPage()) { Title = "Recently played games" },
         ];
     }
 

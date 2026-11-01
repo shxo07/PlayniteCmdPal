@@ -152,7 +152,8 @@ public sealed class PlayniteCmdPalPlugin : GenericPlugin
         return !string.Equals(oldGame.Name, newGame.Name, StringComparison.Ordinal) ||
                oldGame.IsInstalled != newGame.IsInstalled ||
                oldGame.SourceId != newGame.SourceId ||
-               !SameIds(oldGame.PlatformIds, newGame.PlatformIds);
+               !SameIds(oldGame.PlatformIds, newGame.PlatformIds) ||
+               oldGame.LastActivity != newGame.LastActivity;
     }
 
     private static bool SameIds(List<Guid>? left, List<Guid>? right) =>
@@ -197,7 +198,8 @@ public sealed class PlayniteCmdPalPlugin : GenericPlugin
                     game.Name,
                     game.IsInstalled,
                     GetSourceName(game.SourceId),
-                    GetPlatformNames(game.PlatformIds)));
+                    GetPlatformNames(game.PlatformIds),
+                    game.LastActivity));
             }
             catch (ArgumentException)
             {
