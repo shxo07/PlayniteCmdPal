@@ -28,25 +28,26 @@ foreach ($assembly in @($snapshotAssemblyObject, $pluginMetadata)) {
 $gameType = $snapshotAssemblyObject.GetType('PlayniteCmdPal.Snapshot.SnapshotGame', $true)
 $snapshotType = $snapshotAssemblyObject.GetType('PlayniteCmdPal.Snapshot.CatalogSnapshot', $true)
 $publisherType = $snapshotAssemblyObject.GetType('PlayniteCmdPal.Snapshot.SnapshotFilePublisher', $true)
-$gameConstructor = $gameType.GetConstructor([type[]]@([string], [string], [bool], [string], [string]))
-$snapshotConstructor = @($snapshotType.GetConstructors())[0]
+$gameConstructor = $gameType.GetConstructor([type[]]@([string], [string], [bool], [string], [string], [string], [string]))
+$snapshotConstructor = @($snapshotType.GetConstructors() | Where-Object { $_.GetParameters().Count -eq 3 })[0]
 
 # Purely synthetic data exercises JSON escaping, non-ASCII characters, optional
 # fields, and isolated UTF-16 surrogate replacement without reading any library.
 $prefix = 'Example "quoted" \ path ' + [char]10 + [char]0x00e9 + [char]::ConvertFromUtf32(0x1f3ae)
 $name = $prefix + [char]0xd800 + ' end'
 $expectedName = $prefix + [char]0xfffd + ' end'
-$firstGame = $gameConstructor.Invoke([object[]]@('11111111-1111-4111-8111-111111111111', $name, $true, 'Source', 'PC'))
-$secondGame = $gameConstructor.Invoke([object[]]@('22222222-2222-4222-8222-222222222222', 'Second', $false, $null, $null))
+$firstGame = $gameConstructor.Invoke([object[]]@('11111111-1111-4111-8111-111111111111', $name, $true, 'Source', 'PC', $null, $null))
+$secondGame = $gameConstructor.Invoke([object[]]@('22222222-2222-4222-8222-222222222222', 'Second', $false, $null, $null, $null, $null))
 $listType = [type]::GetType('System.Collections.Generic.List`1').MakeGenericType($gameType)
 $games = [Activator]::CreateInstance($listType)
 [void]$games.Add($firstGame)
 [void]$games.Add($secondGame)
 
 $timestamp = [DateTimeOffset]::Parse('2026-10-30T00:00:00Z', [Globalization.CultureInfo]::InvariantCulture)
-$snapshotArguments = [object[]]::new(2)
+$snapshotArguments = [object[]]::new(3)
 $snapshotArguments[0] = $timestamp
 $snapshotArguments[1] = $games
+$snapshotArguments[2] = 1
 $snapshot = $snapshotConstructor.Invoke($snapshotArguments)
 
 $directory = Join-Path ([IO.Path]::GetTempPath()) ('PlayniteCmdPal.NetFxSmoke.' + [guid]::NewGuid().ToString('N'))
@@ -60,7 +61,7 @@ try {
     $firstPublication = [Text.Encoding]::UTF8.GetString([IO.File]::ReadAllBytes($path)) | ConvertFrom-Json
     if ($firstPublication.games[1].name -ne 'Second') { throw 'First publication was invalid.' }
 
-    $games[1] = $gameConstructor.Invoke([object[]]@('22222222-2222-4222-8222-222222222222', 'Second updated', $false, $null, $null))
+    $games[1] = $gameConstructor.Invoke([object[]]@('22222222-2222-4222-8222-222222222222', 'Second updated', $false, $null, $null, $null, $null))
     $snapshotArguments[1] = $games
     $replacement = $snapshotConstructor.Invoke($snapshotArguments)
     $publisherType::PublishAsync([string]$path, $replacement, [Threading.CancellationToken]::None).GetAwaiter().GetResult()
