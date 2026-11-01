@@ -9,7 +9,7 @@ This page explains what is tested, where each check runs, and how to run it. For
 | Project | Target | References | Needs Playnite installed? |
 |---|---|---|---|
 | `PlayniteCmdPal.Core.Tests` | `net10.0` | `PlayniteCmdPal.Core` | No |
-| `PlayniteCmdPal.Command.Tests` | `net10.0-windows10.0.26100.0` | `PlayniteCmdPal.Core`, linked production `ToggleFavoriteCommand.cs`, Command Palette SDK | No (Windows CI required) |
+| `PlayniteCmdPal.Command.Tests` | `net10.0-windows10.0.26100.0` | `PlayniteCmdPal.Core`, linked production `ToggleFavoriteCommand.cs`, Command Palette SDK | No |
 | `PlayniteCmdPal.Playnite.Tests` | `net10.0` | `PlayniteCmdPal.Playnite`, `PlayniteCmdPal.Snapshot` | No |
 
 `PlayniteCmdPal.Core.Tests` and `PlayniteCmdPal.Playnite.Tests` do not reference `PlayniteCmdPal/` (the CmdPal host) or `PlayniteCmdPal.PlaynitePlugin/` (the `net462` companion plugin). `PlayniteCmdPal.Command.Tests` compiles the production `ToggleFavoriteCommand.cs` into a focused Windows test assembly so it can assert the actual SDK command-result and toast-follow-up values without loading the full WinUI host. The companion plugin is only compiled; its SDK usage is exercised indirectly by the behavior it delegates to the shared snapshot assembly.
@@ -153,10 +153,10 @@ and **183** for the snapshot contract, publication, refresh, and adapter policy.
 How that number is established, so it can be re-derived rather than trusted:
 
 | Source | Core | Command | Adapter | Total |
-|---|---|---|---|
-| Count of `[Fact]` plus `[InlineData]` rows in each project in this commit | 66 | 2 | 183 | 251 |
-| `dotnet test` totals in Windows CI run [41184115994](https://github.com/werdscopez7347/PlayniteCmdPal/actions/runs/41184115994) (pre-command-suite baseline) | 66 | n/a | 183 | 249 |
-| `dotnet test` totals for the new command suite | pending latest Windows CI | 2 authored cases | n/a | pending latest Windows CI |
+|---|---:|---:|---:|---:|
+| Authored `[Fact]` plus `[InlineData]` cases in this branch | 66 | 2 | 183 | 251 |
+| Existing Windows CI baseline before command-result tests ([run 41184115994](https://github.com/werdscopez7347/PlayniteCmdPal/actions/runs/41184115994)) | 66 | — | 183 | 249 |
+| Updated Windows CI on this branch | Pending | Pending | Pending | Pending |
 
 Before adding the command-result suite, Windows CI reported 249 passing cases across the core and adapter projects. The two new command-result cases bring the authored total to 251; their executed result is pending the updated Windows CI run.
 
