@@ -13,6 +13,10 @@ The canonical file is `%LOCALAPPDATA%\PlayniteCmdPal\catalog-v1.json`. The plugi
 
 ## Schema v1
 
+The writer adds the optional `lastActivity` property to each v1 record when Playnite has a value. The reader accepts older records without the property, preserving compatibility with snapshots produced before this feature. It is serialized with the round-trip .NET `DateTime` format (`O`) so the value and `DateTime.Kind` are retained; it is not forced to UTC. Playnite's SDK documents `Game.LastActivity` as the last-played `DateTime?`, but does not promise a universal timezone contract for every persisted value. The view sorts the original ticks and does not invent an offset. This is deterministic within the current Playnite machine/library timezone; a library moved between timezones cannot recover an original offset that the SDK value does not contain. `Modified` is not used.
+
+The recently played view sorts by descending `LastActivity.Ticks`. Equal timestamps are resolved by title using `OrdinalIgnoreCase`, then title using `Ordinal`, then the Playnite game ID using `Ordinal`. The page includes an explicit refresh row because Command Palette retains the page instance between visits.
+
 ```json
 {
   "schemaVersion": 1,
@@ -35,7 +39,7 @@ The parser rejects input over 32 MiB, JSON deeper than 16 levels, unsupported sc
 
 ## Publication and refresh
 
-The plugin requests an export on application start, database open, `OnLibraryUpdated`, game install/uninstall lifecycle events, game collection changes, relevant game updates, and source/platform metadata changes. Requests are debounced by 750 ms and serialized. A request arriving during an export schedules one follow-up export, so the final state is not lost. Each export re-enumerates the database; it does not patch an old snapshot from event payloads.
+The plugin requests an export on application start, database open, `OnLibraryUpdated`, game install/uninstall lifecycle events, game collection changes, relevant game updates (including `LastActivity` changes), and source/platform metadata changes. Requests are debounced by 750 ms and serialized. A request arriving during an export schedules one follow-up export, so the final state is not lost. Each export re-enumerates the database; it does not patch an old snapshot from event payloads.
 
 Projection runs on Playnite's `IMainViewAPI.UIDispatcher` because SDK database objects are affinity-sensitive. Serialization, flush, and file replacement run in the background. The exporter uses .NET Framework's built-in JSON writer and does not reference `System.Text.Json`; the `net10.0` adapter uses its framework's `System.Text.Json` for parsing. Publication is limited to 32 MiB while bytes are written. The publisher writes a complete same-directory temporary file, flushes it to disk, closes it, then uses `File.Replace` (or `File.Move` on first creation). A failed or canceled export leaves the previous snapshot intact and removes only its own temporary file. If the library exceeds 100,000 records, the plugin refuses to publish a truncated catalog.
 

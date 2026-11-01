@@ -157,7 +157,7 @@ public static class CatalogSnapshotParser
     {
         game = null;
         if (element.ValueKind != JsonValueKind.Object || HasDuplicateProperties(element) ||
-            HasUnexpectedProperties(element, "id", "name", "isInstalled", "source", "platform"))
+            HasUnexpectedProperties(element, "id", "name", "isInstalled", "source", "platform", "lastActivity"))
         {
             return false;
         }
@@ -182,9 +182,21 @@ public static class CatalogSnapshotParser
             return false;
         }
 
+        DateTime? lastActivity = null;
+        if (TryGetProperty(element, "lastActivity", out var activityElement) && activityElement.ValueKind != JsonValueKind.Null)
+        {
+            if (activityElement.ValueKind != JsonValueKind.String ||
+                !DateTime.TryParseExact(activityElement.GetString(), "O", CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var parsedActivity))
+            {
+                return false;
+            }
+
+            lastActivity = parsedActivity;
+        }
+
         try
         {
-            game = new SnapshotGame(id.GetString()!, name.GetString()!, installed.GetBoolean(), source, platform);
+            game = new SnapshotGame(id.GetString()!, name.GetString()!, installed.GetBoolean(), source, platform, lastActivity);
             return true;
         }
         catch (ArgumentException)

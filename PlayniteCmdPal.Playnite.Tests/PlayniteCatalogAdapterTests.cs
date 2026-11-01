@@ -68,6 +68,16 @@ public sealed class PlayniteCatalogAdapterTests : IDisposable
     }
 
     [Fact]
+    public async Task LastActivitySurvivesSnapshotAdapterMapping()
+    {
+        var activity = new DateTime(2026, 10, 30, 14, 25, 0, DateTimeKind.Unspecified);
+        await PublishAsync(new CatalogSnapshot(_time.GetUtcNow(), new[] { new SnapshotGame(GameA, "Halo", true, lastActivity: activity) }));
+        var result = await new PlayniteCatalogAdapter(_path, _time).GetAsync();
+        Assert.Equal(activity, Assert.Single(result.Games).LastActivity);
+        Assert.Equal(DateTimeKind.Unspecified, result.Games[0].LastActivity!.Value.Kind);
+    }
+
+    [Fact]
     public async Task EmptyValidSnapshotIsAnAvailableEmptyLibrary()
     {
         await PublishAsync(new CatalogSnapshot(_time.GetUtcNow(), Array.Empty<SnapshotGame>()));

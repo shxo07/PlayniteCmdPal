@@ -129,7 +129,7 @@ public sealed class PlayniteCatalogAdapter : IReadOnlyPlayniteCatalog
                 if (parsed.Snapshot is { } snapshot)
                 {
                     var games = snapshot.Games
-                        .Select(game => new GameEntry(game.Id, game.Name, game.Source, game.IsInstalled, null, game.Platform))
+                        .Select(game => new GameEntry(game.Id, game.Name, game.Source, game.IsInstalled, null, game.Platform, game.LastActivity))
                         .ToArray();
                     _lastGood = new CatalogReadResult(games, snapshot.GeneratedAtUtc, IsStale(snapshot.GeneratedAtUtc, now), null, parsed.SkippedRecordCount, false);
                     _lastIssue = null;
