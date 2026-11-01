@@ -1,5 +1,6 @@
 using Microsoft.CommandPalette.Extensions;
 using Microsoft.CommandPalette.Extensions.Toolkit;
+using PlayniteCmdPal;
 using PlayniteCmdPal.Core;
 using Xunit;
 
