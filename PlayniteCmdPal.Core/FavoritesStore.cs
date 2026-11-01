@@ -76,7 +76,24 @@ public sealed partial class FavoritesStore
         }
 
         // Notify only after persistence succeeds and the store lock has been released.
-        FavoritesChanged?.Invoke(this, EventArgs.Empty);
+        // Observer failures must not make a durable preference write look like a failed
+        // command. Each page refresh is isolated from the command invocation.
+        var handlers = FavoritesChanged;
+        if (handlers is not null)
+        {
+            foreach (EventHandler handler in handlers.GetInvocationList())
+            {
+                try
+                {
+                    handler(this, EventArgs.Empty);
+                }
+                catch
+                {
+                    // The persisted preference remains authoritative; observers can retry.
+                }
+            }
+        }
+
         return isFavorite;
     }
 
