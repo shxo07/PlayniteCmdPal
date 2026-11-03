@@ -55,7 +55,13 @@ Use Semantic Versioning; before 1.0.0, use `0.y.z` and increment the minor versi
 
 
 ## ADR-008: Bridge-owned artwork cache and schema v2
-**Status:** Accepted
+**Status:** Accepted; implementation and verification in review
 
-Use a bridge-owned local cache populated only from Playnite database file references resolved through the documented SDK. Export only content-derived opaque SHA-256 identifiers; never export original image references, URLs, or filesystem paths. The cache is bounded, validates image signatures, and is pruned only after a successful atomic catalog publication. Schema v1 remains immutable and readable; schema v2 adds optional coverArtworkId and iconArtworkId fields. The complete trust boundary, limits, migration, refresh, cleanup, and failure contract is recorded in [Artwork transport](ARTWORK-TRANSPORT.md).
+Use a bridge-owned local cache populated only from canonical, game-owned Playnite database file references resolved through the documented SDK. Export only content-derived opaque SHA-256 identifiers; never export original image references, URLs, or filesystem paths. Schema v1 remains immutable and readable; schema v2 adds optional coverArtworkId and iconArtworkId fields. Malformed optional artwork identifiers are nulled independently without dropping otherwise valid game metadata.
+
+The cache is bounded per generation, and a single producer owns publication. A producer-side periodic revalidation export is required because bytes can change while a database reference remains unchanged. Cache publication is coordinated with the atomic v2 snapshot; cleanup failure must retain transaction state and block a subsequent generation until recovery succeeds. The reader's returned local path is a short-lived locator, not a lease: consumers accept missing artwork after generation replacement and must re-resolve against the current snapshot.
+
+The threat model excludes a malicious process running as the same Windows user. Reparse-point and normalized-path checks are defense-in-depth, not a claim of race-proof containment against same-user path replacement. Transport signature checks do not prove successful decoding; WERD-80 owns decoding and image fallback. A surviving v2 snapshot remains authoritative after producer downgrade; safe rollback requires the owner to stop the producer, verify the v1 snapshot, and explicitly retire the stale v2 snapshot before v1 fallback can occur.
+
+The complete trust boundary, limits, migration, refresh, cleanup, and failure contract is recorded in [Artwork transport](ARTWORK-TRANSPORT.md).
 
