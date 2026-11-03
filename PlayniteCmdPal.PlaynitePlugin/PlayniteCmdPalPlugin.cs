@@ -19,6 +19,7 @@ public sealed class PlayniteCmdPalPlugin : GenericPlugin
 {
     public static readonly Guid PluginId = Guid.Parse("9E4CF37F-EF29-495F-9E83-4EA1A389ABD8");
     private static readonly TimeSpan Debounce = TimeSpan.FromMilliseconds(750);
+    private static readonly TimeSpan ArtworkRevalidationInterval = TimeSpan.FromMinutes(30);
     private static readonly ILogger Logger = LogManager.GetLogger();
     private readonly CatalogExportCoordinator _coordinator;
     private readonly Dispatcher _dispatcher;
@@ -28,6 +29,7 @@ public sealed class PlayniteCmdPalPlugin : GenericPlugin
     private bool _subscribed;
     private bool _disposed;
     private int _coordinatorStarted;
+    private Timer? _artworkRevalidationTimer;
 
     public PlayniteCmdPalPlugin(IPlayniteAPI api) : base(api)
     {
@@ -49,6 +51,13 @@ public sealed class PlayniteCmdPalPlugin : GenericPlugin
         if (Interlocked.CompareExchange(ref _coordinatorStarted, 1, 0) == 0)
         {
             _ = RunCoordinatorAsync();
+            // Playnite may update bytes behind an unchanged database reference. Re-exporting
+            // periodically re-reads the source and lets its content hash detect that change.
+            _artworkRevalidationTimer = new Timer(
+                _ => _coordinator.RequestExport(),
+                null,
+                ArtworkRevalidationInterval,
+                ArtworkRevalidationInterval);
         }
     }
 
@@ -72,6 +81,8 @@ public sealed class PlayniteCmdPalPlugin : GenericPlugin
             UnsubscribeLocked();
         }
 
+        _artworkRevalidationTimer?.Dispose();
+        _artworkRevalidationTimer = null;
         _coordinator.Dispose();
         base.Dispose();
     }
