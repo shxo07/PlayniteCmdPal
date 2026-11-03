@@ -204,5 +204,22 @@ public sealed class CatalogSnapshotParserTests
         Assert.Equal(1, result.SkippedRecordCount);
     }
 
+    [Fact]
+    public void ReportsSpecificReasonsForSkippedRecords()
+    {
+        var json = $"""{"schemaVersion":1,"generatedAtUtc":"2026-10-30T00:00:00Z","games":[
+            {"id":"{{GameA}}","name":"Halo","isInstalled":true},
+            {"id":"bad","name":"Bad ID","isInstalled":true},
+            {"id":"{{GameA}}","name":"Duplicate","isInstalled":true},
+            {"id":"{{GameB}}","name":"Missing installed flag"}
+        ]}""";
+
+        var result = CatalogSnapshotParser.Parse(Json(json));
+
+        Assert.Equal(2, result.SkippedRecordCount);
+        Assert.Equal(1, result.SkippedRecordReasons["non-canonical or empty game ID"]);
+        Assert.Equal(1, result.SkippedRecordReasons["missing or incorrectly typed required field"]);
+    }
+
     private static byte[] Json(string value) => Encoding.UTF8.GetBytes(value);
 }
