@@ -123,6 +123,7 @@ public sealed class ArtworkCacheGenerationTests : IDisposable
         Assert.False(File.Exists(Path.Combine(_cacheRoot, firstId + ".jpg")));
         Assert.True(File.Exists(Path.Combine(_cacheRoot, secondId + ".jpg")));
         Assert.Single(Directory.GetFiles(_cacheRoot));
+        Assert.Empty(Directory.GetDirectories(Path.GetDirectoryName(_cacheRoot)!, "artwork-v2.backup-*"));
     }
 
     [Fact]
@@ -145,6 +146,39 @@ public sealed class ArtworkCacheGenerationTests : IDisposable
         }
         Assert.True(File.Exists(Path.Combine(_cacheRoot, Digest(oldBytes) + ".jpg")));
         Assert.False(File.Exists(Path.Combine(_cacheRoot, Digest(newBytes) + ".jpg")));
+    }
+
+    [Fact]
+    public void CleanupFailureKeepsPublishedTransactionMarkerForRecovery()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+
+        var bytes = new byte[] { 0xFF, 0xD8, 0xFF, 0xD9 };
+        var source = WriteSource(FileIdA, bytes);
+        using (var initial = new ArtworkCacheGeneration(_cacheRoot))
+        {
+            initial.TryImport(GameId, Reference(FileIdA), source, _filesRoot);
+            initial.Activate();
+            initial.MarkPublished();
+            initial.Complete();
+        }
+
+        var next = new ArtworkCacheGeneration(_cacheRoot);
+        next.TryImport(GameId, Reference(FileIdA), source, _filesRoot);
+        next.Activate();
+        next.MarkPublished();
+        var backup = Directory.GetDirectories(Path.GetDirectoryName(_cacheRoot)!, "artwork-v2.backup-*").Single();
+        var backupFile = Directory.GetFiles(backup).Single();
+        using (new FileStream(backupFile, FileMode.Open, FileAccess.Read, FileShare.Read))
+        {
+            Assert.Throws<IOException>(() => next.Complete());
+            Assert.True(File.Exists(_cacheRoot + ".transaction"));
+        }
+
+        next.Dispose();
+        using (var recovery = new ArtworkCacheGeneration(_cacheRoot)) { }
+        Assert.False(File.Exists(_cacheRoot + ".transaction"));
+        Assert.Empty(Directory.GetDirectories(Path.GetDirectoryName(_cacheRoot)!, "artwork-v2.backup-*"));
     }
 
     [Fact]
