@@ -135,7 +135,11 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage
 
         if (catalog.SkippedRecordCount > 0)
         {
-            items.Add(CreateStatusItem($"{catalog.SkippedRecordCount} invalid catalog entr{(catalog.SkippedRecordCount == 1 ? "y was" : "ies were")} skipped."));
+            var reasons = string.Join(", ", catalog.SkippedRecordReasons
+                .OrderBy(pair => pair.Key, StringComparer.Ordinal)
+                .Select(pair => $"{pair.Value} {pair.Key}"));
+            var detail = string.IsNullOrEmpty(reasons) ? string.Empty : $" ({reasons})";
+            items.Add(CreateStatusItem($"{catalog.SkippedRecordCount} invalid catalog entr{(catalog.SkippedRecordCount == 1 ? "y was" : "ies were")} skipped{detail}."));
         }
 
         if (catalog.Games.Count == 0)
