@@ -233,8 +233,13 @@ public sealed class CatalogSnapshotContractTests
     }
 
     [Fact]
-    public void ArtworkSignatureValidationRecognizesSupportedCompleteContainers()
+    public void ArtworkSignatureValidationRecognizesContainerSignaturesWithoutClaimingDecodability()
     {
+        // A real 1x1 PNG fixture complements the minimal marker-only format probes below.
+        var realPng = Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/lYQAAAAASUVORK5CYII=");
+        Assert.True(ArtworkFileSignature.TryGetExtension(realPng, out var realPngExtension));
+        Assert.Equal(".png", realPngExtension);
+
         var png = new byte[24];
         byte[] pngHeader = { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A };
         Array.Copy(pngHeader, png, pngHeader.Length);
