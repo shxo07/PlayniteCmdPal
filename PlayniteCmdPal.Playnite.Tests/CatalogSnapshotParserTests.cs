@@ -216,8 +216,9 @@ public sealed class CatalogSnapshotParserTests
 
         var result = CatalogSnapshotParser.Parse(Json(json));
 
-        Assert.Equal(2, result.SkippedRecordCount);
+        Assert.Equal(3, result.SkippedRecordCount);
         Assert.Equal(1, result.SkippedRecordReasons["non-canonical or empty game ID"]);
+        Assert.Equal(1, result.SkippedRecordReasons["duplicate game ID"]);
         Assert.Equal(1, result.SkippedRecordReasons["missing or incorrectly typed required field"]);
     }
 
