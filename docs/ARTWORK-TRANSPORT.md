@@ -1,6 +1,6 @@
 # Artwork transport and trust boundary
 
-Status: Implemented for WERD-71; automated Windows CI and CodeQL checks pass. Live Playnite verification remains pending.
+Status: Implementation in review. Automated checks must be rerun against the final PR head; live Playnite verification remains pending.
 
 ## Decision
 
@@ -19,7 +19,7 @@ A missing, unresolvable, malformed, unsupported, or inaccessible reference produ
 ## Cache layout and ownership
 
 - Root: %LOCALAPPDATA%\PlayniteCmdPal\artwork-v2\
-- The plugin is the only writer. The Command Palette adapter is read-only.
+- The plugin is the only writer. The Command Palette adapter is read-only. The exporter must enforce single-writer ownership across plugin instances/processes before recovery or publication.
 - Each asset filename is the lowercase SHA-256 digest of its validated bytes plus the extension inferred from the file signature. The snapshot contains only the 64-character digest; the adapter resolves it by trying the fixed allowlisted extensions beneath the fixed cache root.
 - The reader accepts only exactly 64 lowercase hexadecimal characters as an identifier and constructs the candidate path beneath the fixed cache root. It verifies the normalized candidate remains beneath that root.
 - No cache root, filename, source path, or original Playnite reference is serialized into the catalog.
@@ -28,21 +28,21 @@ A missing, unresolvable, malformed, unsupported, or inaccessible reference produ
 ## Validation and resource limits
 
 - Accepted formats: PNG, JPEG, GIF, and WebP, based on file signatures rather than filename extensions.
-- Maximum source file size: 5 MiB. Empty, larger, truncated, or unrecognized files are skipped.
+- Maximum source file size: 5 MiB. Empty, larger, or unrecognized-signature files are skipped. Signature checks are transport validation only; they do not prove that a complete image can be decoded.
 - Maximum active cache generation size: 256 MiB. If importing another image would exceed the limit, that image is omitted; catalog export continues. During atomic replacement, the previous generation is temporarily retained for rollback, so transient disk use can approach two generations; the backup is removed immediately after commit or recovery.
 - Only regular files are accepted; reparse-point source files are rejected.
 - Copying reads no more than the configured per-file limit plus one byte, so a changing or misleading file length cannot bypass the limit.
 - The snapshot parser validates opaque IDs independently of the filesystem. Traversal strings, rooted paths, separators, alternate data stream syntax, and malformed identifiers are rejected before path construction.
 
-The cache is not an image decoder. The transport validates container signatures and byte limits; the UI remains responsible for safe image decoding and should handle decode failures as missing artwork.
+The cache is not an image decoder. The transport validates container signatures and byte limits only. WERD-80 owns decoding, unsupported-codec handling, and fallback to another candidate image.
 
 ## Refresh, invalidation, and cleanup
 
-Every catalog export re-enumerates Playnite's current library and builds a complete staging cache generation. The content hash naturally changes when image bytes change and remains stable when bytes do not. The new snapshot references the new content identifier. The plugin activates the new generation while retaining the previous cache as a rollback directory, then atomically publishes the v2 snapshot. The transaction marker records the snapshot timestamp token as well as the backup state. On startup, recovery checks the current v2 envelope for that exact timestamp to distinguish a crash before publication from a crash immediately after the atomic replace but before the commit marker was updated. It restores the old cache for an unpublished transaction, or keeps the new cache when the matching snapshot was published. After publication it removes the backup; if publication fails it restores the previous cache. This replaces the complete cache generation rather than accumulating old files.
+Every catalog export re-enumerates Playnite's current library and builds a complete staging cache generation. The content hash naturally changes when image bytes change and remains stable when bytes do not. The producer must also re-read/hash each currently referenced image during each export, even when the Playnite reference string is unchanged; a producer-side scheduled/explicit revalidation export is required because the database reference alone is not a content-change signal. The new snapshot references the new content identifier. The plugin activates the new generation while retaining the previous cache as a rollback directory, then atomically publishes the v2 snapshot. The transaction marker records the snapshot timestamp token as well as the backup state. On startup, recovery checks the current v2 envelope for that exact timestamp to distinguish a crash before publication from a crash immediately after the atomic replace but before the commit marker was updated. It restores the old cache for an unpublished transaction, or keeps the new cache when the matching snapshot was published. After publication it removes the backup; if publication fails it restores the previous cache. This replaces the complete cache generation rather than accumulating old files.
 
-If an export fails or is canceled, the previous catalog remains in place and cleanup is not run. This preserves all assets referenced by the last successfully published snapshot. A successful export with missing artwork removes stale unreferenced cache entries. Temporary files are cleaned on every import attempt and stale temporary files are eligible for cleanup on plugin startup.
+If an export fails or is canceled, the previous catalog remains in place and cleanup is not run. The accepted threat model excludes a malicious process running as the same Windows user; pathname/reparse-point checks are defense-in-depth and do not claim race-proof containment against a same-user process that can replace path components between validation and open. The bridge opens source files itself and copies bytes immediately, but Windows path-based APIs do not provide a portable handle-relative containment guarantee here. This preserves all assets referenced by the last successfully published snapshot. A successful export with missing artwork removes stale unreferenced cache entries. Temporary files are cleaned on every import attempt and stale temporary files are eligible for cleanup on plugin startup. Cache deletion failures must remain observable and must prevent transaction bookkeeping from being discarded; an unresolved backup/staging directory must be accounted for and block another generation rather than accumulate without bound.
 
-The adapter never deletes cache files. It resolves identifiers only beneath the fixed cache root or a matching bridge-generated backup directory, rejects reparse-point directories/files, and rechecks file size, signature, extension, and SHA-256 before returning a local path. An absent or modified file is treated as missing artwork, not as a catalog failure.
+The adapter never deletes cache files. It resolves identifiers only beneath the fixed cache root or a matching bridge-generated backup directory, rejects reparse-point directories/files, and rechecks file size, signature, extension, and SHA-256 before returning a local path. The returned path is a short-lived locator, not a durable lease: after a successful generation replacement, a path held by an older reader may disappear. Consumers must treat a missing/unreadable path as missing artwork and re-resolve against the latest snapshot; bounded reader leases are not provided.
 
 ## Snapshot schema migration
 
@@ -50,7 +50,7 @@ Schema v1 remains immutable: its envelope and game allowlist remain exactly as d
 
 Schema v2 adds two optional per-game strings: coverArtworkId and iconArtworkId. Each is either null/absent or a valid lowercase SHA-256 identifier. No other v1 or v2 fields are accepted. The v2 writer emits schemaVersion: 2; the parser explicitly dispatches v1 and v2 rather than interpreting v1 as v2. Unknown schema versions return the existing clear unsupported-schema error.
 
-The plugin publishes the new schema to catalog-v2.json. The adapter checks the v2 location first and falls back to the existing catalog-v1.json only when the v2 file is absent. A malformed or unsupported v2 file is not silently hidden by falling back to stale v1 data. A valid v1 file remains readable during rollout. If artwork references alone make the v2 snapshot exceed the 32 MiB snapshot limit, the plugin retries publication once with the same game data and no artwork references; if that still exceeds the limit, publication fails and the previous snapshot/cache remain available.
+The plugin publishes the new schema to catalog-v2.json. The adapter checks the v2 location first and falls back to the existing catalog-v1.json only when the v2 file is absent. A malformed or unsupported v2 file is not silently hidden by falling back to stale v1 data. A valid v1 file remains readable during rollout. Downgrade policy: an older producer that writes only v1 must explicitly remove/retire the v2 snapshot it previously owned before v1 fallback is expected; the reader will not infer a downgrade from timestamps or silently ignore a surviving v2 file. If the v2 file remains, it remains authoritative until removed by the owner/admin or a later v2 producer replaces it. If artwork references alone make the v2 snapshot exceed the 32 MiB snapshot limit, the plugin retries publication once with the same game data and no artwork references; if that still exceeds the limit, publication fails and the previous snapshot/cache remain available.
 
 ## Failure behavior
 
@@ -61,7 +61,7 @@ The plugin publishes the new schema to catalog-v2.json. The adapter checks the v
 | Database reference cannot be resolved | Null identifier |
 | Missing, unreadable, empty, oversized, truncated, or unsupported image | Null identifier; export continues |
 | Cache limit reached | Null identifier; export continues |
-| Malformed snapshot artwork identifier | Invalid game record is skipped and counted |
+| Malformed snapshot artwork identifier | Only that optional artwork field is nulled; valid game metadata and the other artwork field are retained |
 | Traversal or rooted identifier | Rejected before path resolution |
 | Cache file deleted after publication | Adapter reports missing artwork; catalog remains available |
 | Export fails before publication | Previous snapshot and its referenced cache assets remain intact |
@@ -72,7 +72,7 @@ The plugin publishes the new schema to catalog-v2.json. The adapter checks the v
 - Valid JPEG imports produce deterministic opaque identifiers and files inside the cache root; signature tests cover the supported PNG/JPEG/GIF/WebP container markers.
 - Same bytes produce the same identifier; changed bytes produce a different identifier.
 - Missing, malformed, URL, raw-path, and non-GUID references are rejected without opening the supplied path.
-- Empty, oversized, truncated, and unknown-signature files are rejected.
+- Empty, oversized, and unknown-signature files are rejected. A signature-valid but undecodable image is a consumer-side decode failure, not a transport guarantee.
 - Cache byte limits are enforced while reading and before publication.
 - Identifier resolution rejects traversal, rooted paths, separators, malformed digests, and reparse-point files or cache roots.
 - Cleanup preserves every asset referenced by the currently published snapshot and removes orphaned assets only after successful publication.
@@ -84,4 +84,4 @@ The plugin publishes the new schema to catalog-v2.json. The adapter checks the v
 
 ## Non-goals
 
-No third-party artwork downloads, storefront scraping, cloud hosting, network listener, IPC, Playnite database writes, arbitrary file access, or Command Palette artwork UI changes.
+No third-party artwork downloads, storefront scraping, cloud hosting, network listener, IPC, Playnite database writes, arbitrary file access, or Command Palette artwork UI changes. WERD-80 owns UI rendering, asynchronous/cancellable loading, bounded decoded-image caching, image fallback, and DPI verification.
