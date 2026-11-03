@@ -195,13 +195,16 @@ public sealed class CatalogSnapshotParserTests
     [InlineData("../aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")]
     [InlineData("C:\\\\temp\\\\art.png")]
     [InlineData("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")]
-    public void SkipsV2RecordsWithUnsafeArtworkIdentifiers(string artworkId)
+    public void KeepsValidGameAndNullsOnlyUnsafeArtworkIdentifier(string artworkId)
     {
-        var json = $$"""{"schemaVersion":2,"generatedAtUtc":"2026-10-30T00:00:00Z","games":[{"id":"{{GameA}}","name":"Halo","isInstalled":true,"iconArtworkId":"{{artworkId}}"}]}""";
+        const string validCover = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+        var json = $"""{"schemaVersion":2,"generatedAtUtc":"2026-10-30T00:00:00Z","games":[{"id":"{{GameA}}","name":"Halo","isInstalled":true,"coverArtworkId":"{{validCover}}","iconArtworkId":"{{artworkId}}"}]}""";
         var result = CatalogSnapshotParser.Parse(Json(json));
         Assert.Null(result.Issue);
-        Assert.Empty(result.Snapshot!.Games);
-        Assert.Equal(1, result.SkippedRecordCount);
+        var game = Assert.Single(result.Snapshot!.Games);
+        Assert.Equal(validCover, game.CoverArtworkId);
+        Assert.Null(game.IconArtworkId);
+        Assert.Equal(0, result.SkippedRecordCount);
     }
 
     [Fact]
