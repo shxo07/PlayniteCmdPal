@@ -14,9 +14,9 @@ using PlayniteCmdPal.Playnite;
 
 namespace PlayniteCmdPal;
 
-internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
+internal sealed partial class PlayniteCmdPalPage : DynamicListPage
 {
-    private readonly PlayniteCatalogAdapter _catalog = new();
+    private readonly IReadOnlyPlayniteCatalog _catalog = new PlayniteCatalogAdapter();
     private IListItem[] _items = [CreateStatusItem("Loading your Playnite library…")];
     private CancellationTokenSource? _searchCancellation;
     private string _searchText = string.Empty;
@@ -135,11 +135,7 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
 
         if (catalog.SkippedRecordCount > 0)
         {
-            var reasons = string.Join(", ", catalog.SkippedRecordReasons
-                .OrderBy(pair => pair.Key, StringComparer.Ordinal)
-                .Select(pair => $"{pair.Value} {pair.Key}"));
-            var detail = string.IsNullOrEmpty(reasons) ? string.Empty : $" ({reasons})";
-            items.Add(CreateStatusItem($"{catalog.SkippedRecordCount} invalid catalog entr{(catalog.SkippedRecordCount == 1 ? "y was" : "ies were")} skipped{detail}."));
+            items.Add(CreateStatusItem($"{catalog.SkippedRecordCount} invalid catalog entr{(catalog.SkippedRecordCount == 1 ? "y was" : "ies were")} skipped."));
         }
 
         if (catalog.Games.Count == 0)
@@ -184,37 +180,27 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
                 metadata.Add($"ID {game.GameId[..8]}");
             }
 
-            var iconPath = PlayniteCatalogAdapter.ResolveArtworkPath(game.IconReference);
-            var coverPath = PlayniteCatalogAdapter.ResolveArtworkPath(game.CoverArtworkReference);
-            var artworkPath = iconPath ?? coverPath;
             items.Add(new ListItem(new LaunchGameCommand(game.GameId))
             {
                 Title = game.Title,
                 Subtitle = string.Join(" · ", metadata),
-                Icon = artworkPath is null ? null : new IconInfo(new Uri(artworkPath).AbsoluteUri),
+                MoreCommands =
+                [
+                    new CommandContextItem(new ShowGameDetailsCommand(game.GameId)),
+                ],
             });
         }
 
         return items.ToArray();
     }
 
-    private static ListItem CreateStatusItem(string message) =>
-        new(new NoOpCommand()) { Title = message };
+    private static IListItem CreateStatusItem(string message) =>
+        new ListItem(new NoOpCommand()) { Title = message };
 
-    private ListItem CreateRefreshItem(string message) =>
-        new(new RefreshCatalogCommand(this)) { Title = message, Subtitle = "Press Enter to retry" };
+    private IListItem CreateRefreshItem(string message) =>
+        new ListItem(new RefreshCatalogCommand(this)) { Title = message, Subtitle = "Press Enter to retry" };
 
-    public void Dispose()
-    {
-        lock (_requestGate)
-        {
-            _searchCancellation?.Cancel();
-            _searchCancellation?.Dispose();
-            _searchCancellation = null;
-        }
-    }
-
-    private sealed partial class RefreshCatalogCommand : InvokableCommand
+    private sealed class RefreshCatalogCommand : InvokableCommand
     {
         private readonly PlayniteCmdPalPage _page;
 
