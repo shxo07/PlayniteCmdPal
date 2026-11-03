@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.Json;
 using PlayniteCmdPal.Playnite;
 using PlayniteCmdPal.Snapshot;
 using Xunit;
