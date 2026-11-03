@@ -12,8 +12,7 @@ public sealed class CatalogReadResult
         bool isStale,
         CatalogIssue? issue,
         int skippedRecordCount,
-        bool isFromCache,
-        IReadOnlyDictionary<string, int>? skippedRecordReasons = null)
+        bool isFromCache)
     {
         Games = games;
         GeneratedAtUtc = generatedAtUtc;
@@ -21,7 +20,6 @@ public sealed class CatalogReadResult
         Issue = issue;
         SkippedRecordCount = skippedRecordCount;
         IsFromCache = isFromCache;
-        SkippedRecordReasons = skippedRecordReasons ?? new Dictionary<string, int>();
     }
 
     public bool IsAvailable => GeneratedAtUtc.HasValue;
@@ -30,7 +28,6 @@ public sealed class CatalogReadResult
     public bool IsStale { get; }
     public CatalogIssue? Issue { get; }
     public int SkippedRecordCount { get; }
-    public IReadOnlyDictionary<string, int> SkippedRecordReasons { get; }
     public bool IsFromCache { get; }
 
     public static CatalogReadResult Unavailable(CatalogIssue issue) =>
@@ -262,8 +259,7 @@ public sealed class PlayniteCatalogAdapter : IReadOnlyPlayniteCatalog
                         IsStale(snapshot.GeneratedAtUtc, now),
                         null,
                         parsed.SkippedRecordCount,
-                        false,
-                        parsed.SkippedRecordReasons);
+                        false);
                     _lastIssue = null;
                 }
                 else
