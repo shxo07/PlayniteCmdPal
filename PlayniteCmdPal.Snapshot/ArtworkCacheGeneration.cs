@@ -25,6 +25,7 @@ public sealed class ArtworkCacheGeneration : IDisposable
     private bool _activated;
     private bool _published;
     private bool _completed;
+    private bool _cleanupFailure;
 
     public ArtworkCacheGeneration(string root, long maxCacheBytes = SnapshotLimits.MaxArtworkCacheBytes, int maxArtworkBytes = SnapshotLimits.MaxArtworkBytes, string? snapshotPath = null)
     {
@@ -100,6 +101,8 @@ public sealed class ArtworkCacheGeneration : IDisposable
                 {
                     TryDeleteFile(temporary);
                     TryDeleteFile(destination);
+                    if (File.Exists(temporary) || File.Exists(destination))
+                        _cleanupFailure = true;
                     throw;
                 }
             }
@@ -118,6 +121,8 @@ public sealed class ArtworkCacheGeneration : IDisposable
 
     public void Activate(string? publicationToken = null)
     {
+        if (_cleanupFailure)
+            throw new IOException("A failed artwork import left temporary data that could not be cleaned; the generation cannot be published.");
         if (_activated) throw new InvalidOperationException("Artwork generation is already active.");
         _backup = _root + ".backup-" + Guid.NewGuid().ToString("N");
         var rootInfo = new DirectoryInfo(_root);
@@ -196,7 +201,7 @@ public sealed class ArtworkCacheGeneration : IDisposable
             DeleteFileOrThrow(_marker);
             _activated = false;
         }
-        else TryDeleteDirectory(_staging);
+        else DeleteDirectoryOrThrow(_staging);
     }
 
     public void Dispose()
