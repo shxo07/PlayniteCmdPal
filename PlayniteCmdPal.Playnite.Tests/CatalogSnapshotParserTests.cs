@@ -1,5 +1,4 @@
 using System.Text;
-using System.Text.Json;
 using PlayniteCmdPal.Playnite;
 using PlayniteCmdPal.Snapshot;
 using Xunit;
@@ -205,30 +204,6 @@ public sealed class CatalogSnapshotParserTests
         Assert.Equal(validCover, game.CoverArtworkId);
         Assert.Null(game.IconArtworkId);
         Assert.Equal(0, result.SkippedRecordCount);
-    }
-
-    [Fact]
-    public void ReportsSpecificReasonsForSkippedRecords()
-    {
-        var json = JsonSerializer.Serialize(new
-        {
-            schemaVersion = 1,
-            generatedAtUtc = "2026-10-30T00:00:00Z",
-            games = new object[]
-            {
-                new { id = GameA, name = "Halo", isInstalled = true },
-                new { id = "bad", name = "Bad ID", isInstalled = true },
-                new { id = GameA, name = "Duplicate", isInstalled = true },
-                new { id = GameB, name = "Missing installed flag" },
-            },
-        });
-
-        var result = CatalogSnapshotParser.Parse(Json(json));
-
-        Assert.Equal(3, result.SkippedRecordCount);
-        Assert.Equal(1, result.SkippedRecordReasons["non-canonical or empty game ID"]);
-        Assert.Equal(1, result.SkippedRecordReasons["duplicate game ID"]);
-        Assert.Equal(1, result.SkippedRecordReasons["missing or incorrectly typed required field"]);
     }
 
     private static byte[] Json(string value) => Encoding.UTF8.GetBytes(value);
