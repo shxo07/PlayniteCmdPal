@@ -207,7 +207,7 @@ public sealed class CatalogSnapshotParserTests
     [Fact]
     public void ReportsSpecificReasonsForSkippedRecords()
     {
-        var json = $"""{"schemaVersion":1,"generatedAtUtc":"2026-10-30T00:00:00Z","games":[
+        var json = $$"""{"schemaVersion":1,"generatedAtUtc":"2026-10-30T00:00:00Z","games":[
             {"id":"{{GameA}}","name":"Halo","isInstalled":true},
             {"id":"bad","name":"Bad ID","isInstalled":true},
             {"id":"{{GameA}}","name":"Duplicate","isInstalled":true},
