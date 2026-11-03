@@ -28,19 +28,16 @@ public sealed class CatalogIssue
 
 public sealed class CatalogSnapshotParseResult
 {
-    internal CatalogSnapshotParseResult(CatalogSnapshot? snapshot, CatalogIssue? issue, int skippedRecordCount,
-        IReadOnlyDictionary<string, int>? skippedRecordReasons = null)
+    internal CatalogSnapshotParseResult(CatalogSnapshot? snapshot, CatalogIssue? issue, int skippedRecordCount)
     {
         Snapshot = snapshot;
         Issue = issue;
         SkippedRecordCount = skippedRecordCount;
-        SkippedRecordReasons = skippedRecordReasons ?? new Dictionary<string, int>();
     }
 
     public CatalogSnapshot? Snapshot { get; }
     public CatalogIssue? Issue { get; }
     public int SkippedRecordCount { get; }
-    public IReadOnlyDictionary<string, int> SkippedRecordReasons { get; }
 
     public static CatalogSnapshotParseResult Failure(CatalogErrorCode code, string message) =>
         new(null, new CatalogIssue(code, message), 0);
@@ -132,30 +129,21 @@ public static class CatalogSnapshotParser
             var games = new List<SnapshotGame>(gameCount);
             var gameIds = new HashSet<string>(StringComparer.Ordinal);
             var skippedRecordCount = 0;
-            var skippedRecordReasons = new Dictionary<string, int>(StringComparer.Ordinal);
             foreach (var element in gamesElement.EnumerateArray())
             {
-                if (TryParseGame(element, schemaVersion, out var game, out var reason))
+                if (TryParseGame(element, schemaVersion, out var game, out _) && gameIds.Add(game!.Id))
                 {
-                    if (gameIds.Add(game!.Id))
-                    {
-                        games.Add(game);
-                        continue;
-                    }
-
-                    reason = "duplicate game ID";
+                    games.Add(game);
+                    continue;
                 }
 
                 skippedRecordCount++;
-                skippedRecordReasons.TryGetValue(reason, out var count);
-                skippedRecordReasons[reason] = count + 1;
             }
 
             return new CatalogSnapshotParseResult(
                 new CatalogSnapshot(generatedAtUtc, games, schemaVersion),
                 null,
-                skippedRecordCount,
-                skippedRecordReasons);
+                skippedRecordCount);
         }
     }
 
