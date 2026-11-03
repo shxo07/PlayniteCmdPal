@@ -14,9 +14,9 @@ using PlayniteCmdPal.Playnite;
 
 namespace PlayniteCmdPal;
 
-internal sealed partial class PlayniteCmdPalPage : DynamicListPage
+internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
 {
-    private readonly IReadOnlyPlayniteCatalog _catalog = new PlayniteCatalogAdapter();
+    private readonly PlayniteCatalogAdapter _catalog = new();
     private IListItem[] _items = [CreateStatusItem("Loading your Playnite library…")];
     private CancellationTokenSource? _searchCancellation;
     private string _searchText = string.Empty;
@@ -198,13 +198,23 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage
         return items.ToArray();
     }
 
-    private static IListItem CreateStatusItem(string message) =>
-        new ListItem(new NoOpCommand()) { Title = message };
+    private static ListItem CreateStatusItem(string message) =>
+        new(new NoOpCommand()) { Title = message };
 
-    private IListItem CreateRefreshItem(string message) =>
-        new ListItem(new RefreshCatalogCommand(this)) { Title = message, Subtitle = "Press Enter to retry" };
+    private ListItem CreateRefreshItem(string message) =>
+        new(new RefreshCatalogCommand(this)) { Title = message, Subtitle = "Press Enter to retry" };
 
-    private sealed class RefreshCatalogCommand : InvokableCommand
+    public void Dispose()
+    {
+        lock (_requestGate)
+        {
+            _searchCancellation?.Cancel();
+            _searchCancellation?.Dispose();
+            _searchCancellation = null;
+        }
+    }
+
+    private sealed partial class RefreshCatalogCommand : InvokableCommand
     {
         private readonly PlayniteCmdPalPage _page;
 
