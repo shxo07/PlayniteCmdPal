@@ -234,15 +234,13 @@ public static class CatalogSnapshotParser
             if (TryGetProperty(element, "coverArtworkId", out var coverElement) &&
                 !TryReadOptionalArtworkId(coverElement, ref coverArtworkId))
             {
-                reason = "invalid cover artwork identifier";
-                return false;
+                coverArtworkId = null;
             }
 
             if (TryGetProperty(element, "iconArtworkId", out var iconElement) &&
                 !TryReadOptionalArtworkId(iconElement, ref iconArtworkId))
             {
-                reason = "invalid icon artwork identifier";
-                return false;
+                iconArtworkId = null;
             }
         }
 
