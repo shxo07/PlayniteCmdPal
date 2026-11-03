@@ -98,7 +98,26 @@ try {
         throw 'The publisher left an unexpected file behind.'
     }
 
-    Write-Host 'Playnite bridge .NET Framework snapshot smoke passed (synthetic data, no System.Text.Json reference).'
+    # Exercise the v2 artwork contract through the actual net462 serializer/publisher.
+    $artworkId = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+    $v2Game = $gameConstructor.Invoke([object[]]@('11111111-1111-4111-8111-111111111111', 'Artwork game', $true, 'Source', 'PC', $artworkId, $artworkId))
+    $v2Games = [Activator]::CreateInstance($listType)
+    [void]$v2Games.Add($v2Game)
+    $v2Arguments = [object[]]::new(3)
+    $v2Arguments[0] = $timestamp
+    $v2Arguments[1] = $v2Games
+    $v2Arguments[2] = 2
+    $v2Snapshot = $snapshotConstructor.Invoke($v2Arguments)
+    $v2Path = Join-Path $directory 'catalog-v2.json'
+    $publisherType::PublishAsync([string]$v2Path, $v2Snapshot, [Threading.CancellationToken]::None).GetAwaiter().GetResult()
+    $v2Json = [Text.Encoding]::UTF8.GetString([IO.File]::ReadAllBytes($v2Path)) | ConvertFrom-Json
+    if ($v2Json.schemaVersion -ne 2 -or @($v2Json.games).Count -ne 1 -or
+        $v2Json.games[0].coverArtworkId -ne $artworkId -or
+        $v2Json.games[0].iconArtworkId -ne $artworkId) {
+        throw 'The schema v2 artwork snapshot did not round-trip through the .NET Framework publisher.'
+    }
+
+    Write-Host 'Playnite bridge .NET Framework v1/v2 snapshot smoke passed (synthetic data, no System.Text.Json reference).'
 } finally {
     if (Test-Path -LiteralPath $directory) {
         Remove-Item -LiteralPath $directory -Recurse -Force -ErrorAction SilentlyContinue
