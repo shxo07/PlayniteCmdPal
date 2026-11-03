@@ -100,7 +100,7 @@ For contributor testing, follow [Developer Setup](DEVELOPER-SETUP.md): enable De
 The public instructions depend on the selected live install source:
 
 - **Microsoft Store:** install from the Store product page or the Gallery's Store action after the Store listing is live. Do not publish a Store URL or product ID before Partner Center provides it.
-- **WinGet (not selected):** only document `winget install` after a tested WinGet manifest and installer have been accepted. The manifest must include the official Command Palette discovery tag.
+- **WinGet:** the selected additional Gallery install source. Document `winget install` only after the manifest and installer are accepted and install/upgrade/uninstall are validated. The manifest must include the official Command Palette discovery tag.
 
 ### Update
 
