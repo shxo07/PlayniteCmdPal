@@ -28,16 +28,19 @@ public sealed class CatalogIssue
 
 public sealed class CatalogSnapshotParseResult
 {
-    internal CatalogSnapshotParseResult(CatalogSnapshot? snapshot, CatalogIssue? issue, int skippedRecordCount)
+    internal CatalogSnapshotParseResult(CatalogSnapshot? snapshot, CatalogIssue? issue, int skippedRecordCount,
+        IReadOnlyDictionary<string, int>? skippedRecordReasons = null)
     {
         Snapshot = snapshot;
         Issue = issue;
         SkippedRecordCount = skippedRecordCount;
+        SkippedRecordReasons = skippedRecordReasons ?? new Dictionary<string, int>();
     }
 
     public CatalogSnapshot? Snapshot { get; }
     public CatalogIssue? Issue { get; }
     public int SkippedRecordCount { get; }
+    public IReadOnlyDictionary<string, int> SkippedRecordReasons { get; }
 
     public static CatalogSnapshotParseResult Failure(CatalogErrorCode code, string message) =>
         new(null, new CatalogIssue(code, message), 0);
@@ -129,22 +132,30 @@ public static class CatalogSnapshotParser
             var games = new List<SnapshotGame>(gameCount);
             var gameIds = new HashSet<string>(StringComparer.Ordinal);
             var skippedRecordCount = 0;
+            var skippedRecordReasons = new Dictionary<string, int>(StringComparer.Ordinal);
             foreach (var element in gamesElement.EnumerateArray())
             {
-                if (TryParseGame(element, schemaVersion, out var game) && gameIds.Add(game!.Id))
+                if (TryParseGame(element, schemaVersion, out var game, out var reason))
                 {
-                    games.Add(game);
+                    if (gameIds.Add(game!.Id))
+                    {
+                        games.Add(game);
+                        continue;
+                    }
+
+                    reason = "duplicate game ID";
                 }
-                else
-                {
-                    skippedRecordCount++;
-                }
+
+                skippedRecordCount++;
+                skippedRecordReasons.TryGetValue(reason, out var count);
+                skippedRecordReasons[reason] = count + 1;
             }
 
             return new CatalogSnapshotParseResult(
                 new CatalogSnapshot(generatedAtUtc, games, schemaVersion),
                 null,
-                skippedRecordCount);
+                skippedRecordCount,
+                skippedRecordReasons);
         }
     }
 
@@ -171,9 +182,10 @@ public static class CatalogSnapshotParser
                generatedAtUtc.Offset == TimeSpan.Zero;
     }
 
-    private static bool TryParseGame(JsonElement element, int schemaVersion, out SnapshotGame? game)
+    private static bool TryParseGame(JsonElement element, int schemaVersion, out SnapshotGame? game, out string reason)
     {
         game = null;
+        reason = "invalid record";
         var allowedProperties = schemaVersion == SnapshotLimits.LegacySchemaVersion
             ? new[] { "id", "name", "isInstalled", "source", "platform" }
             : new[] { "id", "name", "isInstalled", "source", "platform", "coverArtworkId", "iconArtworkId" };
@@ -182,6 +194,7 @@ public static class CatalogSnapshotParser
             HasDuplicateProperties(element) ||
             HasUnexpectedProperties(element, allowedProperties))
         {
+            reason = "invalid record shape or unexpected property";
             return false;
         }
 
@@ -193,6 +206,7 @@ public static class CatalogSnapshotParser
             (installedElement.ValueKind != JsonValueKind.True &&
              installedElement.ValueKind != JsonValueKind.False))
         {
+            reason = "missing or incorrectly typed required field";
             return false;
         }
 
@@ -204,12 +218,14 @@ public static class CatalogSnapshotParser
         if (TryGetProperty(element, "source", out var sourceElement) &&
             !TryReadOptionalString(sourceElement, ref source))
         {
+            reason = "invalid source field";
             return false;
         }
 
         if (TryGetProperty(element, "platform", out var platformElement) &&
             !TryReadOptionalString(platformElement, ref platform))
         {
+            reason = "invalid platform field";
             return false;
         }
 
@@ -218,12 +234,14 @@ public static class CatalogSnapshotParser
             if (TryGetProperty(element, "coverArtworkId", out var coverElement) &&
                 !TryReadOptionalArtworkId(coverElement, ref coverArtworkId))
             {
+                reason = "invalid cover artwork identifier";
                 return false;
             }
 
             if (TryGetProperty(element, "iconArtworkId", out var iconElement) &&
                 !TryReadOptionalArtworkId(iconElement, ref iconArtworkId))
             {
+                reason = "invalid icon artwork identifier";
                 return false;
             }
         }
@@ -240,8 +258,19 @@ public static class CatalogSnapshotParser
                 iconArtworkId);
             return true;
         }
+        catch (ArgumentException ex) when (ex.ParamName == "id")
+        {
+            reason = "non-canonical or empty game ID";
+            return false;
+        }
+        catch (ArgumentException ex) when (ex.ParamName == "name")
+        {
+            reason = "empty game name";
+            return false;
+        }
         catch (ArgumentException)
         {
+            reason = "invalid game metadata";
             return false;
         }
     }
