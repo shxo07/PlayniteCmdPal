@@ -180,10 +180,14 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage
                 metadata.Add($"ID {game.GameId[..8]}");
             }
 
+            var iconPath = PlayniteCatalogAdapter.ResolveArtworkPath(game.IconReference);
+            var coverPath = PlayniteCatalogAdapter.ResolveArtworkPath(game.CoverArtworkReference);
+            var artworkPath = iconPath ?? coverPath;
             items.Add(new ListItem(new LaunchGameCommand(game.GameId))
             {
                 Title = game.Title,
                 Subtitle = string.Join(" · ", metadata),
+                Icon = artworkPath is null ? null : new IconInfo(new Uri(artworkPath).AbsoluteUri),
             });
         }
 
