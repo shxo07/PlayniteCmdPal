@@ -371,8 +371,7 @@ public sealed class PlayniteCatalogAdapter : IReadOnlyPlayniteCatalog
             IsStale(good.GeneratedAtUtc!.Value, now),
             issue,
             good.SkippedRecordCount,
-            isFromCache,
-            good.SkippedRecordReasons);
+            isFromCache);
     }
 
     private static bool IsStale(DateTimeOffset generatedAtUtc, DateTimeOffset now) =>
