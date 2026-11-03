@@ -256,6 +256,7 @@ public static class CatalogSnapshotParser
                 platform,
                 coverArtworkId,
                 iconArtworkId);
+            reason = string.Empty;
             return true;
         }
         catch (ArgumentException ex) when (ex.ParamName == "id")
