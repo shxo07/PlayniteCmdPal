@@ -21,6 +21,7 @@ public sealed class PlayniteCmdPalPlugin : GenericPlugin
     private static readonly TimeSpan Debounce = TimeSpan.FromMilliseconds(750);
     private static readonly TimeSpan ArtworkRevalidationInterval = TimeSpan.FromMinutes(30);
     private static readonly ILogger Logger = LogManager.GetLogger();
+    private static readonly Mutex ArtworkExportMutex = new Mutex(false, @"Local\PlayniteCmdPal.ArtworkExport");
     private readonly CatalogExportCoordinator _coordinator;
     private readonly Dispatcher _dispatcher;
     private readonly string _snapshotPath;
@@ -173,12 +174,26 @@ public sealed class PlayniteCmdPalPlugin : GenericPlugin
 
     private async Task ExportAsync(CancellationToken cancellationToken)
     {
-        if (!PlayniteApi.Database.IsOpen)
+        var ownsExportLock = false;
+        try
         {
-            return;
-        }
+            try
+            {
+                ownsExportLock = ArtworkExportMutex.WaitOne(TimeSpan.FromSeconds(30));
+            }
+            catch (AbandonedMutexException)
+            {
+                // The previous producer exited unexpectedly; this process now owns the mutex
+                // and may perform transaction recovery before starting another generation.
+                ownsExportLock = true;
+            }
 
-        // Playnite's database objects are affinity-sensitive. Project on its dispatcher,
+            if (!ownsExportLock)
+                throw new IOException("Another PlayniteCmdPal artwork producer is still active.");
+            if (!PlayniteApi.Database.IsOpen)
+                return;
+
+            // Playnite's database objects are affinity-sensitive. Project on its dispatcher,
         // then serialize/flush/replace the file on a background thread.
         using (var artwork = new ArtworkCacheGeneration(_artworkCacheRoot, snapshotPath: _snapshotPath))
         {
@@ -211,6 +226,11 @@ public sealed class PlayniteCmdPalPlugin : GenericPlugin
                 else artwork.Rollback();
                 throw;
             }
+        }
+        finally
+        {
+            if (ownsExportLock)
+                ArtworkExportMutex.ReleaseMutex();
         }
     }
 
