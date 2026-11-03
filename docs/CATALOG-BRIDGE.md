@@ -9,7 +9,7 @@ This document describes the catalog snapshot transport accepted in [ADR-005](DEC
 - `PlayniteCmdPal.PlaynitePlugin` (`net462`): companion Playnite generic plugin that projects `PlayniteApi.Database.Games` and publishes the snapshot.
 - `PlayniteCmdPal.Playnite.Tests`: synthetic-file adapter/protocol tests. `scripts/test-playnite-snapshot-netfx.ps1` additionally exercises the actual `net462` writer/publisher in Windows PowerShell 5.1. Neither requires Playnite, PowerToys, or a personal library.
 
-The canonical file is `%LOCALAPPDATA%\PlayniteCmdPal\catalog-v1.json`. The plugin creates the directory with inherited per-user permissions. The adapter opens the file read-only with `FileShare.ReadWrite | FileShare.Delete`; it never creates, repairs, or deletes the snapshot.
+The canonical file is `%LOCALAPPDATA%\PlayniteCmdPal\catalog-v1.json`. The plugin creates the directory with inherited per-user permissions. The adapter opens the file read-only with `FileShare.ReadWrite | FileShare.Delete`; it never creates, repairs, or deletes the snapshot. Artwork transport, v2 fields, cache lifecycle, and rollout policy are specified in [Artwork transport](ARTWORK-TRANSPORT.md).
 
 ## Schema v1
 
@@ -31,7 +31,7 @@ The canonical file is `%LOCALAPPDATA%\PlayniteCmdPal\catalog-v1.json`. The plugi
 
 `generatedAtUtc` is an ISO-8601 UTC timestamp; fractional seconds are optional, and non-UTC offsets are rejected. `id` is Playnite's stable GUID in lowercase canonical D format and is the only identity key. Empty GUIDs, non-canonical IDs, blank names, missing required fields, wrong field types, duplicate JSON properties, and unknown v1 fields are invalid. `source` and `platform` are optional strings or null; the plugin joins multiple platform names with `, ` in ordinal order. No executable paths, launch actions, icons, or full SDK models are exported.
 
-The parser rejects input over 32 MiB, JSON deeper than 16 levels, unsupported schema versions, malformed envelopes, and arrays over 100,000 records. Invalid individual records and later duplicate IDs are skipped and counted; the first valid record for an ID wins. An empty `games` array is a valid empty library.
+The parser rejects input over 32 MiB, JSON deeper than 16 levels, unsupported schema versions, malformed envelopes, and arrays over 100,000 records. Invalid individual records and later duplicate IDs are skipped and counted; the first valid record for an ID wins. In v2, malformed optional artwork identifiers are nulled individually; valid game identity and metadata are retained. An empty `games` array is a valid empty library.
 
 ## Publication and refresh
 
@@ -66,7 +66,7 @@ The packaging script first runs a synthetic .NET Framework smoke test against th
 
 ## Validation status
 
-**Automated verification:** The latest pull-request commit passed the Windows CI workflow, including restore, build, and test checks. The CodeQL workflow also completed successfully. These checks exercise the synthetic contract tests and the shared .NET Framework smoke checks included in CI.
+**Automated verification:** Run Windows CI against the final pull-request head before merge. Do not treat earlier workflow results as verification of subsequent commits.
 
 **Manual Playnite verification remains:** CI does not run inside a live Playnite host or inspect a user's library. Install the updated companion plugin in the user's Playnite environment and verify that real cover/icon references are copied into the bridge-owned cache, the v2 snapshot is refreshed after artwork changes, missing artwork remains non-fatal, and the previous cache remains usable if publication is interrupted. Do not share or commit personal game names, IDs, or library exports.
 
