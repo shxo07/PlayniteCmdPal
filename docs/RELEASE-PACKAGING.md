@@ -19,11 +19,11 @@ The CmdPal project is an MSIX/packaged WinUI-style extension. Its project target
 
 ## 2. Distribution decision
 
-Microsoft's current guidance says the Extension Gallery is a curated catalogue, not a hosting service. Each listing must point to an extension already published through one of the supported install sources: Microsoft Store or WinGet. Microsoft currently recommends the Store; WinGet is also supported when its manifest uses the `windows-commandpalette-extension` tag.
+Microsoft's Extension Gallery is a catalogue, not a binary host. A Gallery listing must point to a supported install source, including Microsoft Store or WinGet; a WinGet manifest must carry the `windows-commandpalette-extension` tag.
 
-**Current project decision: retain the packaged MSIX and evaluate Microsoft Store first. Do not create a WinGet EXE installer from the old generic Inno Setup example.** That example changes the project to unpackaged mode and writes an InprocServer32 registration, which does not match this project's packaged out-of-process COM server. A WinGet route may be reconsidered only after a supported installer format, registration model, signing model, upgrade path, and clean-machine test are demonstrated for this exact project.
+**Maintainer distribution decision: GitHub Releases for source/release artifacts plus WinGet for installation; Microsoft Store is not a selected channel.** Keep the packaged MSIX and its out-of-process COM registration model. Do not create an unpackaged Inno Setup installer or substitute an InprocServer32 registration. The WinGet installer/manifest, signing, upgrade/uninstall path, and clean-machine behavior still require implementation and validation for this exact package.
 
-This is a direction for investigation, not permission to distribute. Store identity, signing, and licensing gates below remain unresolved. No package should be submitted or published until the maintainer explicitly approves the completed release review.
+This decision does not grant redistribution rights. The Windows SDK projection licensing gate below remains open, and no public binary should be published until that gate and the other release checks are explicitly approved.
 
 ## 3. Release version and package identity
 
@@ -80,11 +80,11 @@ Do not copy a generic `dotnet publish` or Inno Setup command into release instru
 
 The current audit in [Licensing and release readiness](LICENSING-AND-RELEASE.md) identifies these unresolved gates:
 
-1. **Windows SDK projection redistribution:** Microsoft's [Windows SDK REDIST.TXT](https://learn.microsoft.com/en-us/legal/windows-sdk/redist) expressly lists `Microsoft.Windows.SDK.NET.Ref` and permits its package files unmodified as a NuGet package or as part of a program to enable WinRT API calls. The project uses preview package `10.0.26100.68-preview`, whose declared license URL is the preview-specific `https://aka.ms/WinSDKPreviewLicenseURL`; applicability of the published REDIST terms to that preview license, required end-user terms/notices, and the exact x64/ARM64 output inventory remain unverified. This remains a release blocker pending that evidence.
-2. **Stable Windows SDK targeting pack:** the project currently targets `10.0.26100.68-preview`. Evaluate a compatible stable targeting pack and run Windows build/deploy tests before switching. This is a release blocker until resolved.
+1. **Windows SDK projection redistribution:** the selected package is stable `Microsoft.Windows.SDK.NET.Ref 10.0.26100.87`, whose NuGet metadata identifies a `net9.0` targeting pack compatible with .NET 10 and links to the standard Microsoft Windows SDK license (`https://aka.ms/WinSDKLicenseURL`). Microsoft's [Windows SDK REDIST.TXT](https://learn.microsoft.com/en-us/legal/windows-sdk/redist) names this package and permits listed package files to be redistributed unmodified, but its enumerated framework-specific assets are `net8.0` and `net6.0`, not the stable package's `net9.0` asset group. The exact scope therefore remains unconfirmed. The complete stable license, distributor/end-user terms for GitHub Releases and WinGet, required notices, and exact x64/ARM64 shipped-file inventories must be reviewed. This remains a release blocker; see `LICENSING-AND-RELEASE.md`.
+2. **Stable Windows SDK targeting-pack selection:** `10.0.26100.87` has been selected and implemented on the WERD-77 branch. Its build/test validation is tracked there. This engineering decision does not establish redistribution permission and does not close blocker 1.
 3. **Runtime notices:** the MSBuild copy target exists, but the exact runtime notice file still needs verification in both `win-x64` and `win-arm64` publish outputs.
 4. **Dependency inventory:** run `scripts/licensing/New-DependencyInventory.ps1` after a clean restore on the supported Windows build machine and review every item flagged for manual review.
-5. **Signing and Store identity:** reserve the Store identity and validate a certificate whose subject matches the final manifest publisher. The current provisional identity is not proof of Store ownership or signing readiness.
+5. **Signing and package identity:** validate a signing certificate whose subject matches the final MSIX manifest publisher; confirm the package identity and version. The provisional identity is not proof of signing readiness. No Microsoft Store identity is being pursued under the current distribution decision.
 6. **Clean-machine acceptance:** replay install, first launch, update, uninstall, and rollback on a clean supported Windows environment. The Developer Setup page explicitly says the independent clean-machine walkthrough has not yet been completed.
 
 A successful CI build does not clear these release blockers. Do not publish a binary or submit a Gallery listing while any required gate remains open.
@@ -99,8 +99,9 @@ For contributor testing, follow [Developer Setup](DEVELOPER-SETUP.md): enable De
 
 The public instructions depend on the selected live install source:
 
-- **Microsoft Store:** install from the Store product page or the Gallery's Store action after the Store listing is live. Do not publish a Store URL or product ID before Partner Center provides it.
-- **WinGet (not selected):** only document `winget install` after a tested WinGet manifest and installer have been accepted. The manifest must include the official Command Palette discovery tag.
+- **GitHub Releases:** publish versioned source and release notes after all release gates are cleared. Do not present the GitHub release page itself as the MSIX installation mechanism.
+- **WinGet:** publish a validated manifest/installer with the official `windows-commandpalette-extension` discovery tag. Do not document an install command until the package identifier, installer URL/hash, signing, install, upgrade, and uninstall behavior have been verified.
+- **Microsoft Store:** not selected; do not create Store-specific release steps or reserve a Store identity.
 
 ### Update
 
@@ -136,7 +137,7 @@ Before the first public release, the maintainer must confirm:
 - [ ] Windows SDK projection redistribution is cleared for the exact package/version and distribution model; preview-license applicability, Microsoft's end-user terms, required notices and the actual x64/ARM64 output file lists are recorded; the targeting-pack decision is recorded.
 - [ ] The dependency inventory has been regenerated and all review items resolved.
 - [ ] Runtime notices are present in both architecture outputs.
-- [ ] Store identity and signing certificate are final and verified (or a separately validated WinGet route is approved).
+- [ ] MSIX signing identity is final and verified; the GitHub Releases + WinGet distribution route is validated.
 - [ ] x64 and ARM64 packages build and pass package inspection.
 - [ ] A clean supported Windows machine passes install, first-run, update, uninstall, and rollback checks.
 - [ ] Release notes, support/troubleshooting instructions, version, hashes, and notices are complete.
