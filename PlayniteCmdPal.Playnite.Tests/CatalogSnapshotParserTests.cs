@@ -207,12 +207,18 @@ public sealed class CatalogSnapshotParserTests
     [Fact]
     public void ReportsSpecificReasonsForSkippedRecords()
     {
-        var json = $$"""{"schemaVersion":1,"generatedAtUtc":"2026-10-30T00:00:00Z","games":[
-            {"id":"{{GameA}}","name":"Halo","isInstalled":true},
-            {"id":"bad","name":"Bad ID","isInstalled":true},
-            {"id":"{{GameA}}","name":"Duplicate","isInstalled":true},
-            {"id":"{{GameB}}","name":"Missing installed flag"}
-        ]}""";
+        var json = JsonSerializer.Serialize(new
+        {
+            schemaVersion = 1,
+            generatedAtUtc = "2026-10-30T00:00:00Z",
+            games = new object[]
+            {
+                new { id = GameA, name = "Halo", isInstalled = true },
+                new { id = "bad", name = "Bad ID", isInstalled = true },
+                new { id = GameA, name = "Duplicate", isInstalled = true },
+                new { id = GameB, name = "Missing installed flag" },
+            },
+        });
 
         var result = CatalogSnapshotParser.Parse(Json(json));
 
