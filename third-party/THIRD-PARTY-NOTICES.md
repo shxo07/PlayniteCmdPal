@@ -61,34 +61,15 @@ headers and the PowerToys copyright notice. Do not remove those headers.
 
 ## Microsoft Windows SDK projections
 
-`Microsoft.Windows.SDK.NET.Ref` 10.0.26100.68-preview supplies the Windows SDK
-projection assemblies (`Microsoft.Windows.SDK.NET.dll`, `WinRT.Runtime.dll`) that a
-self-contained build of the extension may copy into the package. The package declares
-a **Microsoft Windows SDK (preview) license** (`https://aka.ms/WinSDKPreviewLicenseURL`)
-and sets `requireLicenseAcceptance`; it is not MIT-licensed.
+`Microsoft.Windows.SDK.NET.Ref` 10.0.26100.87 is the selected Windows SDK targeting-pack package for the `net10.0-windows10.0.26100.0` extension. NuGet identifies version 10.0.26100.87 as a `net9.0` package compatible with .NET 10 and links its license information to Microsoft's standard Windows SDK license URL, `https://aka.ms/WinSDKLicenseURL`. It is not MIT-licensed. The full stable license text has not yet been captured and reviewed for this release; do not treat the URL or this notice as a substitute for that review.
 
-Microsoft's official [Windows SDK REDIST.TXT](https://learn.microsoft.com/en-us/legal/windows-sdk/redist)
-(updated 2024-10-21) has a dedicated `Microsoft.Windows.SDK.NET.Ref` entry. It permits
-the files in that package to be distributed unmodified either as a NuGet package or as
-part of a program to enable WinRT API calls. The listed files include
-`Microsoft.Windows.SDK.NET.dll`, `Microsoft.Windows.UI.Xaml.dll` and
-`WinRT.Runtime.dll` (for the net8.0 package group), as well as the net6.0 projection
-and runtime assemblies, WinRT source generator and WinMD metadata.
+Microsoft's official [Windows SDK REDIST.TXT](https://learn.microsoft.com/en-us/legal/windows-sdk/redist) (updated 2024-10-21) has a dedicated `Microsoft.Windows.SDK.NET.Ref` entry. It permits the listed files to be distributed unmodified either as a NuGet package or as part of a program to enable WinRT API calls. The enumerated paths include `Microsoft.Windows.SDK.NET.dll`, `Microsoft.Windows.UI.Xaml.dll` and `WinRT.Runtime.dll` under `lib/net8.0`, plus `Microsoft.Windows.SDK.NET.dll` and `WinRT.Runtime.dll` under `lib/net6.0`, the WinRT source generator, package metadata and WinMD files.
 
-The project's configured package is `10.0.26100.68-preview`; its NuGet metadata points
-to the preview-specific `https://aka.ms/WinSDKPreviewLicenseURL` and requires license
-acceptance. The preview license could not be retrieved and compared with the standard
-Windows SDK license referenced by REDIST.TXT. The Windows SDK distribution conditions
-also require unmodified files, significant primary functionality, a valid copyright
-notice, end-user/distributor terms at least as protective as the SDK terms, and the
-specified indemnification. The project has not yet demonstrated those end-user terms.
+**Unresolved scope:** the stable NuGet package targets `net9.0`, but the REDIST entry's listed framework-specific paths name `net8.0` and `net6.0`; it does not expressly enumerate the stable package's `net9.0` asset group. Obtain written Microsoft confirmation that the REDIST permission covers version `10.0.26100.87` and the exact files in that package before declaring the package cleared.
 
-The package list is not evidence of which files survived trimming/publishing. Exact
-x64 and ARM64 publish/MSIX file lists and their assembly/package versions must be
-recorded from the actual release outputs. Until the preview-license applicability,
-conditions and per-RID output inventory are reviewed, public binary redistribution
-remains blocked. See `docs/LICENSING-AND-RELEASE.md`.
+The Windows SDK REDIST permission is conditional. The applicable terms require (among other things) unmodified distributable files, significant primary functionality, a valid copyright notice, protective terms binding distributors and external end users, and the specified indemnification. The project's selected distribution channels are GitHub Releases and WinGet. The maintainer must review how the distributor and end-user requirements apply to both channels and obtain qualified legal review where necessary.
 
+The package's contents are not the same thing as the files shipped in the application. Inspect the exact `10.0.26100.87` `.nupkg` and record its file list and SHA-256. Separately inspect the `win-x64` and `win-arm64` publish/MSIX outputs and record every SDK-derived file, assembly version, source package and architecture. Until the stable package's `net9.0` REDIST scope, full license conditions and actual output inventory are confirmed, public binary redistribution remains blocked. See `docs/LICENSING-AND-RELEASE.md`.
 ## .NET runtime and library components
 
 The Command Palette extension is published with `SelfContained=true`
