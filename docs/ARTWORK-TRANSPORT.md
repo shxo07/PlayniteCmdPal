@@ -31,7 +31,7 @@ The public API documentation does **not** formally guarantee the exact serialize
 ## Cache layout and ownership
 
 - Root: %LOCALAPPDATA%\PlayniteCmdPal\artwork-v2\
-- The plugin is the only writer. The Command Palette adapter is read-only. The exporter must enforce single-writer ownership across plugin instances/processes before recovery or publication.
+- The plugin is the only writer. The Command Palette adapter is read-only. Before recovery or publication, the exporter holds an exclusive handle on `%LOCALAPPDATA%\\PlayniteCmdPal\\artwork-v2.export.lock` (`FileShare.None`) across the complete export transaction. Windows releases the handle automatically when its process exits, including after a crash; unlike a `Local\\` named synchronization object, the file lock is not scoped to one Windows session. The lock file itself is persistent and harmless; ownership is the open handle, not the file's existence.
 - Each asset filename is the lowercase SHA-256 digest of its validated bytes plus the extension inferred from the file signature. The snapshot contains only the 64-character digest; the adapter resolves it by trying the fixed allowlisted extensions beneath the fixed cache root.
 - The reader accepts only exactly 64 lowercase hexadecimal characters as an identifier and constructs the candidate path beneath the fixed cache root. It verifies the normalized candidate remains beneath that root.
 - No cache root, filename, source path, or original Playnite reference is serialized into the catalog.
