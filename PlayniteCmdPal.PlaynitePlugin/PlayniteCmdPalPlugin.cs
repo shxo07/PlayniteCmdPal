@@ -219,6 +219,7 @@ public sealed class PlayniteCmdPalPlugin : GenericPlugin
                 else artwork.Rollback();
                 throw;
             }
+            }
         }
         finally
         {
