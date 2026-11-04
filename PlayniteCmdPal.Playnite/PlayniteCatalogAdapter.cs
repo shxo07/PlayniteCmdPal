@@ -92,7 +92,7 @@ public sealed class PlayniteCatalogAdapter : IReadOnlyPlayniteCatalog
 
         try
         {
-            var root = Path.GetFullPath(cacheRoot ?? GetDefaultArtworkCachePath());
+            var root = Path.TrimEndingDirectorySeparator(Path.GetFullPath(cacheRoot ?? GetDefaultArtworkCachePath()));
             var directory = new DirectoryInfo(root);
             if (!directory.Exists || (directory.Attributes & FileAttributes.ReparsePoint) != 0)
             {
