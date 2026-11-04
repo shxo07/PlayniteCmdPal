@@ -174,15 +174,12 @@ public sealed class PlayniteCmdPalPlugin : GenericPlugin
 
     private async Task ExportAsync(CancellationToken cancellationToken)
     {
-        var ownsExportLock = false;
+        // FileShare.None ownership is tied to this open handle, so Windows releases it
+        // automatically if the producer process crashes. Unlike a named semaphore it is
+        // not session-local and it can safely span the awaits below.
+        using var exportLock = await AcquireExportLockAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            // A named semaphore is used instead of a Mutex because this method awaits.
-            // Semaphore permits may be released by the continuation thread after an await.
-            ownsExportLock = ArtworkExportSemaphore.WaitOne(TimeSpan.FromSeconds(30));
-
-            if (!ownsExportLock)
-                throw new IOException("Another PlayniteCmdPal artwork producer is still active.");
             if (!PlayniteApi.Database.IsOpen)
                 return;
 
@@ -225,6 +222,29 @@ public sealed class PlayniteCmdPalPlugin : GenericPlugin
         {
             if (ownsExportLock)
                 ArtworkExportSemaphore.Release();
+        }
+    }
+
+    private async Task<FileStream> AcquireExportLockAsync(CancellationToken cancellationToken)
+    {
+        var lockPath = _artworkCacheRoot + ".export.lock";
+        Directory.CreateDirectory(System.IO.Path.GetDirectoryName(lockPath)!);
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(30);
+        while (true)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            try
+            {
+                return new FileStream(lockPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+            }
+            catch (IOException) when (DateTime.UtcNow < deadline)
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(100), cancellationToken).ConfigureAwait(false);
+            }
+            catch (IOException ex)
+            {
+                throw new IOException("Another PlayniteCmdPal artwork producer still owns the export lock.", ex);
+            }
         }
     }
 
