@@ -41,8 +41,12 @@ public sealed class ArtworkExportLockTests
                 using var competing = new FileStream(lockPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
             });
 
-            owner.Kill(entireProcessTree: true);
+            // Kill only the lock-owning PowerShell process. Its file handle must be released
+            // by process termination before another process can acquire the exclusive lock.
+            owner.Kill();
             await owner.WaitForExitAsync();
+            owner.Dispose();
+            owner = null;
 
             using var recovered = new FileStream(lockPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
             Assert.True(recovered.CanWrite);
