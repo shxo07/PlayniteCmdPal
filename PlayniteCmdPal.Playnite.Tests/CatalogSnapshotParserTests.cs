@@ -207,5 +207,23 @@ public sealed class CatalogSnapshotParserTests
         Assert.Equal(0, result.SkippedRecordCount);
     }
 
+    [Theory]
+    [InlineData("\\uD800")]
+    [InlineData("\\uDC00")]
+    public void MalformedUnicodeArtworkIdentifierDoesNotDiscardGameOrSiblingArtwork(string invalidArtworkId)
+    {
+        const string validCover = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+        var json = "{\\"schemaVersion\\":2,\\"generatedAtUtc\\":\\"2026-10-30T00:00:00Z\\",\\"games\\":[{\\"id\\":\\""
+            + GameA + "\\",\\"name\\":\\"Halo\\",\\"isInstalled\\":true,\\"coverArtworkId\\":\\""
+            + validCover + "\\",\\"iconArtworkId\\":\\"" + invalidArtworkId + "\\"}]}";
+        var result = CatalogSnapshotParser.Parse(Json(json));
+
+        Assert.Null(result.Issue);
+        var game = Assert.Single(result.Snapshot!.Games);
+        Assert.Equal(validCover, game.CoverArtworkId);
+        Assert.Null(game.IconArtworkId);
+        Assert.Equal(0, result.SkippedRecordCount);
+    }
+
     private static byte[] Json(string value) => Encoding.UTF8.GetBytes(value);
 }
