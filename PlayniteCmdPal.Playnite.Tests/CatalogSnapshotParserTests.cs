@@ -213,9 +213,9 @@ public sealed class CatalogSnapshotParserTests
     public void MalformedUnicodeArtworkIdentifierDoesNotDiscardGameOrSiblingArtwork(string invalidArtworkId)
     {
         const string validCover = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
-        var json = "{\\"schemaVersion\\":2,\\"generatedAtUtc\\":\\"2026-10-30T00:00:00Z\\",\\"games\\":[{\\"id\\":\\""
-            + GameA + "\\",\\"name\\":\\"Halo\\",\\"isInstalled\\":true,\\"coverArtworkId\\":\\""
-            + validCover + "\\",\\"iconArtworkId\\":\\"" + invalidArtworkId + "\\"}]}";
+        var json = "{\"schemaVersion\":2,\"generatedAtUtc\":\"2026-10-30T00:00:00Z\",\"games\":[{\"id\":\""
+            + GameA + "\",\"name\":\"Halo\",\"isInstalled\":true,\"coverArtworkId\":\""
+            + validCover + "\",\"iconArtworkId\":\"" + invalidArtworkId + "\"}]}";
         var result = CatalogSnapshotParser.Parse(Json(json));
 
         Assert.Null(result.Issue);
