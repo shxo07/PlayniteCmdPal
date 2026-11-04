@@ -197,11 +197,18 @@ public sealed class ArtworkCacheGeneration : IDisposable
         if (_activated)
         {
             DeleteDirectoryOrThrow(_root);
-            if (!string.IsNullOrEmpty(_backup) && Directory.Exists(_backup)) Directory.Move(_backup, _root);
-            DeleteFileOrThrow(_marker);
+            if (!string.IsNullOrEmpty(_backup) && Directory.Exists(_backup))
+                Directory.Move(_backup, _root);
+
+            // Clear activation as soon as restoration is complete. If marker deletion
+            // fails, Dispose must not retry by deleting the restored previous generation.
             _activated = false;
+            DeleteFileOrThrow(_marker);
+            _completed = true;
+            return;
         }
-        else DeleteDirectoryOrThrow(_staging);
+
+        DeleteDirectoryOrThrow(_staging);
     }
 
     public void Dispose()
@@ -235,7 +242,10 @@ public sealed class ArtworkCacheGeneration : IDisposable
             var lines = File.ReadAllText(marker, Encoding.UTF8).Split(new[] { Environment.NewLine }, StringSplitOptions.None);
             if (lines.Length < 4) throw new InvalidDataException("The artwork cache transaction marker is incomplete.");
             var token = lines[3];
-            var published = lines[0] == "published" || HasPublishedSnapshot(snapshotPath, token);
+            var publicationState = lines[0] == "published"
+                ? SnapshotPublicationState.Published
+                : GetSnapshotPublicationState(snapshotPath, token);
+            var published = publicationState == SnapshotPublicationState.Published;
             var backup = lines[1];
             var hadPrevious = lines[2] == "1";
             if (!IsValidBackupPath(root, backup))
@@ -311,20 +321,45 @@ public sealed class ArtworkCacheGeneration : IDisposable
         }
     }
 
-    private static bool HasPublishedSnapshot(string? snapshotPath, string token)
+    private enum SnapshotPublicationState
     {
-        if (string.IsNullOrWhiteSpace(snapshotPath) || string.IsNullOrEmpty(token) || !File.Exists(snapshotPath)) return false;
+        NotPublished,
+        Published,
+    }
+
+    private static SnapshotPublicationState GetSnapshotPublicationState(string? snapshotPath, string token)
+    {
+        if (string.IsNullOrWhiteSpace(snapshotPath) || string.IsNullOrEmpty(token))
+            return SnapshotPublicationState.NotPublished;
+
         try
         {
-            var info = new FileInfo(snapshotPath);
-            if (info.Length > SnapshotLimits.MaxBytes) return false;
-            var json = File.ReadAllText(snapshotPath, Encoding.UTF8);
-            return json.StartsWith("{\"schemaVersion\":2,\"generatedAtUtc\":\"" + token + "\",\"games\":", StringComparison.Ordinal);
+            using var stream = new FileStream(
+                snapshotPath,
+                FileMode.Open,
+                FileAccess.Read,
+                FileShare.ReadWrite | FileShare.Delete);
+            if (stream.Length > SnapshotLimits.MaxBytes)
+                return SnapshotPublicationState.NotPublished;
+
+            using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+            var json = reader.ReadToEnd();
+            return json.StartsWith(
+                "{\\"schemaVersion\\":2,\\"generatedAtUtc\\":\\"" + token + "\\",\\"games\\":",
+                StringComparison.Ordinal)
+                ? SnapshotPublicationState.Published
+                : SnapshotPublicationState.NotPublished;
         }
-        catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is ArgumentException)
+        catch (FileNotFoundException)
         {
-            return false;
+            return SnapshotPublicationState.NotPublished;
         }
+        catch (DirectoryNotFoundException)
+        {
+            return SnapshotPublicationState.NotPublished;
+        }
+        // Sharing, access, and other IO failures intentionally propagate. Recovery must
+        // retain both generations and the marker when publication evidence is unreadable.
     }
 
     private static bool TryDetectFormat(byte[] data, out string extension) =>
