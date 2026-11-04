@@ -21,7 +21,7 @@ public sealed class PlayniteCmdPalPlugin : GenericPlugin
     private static readonly TimeSpan Debounce = TimeSpan.FromMilliseconds(750);
     private static readonly TimeSpan ArtworkRevalidationInterval = TimeSpan.FromMinutes(30);
     private static readonly ILogger Logger = LogManager.GetLogger();
-    private static readonly Mutex ArtworkExportMutex = new Mutex(false, @"Local\PlayniteCmdPal.ArtworkExport");
+    private static readonly Semaphore ArtworkExportSemaphore = new Semaphore(1, 1, @"Local\PlayniteCmdPal.ArtworkExport");
     private readonly CatalogExportCoordinator _coordinator;
     private readonly Dispatcher _dispatcher;
     private readonly string _snapshotPath;
@@ -177,16 +177,9 @@ public sealed class PlayniteCmdPalPlugin : GenericPlugin
         var ownsExportLock = false;
         try
         {
-            try
-            {
-                ownsExportLock = ArtworkExportMutex.WaitOne(TimeSpan.FromSeconds(30));
-            }
-            catch (AbandonedMutexException)
-            {
-                // The previous producer exited unexpectedly; this process now owns the mutex
-                // and may perform transaction recovery before starting another generation.
-                ownsExportLock = true;
-            }
+            // A named semaphore is used instead of a Mutex because this method awaits.
+            // Semaphore permits may be released by the continuation thread after an await.
+            ownsExportLock = ArtworkExportSemaphore.WaitOne(TimeSpan.FromSeconds(30));
 
             if (!ownsExportLock)
                 throw new IOException("Another PlayniteCmdPal artwork producer is still active.");
@@ -230,7 +223,7 @@ public sealed class PlayniteCmdPalPlugin : GenericPlugin
         finally
         {
             if (ownsExportLock)
-                ArtworkExportMutex.ReleaseMutex();
+                ArtworkExportSemaphore.Release();
         }
     }
 
