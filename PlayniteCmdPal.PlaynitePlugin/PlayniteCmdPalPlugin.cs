@@ -207,6 +207,7 @@ public sealed class PlayniteCmdPalPlugin : GenericPlugin
                         snapshot.Games.Select(g => new SnapshotGame(g.Id, g.Name, g.IsInstalled, g.Source, g.Platform)).ToArray(),
                         SnapshotLimits.SchemaVersion);
                     await SnapshotFilePublisher.PublishAsync(_snapshotPath, withoutArtwork, cancellationToken).ConfigureAwait(false);
+                    snapshotPublished = true;
                     artwork.ClearActiveCache();
                 }
 
