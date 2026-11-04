@@ -71,7 +71,7 @@ The plugin publishes the new schema to catalog-v2.json. The adapter checks the v
 | No cover/icon reference | Null identifier; game remains in catalog |
 | Non-GUID reference, raw path, or URL | Rejected; no filesystem access |
 | Database reference cannot be resolved | Null identifier |
-| Missing, unreadable, empty, oversized, truncated, or unsupported image | Null identifier; export continues |
+| Missing, unreadable, empty, oversized, or signature-invalid/unsupported image | Null identifier; export continues |
 | Cache limit reached | Null identifier; export continues |
 | Malformed snapshot artwork identifier | Only that optional artwork field is nulled; valid game metadata and the other artwork field are retained |
 | Traversal or rooted identifier | Rejected before path resolution |
@@ -90,7 +90,7 @@ The plugin publishes the new schema to catalog-v2.json. The adapter checks the v
 - Cleanup preserves every asset referenced by the currently published snapshot and removes orphaned assets only after successful publication.
 - v1 fixtures remain readable with null artwork; v2 valid and invalid artwork fields are covered, including explicit v1 fallback only when v2 is missing.
 - Real Playnite reference grammar is covered: game GUID plus file GUID/extension; raw paths, URLs, traversal, mismatched game IDs, and unsupported extensions are rejected before SDK resolution.
-- Supported image signatures and truncated/unknown containers are covered; cache path resolution accepts only digest identifiers and fixed extensions.
+- Supported image signatures and signature-invalid/unknown containers are covered; cache path resolution accepts only digest identifiers and fixed extensions. The transport does not guarantee detection of every structurally truncated image when its outer signature markers remain valid; decoder-level validation belongs to WERD-80.
 - A malformed or unsupported v2 file does not trigger silent v1 fallback.
 - Missing artwork never makes a valid catalog unavailable.
 
