@@ -390,7 +390,7 @@ public sealed class ArtworkCacheGenerationTests : IDisposable
     }
 
     private string GetStagingDirectory() => Directory.GetDirectories(Path.GetDirectoryName(_cacheRoot)!, "artwork-v2.staging-*").Single();
-    private static string Reference(string fileId) => GameId + "\" + fileId + ".jpg";
+    private static string Reference(string fileId) => GameId + "\\" + fileId + ".jpg";
     private static string Digest(byte[] bytes)
     {
         using var sha = SHA256.Create();
