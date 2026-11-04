@@ -271,6 +271,48 @@ public sealed class ArtworkCacheGenerationTests : IDisposable
     }
 
     [Fact]
+    public void MetadataOnlyFallbackCleanupFailurePreservesPublishedGenerationForRecovery()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+
+        const string token = "2026-11-04T12:00:00.0000000Z";
+        var bytes = new byte[] { 0xFF, 0xD8, 0xFF, 0xD9 };
+        var source = WriteSource(FileIdA, bytes);
+        var snapshotPath = Path.Combine(_directory, "catalog-v2.json");
+        var cache = new ArtworkCacheGeneration(_cacheRoot, snapshotPath: snapshotPath);
+        var artworkId = cache.TryImport(GameId, Reference(FileIdA), source, _filesRoot);
+        Assert.NotNull(artworkId);
+        cache.Activate(token);
+
+        // This metadata-only fallback snapshot contains no artwork identifiers.
+        File.WriteAllText(snapshotPath,
+            "{\"schemaVersion\":2,\"generatedAtUtc\":\"" + token + "\",\"games\":[{\"id\":\"" + GameId + "\",\"name\":\"Game\"}]}");
+
+        var activeArtwork = Path.Combine(_cacheRoot, artworkId + ".jpg");
+        using (new FileStream(activeArtwork, FileMode.Open, FileAccess.Read, FileShare.Read))
+        {
+            var snapshotPublished = true;
+            try
+            {
+                cache.ClearActiveCache();
+            }
+            catch
+            {
+                if (snapshotPublished) cache.PreserveForRecovery();
+                else cache.Rollback();
+            }
+
+            Assert.True(File.Exists(_cacheRoot + ".transaction"));
+            Assert.True(File.Exists(activeArtwork));
+        }
+
+        cache.Dispose();
+        using (var recovery = new ArtworkCacheGeneration(_cacheRoot, snapshotPath: snapshotPath)) { }
+        Assert.False(File.Exists(_cacheRoot + ".transaction"));
+        Assert.True(Directory.Exists(_cacheRoot));
+    }
+
+    [Fact]
     public void OrphanedBackupCleanupFailureIsSurfacedAndBlocksNewGeneration()
     {
         var parent = Path.GetDirectoryName(_cacheRoot)!;
