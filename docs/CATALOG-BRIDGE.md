@@ -1,4 +1,6 @@
-# Playnite Catalog Bridge\n\n> Artwork transport and the schema v2 trust boundary are specified in [Artwork transport](ARTWORK-TRANSPORT.md). The v1 contract below remains unchanged for existing catalogs.
+# Playnite Catalog Bridge
+
+> Artwork transport and the schema v2 trust boundary are specified in [Artwork transport](ARTWORK-TRANSPORT.md). The v1 contract below remains unchanged for existing catalogs.
 
 This document describes the catalog snapshot transport accepted in [ADR-005](DECISIONS.md#adr-005-companion-plugin-json-snapshot-for-catalog-access). It does not change the Command Palette search UI; the presentation layer consumes `IReadOnlyPlayniteCatalog`.
 
