@@ -182,6 +182,30 @@ public sealed class ArtworkCacheGenerationTests : IDisposable
     }
 
     [Fact]
+    public void OrphanedBackupCleanupFailureIsSurfacedAndBlocksNewGeneration()
+    {
+        var parent = Path.GetDirectoryName(_cacheRoot)!;
+        Directory.CreateDirectory(parent);
+        Directory.CreateDirectory(_cacheRoot);
+        var orphanedBackup = _cacheRoot + ".backup-" + Guid.NewGuid().ToString("N");
+        Directory.CreateDirectory(orphanedBackup);
+        var lockedFile = Path.Combine(orphanedBackup, "locked.bin");
+        File.WriteAllBytes(lockedFile, new byte[] { 1, 2, 3 });
+
+        if (OperatingSystem.IsWindows())
+        {
+            using (new FileStream(lockedFile, FileMode.Open, FileAccess.Read, FileShare.Read))
+            {
+                Assert.Throws<IOException>(() => new ArtworkCacheGeneration(_cacheRoot));
+                Assert.True(Directory.Exists(orphanedBackup));
+            }
+        }
+
+        using (var recovery = new ArtworkCacheGeneration(_cacheRoot)) { }
+        Assert.False(Directory.Exists(orphanedBackup));
+    }
+
+    [Fact]
     public void StartupRecoveryRestoresPreviousCacheAfterInterruptedSwap()
     {
         var oldBytes = new byte[] { 0xFF, 0xD8, 0xFF, 0xD9 };
