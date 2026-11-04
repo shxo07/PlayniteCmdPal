@@ -28,9 +28,10 @@ public sealed class ArtworkExportLockTests
             CreateNoWindow = true,
         };
 
+        Process? owner = null;
         try
         {
-            using var owner = Process.Start(startInfo);
+            owner = Process.Start(startInfo);
             Assert.NotNull(owner);
             var ready = await owner!.StandardOutput.ReadLineAsync().WaitAsync(TimeSpan.FromSeconds(15));
             Assert.Equal("LOCKED", ready);
@@ -48,6 +49,17 @@ public sealed class ArtworkExportLockTests
         }
         finally
         {
+            if (owner is not null)
+            {
+                try
+                {
+                    if (!owner.HasExited)
+                        owner.Kill(entireProcessTree: true);
+                    owner.Dispose();
+                }
+                catch (InvalidOperationException) { }
+            }
+
             try { Directory.Delete(directory, recursive: true); }
             catch (IOException) { }
             catch (UnauthorizedAccessException) { }
