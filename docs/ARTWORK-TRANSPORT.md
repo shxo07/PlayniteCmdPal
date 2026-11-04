@@ -24,7 +24,7 @@ Evidence for the API surface used by the producer:
 - [PlayniteSDK 6.18.0 package](https://www.nuget.org/packages/PlayniteSDK/6.18.0) — exact package version and net462 target.
 - [IGameDatabaseAPI reference](https://api.playnite.link/docs/api/Playnite.SDK.IGameDatabaseAPI.html) — documents `DatabasePath` and `GetFullFilePath(string)`.
 - [Playnite library extension tutorial: Handling Files](https://api.playnite.link/docs/tutorials/extensions/library.html) — documents that game-related images are database-managed and demonstrates resolving `Game.CoverImage` with `GetFullFilePath`.
-- [Game model source](https://github.com/JosefNemec/Playnite/blob/master/source/PlayniteSDK/Models/Game.cs) — documents `Icon` and `CoverImage` as strings that may contain local paths, HTTP URLs, or database file IDs.
+- The producer compile contract is pinned to the immutable `PlayniteSDK` 6.18.0 NuGet package above. Its version-specific reference assembly is the compile-time API evidence; the moving GitHub `master` source is intentionally not used as release evidence.
 
 The public API documentation does **not** formally guarantee the exact serialized database-reference grammar. The accepted `<game-guid>\\<file-guid>.<extension>` shape is therefore a deliberately narrow, fail-closed producer policy validated against the SDK-backed database layout; it is not presented as a general promise that all possible SDK reference forms are accepted. If a supported Playnite release changes that layout, the bridge omits artwork until the policy and tests are updated. The plugin must continue to use the documented SDK resolver rather than parsing Playnite's private database files.
 
@@ -56,6 +56,28 @@ If an export fails or is canceled, the previous catalog remains in place and cle
 
 The adapter never deletes cache files. It resolves identifiers only beneath the fixed cache root or a matching bridge-generated backup directory, rejects reparse-point directories/files, and rechecks file size, signature, extension, and SHA-256 before returning a local path. The returned path is a short-lived locator, not a durable lease: after a successful generation replacement, a path held by an older reader may disappear. Consumers must treat a missing/unreadable path as missing artwork and re-resolve against the latest snapshot; bounded reader leases are not provided.
 
+## Concrete v2 snapshot example
+
+The producer writes `%LOCALAPPDATA%\PlayniteCmdPal\catalog-v2.json`. Artwork identifiers are optional lowercase SHA-256 digests; no source paths or Playnite references appear in the file.
+
+```json
+{
+  "schemaVersion": 2,
+  "generatedAtUtc": "2026-11-04T05:34:25.6650676Z",
+  "games": [
+    {
+      "id": "11111111-1111-4111-8111-111111111111",
+      "name": "Example",
+      "isInstalled": true,
+      "source": "Steam",
+      "platform": "PC",
+      "coverArtworkId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "iconArtworkId": null
+    }
+  ]
+}
+```
+
 ## Snapshot schema migration
 
 Schema v1 remains immutable: its envelope and game allowlist remain exactly as defined in ADR-005. The parser continues to accept valid v1 snapshots, mapping artwork fields to null.
@@ -63,6 +85,17 @@ Schema v1 remains immutable: its envelope and game allowlist remain exactly as d
 Schema v2 adds two optional per-game strings: coverArtworkId and iconArtworkId. Each is either null/absent or a valid lowercase SHA-256 identifier. No other v1 or v2 fields are accepted. The v2 writer emits schemaVersion: 2; the parser explicitly dispatches v1 and v2 rather than interpreting v1 as v2. Unknown schema versions return the existing clear unsupported-schema error.
 
 The plugin publishes the new schema to catalog-v2.json. The adapter checks the v2 location first and falls back to the existing catalog-v1.json only when the v2 file is absent. A malformed or unsupported v2 file is not silently hidden by falling back to stale v1 data. A valid v1 file remains readable during rollout. Downgrade policy: an older producer that writes only v1 must explicitly remove/retire the v2 snapshot it previously owned before v1 fallback is expected; the reader will not infer a downgrade from timestamps or silently ignore a surviving v2 file. If the v2 file remains, it remains authoritative until removed by the owner/admin or a later v2 producer replaces it. If artwork references alone make the v2 snapshot exceed the 32 MiB snapshot limit, the plugin retries publication once with the same game data and no artwork references; if that still exceeds the limit, publication fails and the previous snapshot/cache remain available.
+
+## Producer/consumer compatibility and rollout
+
+| Producer | Consumer | Expected behavior |
+| --- | --- | --- |
+| v1 producer | v1-capable consumer | Reads the v1 snapshot; no artwork transport |
+| v2 producer | v2-capable consumer | Reads v2 and resolves opaque artwork IDs |
+| v2 producer | old v1-only consumer | Reads only a retained v1 file, if one exists; it cannot see v2 artwork or v2-only catalog updates |
+| v1 producer after v2 | v2-capable consumer | The v2 snapshot remains authoritative while it exists; the older producer must explicitly retire it before v1 fallback is used |
+
+**Upgrade order:** deploy the v2-capable consumer first, while it can still read v1; then install/enable the v2 producer. Keep the v1 file during the compatibility window. Do not assume an older consumer understands the v2 filename or artwork identifiers.
 
 ## Failure behavior
 
