@@ -279,8 +279,20 @@ public static class CatalogSnapshotParser
         return true;
     }
 
-    private static bool TryReadOptionalArtworkId(JsonElement element, ref string? value) =>
-        TryReadOptionalString(element, ref value) && SnapshotValidation.IsArtworkIdOrNull(value);
+    private static bool TryReadOptionalArtworkId(JsonElement element, ref string? value)
+    {
+        try
+        {
+            return TryReadOptionalString(element, ref value) && SnapshotValidation.IsArtworkIdOrNull(value);
+        }
+        catch (InvalidOperationException)
+        {
+            // JsonElement.GetString can reject malformed UTF-16 surrogate sequences.
+            // Optional artwork is non-critical metadata, so discard only this field.
+            value = null;
+            return false;
+        }
+    }
 
     private static bool TryGetProperty(JsonElement element, string name, out JsonElement value)
     {
