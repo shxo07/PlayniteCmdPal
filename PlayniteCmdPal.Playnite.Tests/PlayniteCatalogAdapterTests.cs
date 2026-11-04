@@ -306,6 +306,7 @@ public sealed class PlayniteCatalogAdapterTests : IDisposable
         File.WriteAllBytes(image, bytes);
 
         Assert.Equal(image, PlayniteCatalogAdapter.ResolveArtworkPath(digest, cache));
+        Assert.Equal(image, PlayniteCatalogAdapter.ResolveArtworkPath(digest, cache + Path.DirectorySeparatorChar));
         Assert.Null(PlayniteCatalogAdapter.ResolveArtworkPath("../" + digest, cache));
         Assert.Null(PlayniteCatalogAdapter.ResolveArtworkPath(null, cache));
         File.WriteAllBytes(image, new byte[] { 1, 2, 3 });
@@ -327,6 +328,7 @@ public sealed class PlayniteCatalogAdapterTests : IDisposable
         File.WriteAllBytes(image, bytes);
 
         Assert.Equal(image, PlayniteCatalogAdapter.ResolveArtworkPath(digest, cacheRoot));
+        Assert.Equal(image, PlayniteCatalogAdapter.ResolveArtworkPath(digest, cacheRoot + Path.DirectorySeparatorChar));
     }
 
     private CatalogSnapshot NewSnapshot(params (string Name, bool Installed, string? Source, string? Platform)[] games) =>
