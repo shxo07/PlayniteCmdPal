@@ -178,17 +178,20 @@ public sealed class PlayniteCmdPalPlugin : GenericPlugin
         // automatically if the producer process crashes. Unlike a named semaphore it is
         // not session-local and it can safely span the awaits below.
         using var exportLock = await AcquireExportLockAsync(cancellationToken).ConfigureAwait(false);
-        try
-        {
-            if (!PlayniteApi.Database.IsOpen)
-                return;
+        if (!PlayniteApi.Database.IsOpen)
+            return;
 
-            // Playnite's database objects are affinity-sensitive. Project on its dispatcher,
+        // Playnite's database objects are affinity-sensitive. Project on its dispatcher,
         // then serialize/flush/replace the file on a background thread.
         using (var artwork = new ArtworkCacheGeneration(_artworkCacheRoot, snapshotPath: _snapshotPath))
         {
-            var projection = await _dispatcher.InvokeAsync(() => CreateProjection(cancellationToken), DispatcherPriority.Background, cancellationToken).Task.ConfigureAwait(false);
-            var snapshot = await Task.Run(() => CreateSnapshot(projection, artwork, cancellationToken), cancellationToken).ConfigureAwait(false);
+            var projection = await _dispatcher.InvokeAsync(
+                () => CreateProjection(cancellationToken),
+                DispatcherPriority.Background,
+                cancellationToken).Task.ConfigureAwait(false);
+            var snapshot = await Task.Run(
+                () => CreateSnapshot(projection, artwork, cancellationToken),
+                cancellationToken).ConfigureAwait(false);
             artwork.Activate(snapshot.GeneratedAtUtc.UtcDateTime.ToString("O", CultureInfo.InvariantCulture));
             var snapshotPublished = false;
             try
@@ -199,7 +202,8 @@ public sealed class PlayniteCmdPalPlugin : GenericPlugin
                 }
                 catch (InvalidDataException)
                 {
-                    var withoutArtwork = new CatalogSnapshot(snapshot.GeneratedAtUtc,
+                    var withoutArtwork = new CatalogSnapshot(
+                        snapshot.GeneratedAtUtc,
                         snapshot.Games.Select(g => new SnapshotGame(g.Id, g.Name, g.IsInstalled, g.Source, g.Platform)).ToArray(),
                         SnapshotLimits.SchemaVersion);
                     await SnapshotFilePublisher.PublishAsync(_snapshotPath, withoutArtwork, cancellationToken).ConfigureAwait(false);
@@ -216,12 +220,6 @@ public sealed class PlayniteCmdPalPlugin : GenericPlugin
                 else artwork.Rollback();
                 throw;
             }
-            }
-        }
-        finally
-        {
-            if (ownsExportLock)
-                ArtworkExportSemaphore.Release();
         }
     }
 
