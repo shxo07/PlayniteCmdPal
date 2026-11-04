@@ -221,7 +221,7 @@ public sealed class ArtworkCacheGenerationTests : IDisposable
         var transaction = new ArtworkCacheGeneration(_cacheRoot, snapshotPath: snapshotPath);
         transaction.TryImport(GameId, Reference(FileIdB), newSource, _filesRoot);
         transaction.Activate(token);
-        File.WriteAllText(snapshotPath, "{\\"schemaVersion\\":2,\\"generatedAtUtc\\":\\"" + token + "\\",\\"games\\":[]}");
+        File.WriteAllText(snapshotPath, "{\"schemaVersion\":2,\"generatedAtUtc\":\"" + token + "\",\"games\":[]}");
 
         using (new FileStream(snapshotPath, FileMode.Open, FileAccess.Read, FileShare.None))
         {
@@ -390,7 +390,7 @@ public sealed class ArtworkCacheGenerationTests : IDisposable
     }
 
     private string GetStagingDirectory() => Directory.GetDirectories(Path.GetDirectoryName(_cacheRoot)!, "artwork-v2.staging-*").Single();
-    private static string Reference(string fileId) => GameId + "\\" + fileId + ".jpg";
+    private static string Reference(string fileId) => GameId + "\" + fileId + ".jpg";
     private static string Digest(byte[] bytes)
     {
         using var sha = SHA256.Create();
