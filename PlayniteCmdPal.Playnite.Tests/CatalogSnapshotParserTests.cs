@@ -198,7 +198,7 @@ public sealed class CatalogSnapshotParserTests
     public void KeepsValidGameAndNullsOnlyUnsafeArtworkIdentifier(string artworkId)
     {
         const string validCover = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
-        var json = $"""{"schemaVersion":2,"generatedAtUtc":"2026-10-30T00:00:00Z","games":[{"id":"{{GameA}}","name":"Halo","isInstalled":true,"coverArtworkId":"{{validCover}}","iconArtworkId":"{{artworkId}}"}]}""";
+        var json = $$"""{"schemaVersion":2,"generatedAtUtc":"2026-10-30T00:00:00Z","games":[{"id":"{{GameA}}","name":"Halo","isInstalled":true,"coverArtworkId":"{{validCover}}","iconArtworkId":"{{artworkId}}"}]}""";
         var result = CatalogSnapshotParser.Parse(Json(json));
         Assert.Null(result.Issue);
         var game = Assert.Single(result.Snapshot!.Games);
