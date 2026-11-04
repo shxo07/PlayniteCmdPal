@@ -227,7 +227,7 @@ public sealed class ArtworkCacheGeneration : IDisposable
             }
 
             foreach (var orphanedBackup in Directory.GetDirectories(parent, Path.GetFileName(root) + ".backup-*"))
-                TryDeleteDirectory(orphanedBackup);
+                DeleteDirectoryOrThrow(orphanedBackup);
             return;
         }
         try
@@ -346,11 +346,6 @@ public sealed class ArtworkCacheGeneration : IDisposable
             throw new IOException("The artwork file could not be removed: " + path);
     }
 
-    private static void TryDeleteDirectory(string? path)
-    {
-        try { DeleteDirectoryOrThrow(path); }
-        catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException) { }
-    }
 
     private static void TryDeleteFile(string path)
     {
