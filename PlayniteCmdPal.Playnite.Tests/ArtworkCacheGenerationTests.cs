@@ -149,6 +149,70 @@ public sealed class ArtworkCacheGenerationTests : IDisposable
     }
 
     [Fact]
+    public void MarkerDeletionFailureAfterRollbackCannotDeleteRestoredPreviousCache()
+    {
+        var oldBytes = new byte[] { 0xFF, 0xD8, 0xFF, 0xD9 };
+        var newBytes = new byte[] { 0xFF, 0xD8, 0x06, 0xFF, 0xD9 };
+        var oldSource = WriteSource(FileIdA, oldBytes);
+        var newSource = WriteSource(FileIdB, newBytes);
+        using (var initial = new ArtworkCacheGeneration(_cacheRoot))
+        {
+            initial.TryImport(GameId, Reference(FileIdA), oldSource, _filesRoot);
+            initial.Activate(); initial.MarkPublished(); initial.Complete();
+        }
+
+        var transaction = new ArtworkCacheGeneration(_cacheRoot);
+        transaction.TryImport(GameId, Reference(FileIdB), newSource, _filesRoot);
+        transaction.Activate();
+        var marker = _cacheRoot + ".transaction";
+        using (new FileStream(marker, FileMode.Open, FileAccess.Read, FileShare.None))
+        {
+            Assert.Throws<IOException>(() => transaction.Rollback());
+            Assert.True(File.Exists(Path.Combine(_cacheRoot, Digest(oldBytes) + ".jpg")));
+            transaction.Dispose();
+            Assert.True(File.Exists(Path.Combine(_cacheRoot, Digest(oldBytes) + ".jpg")));
+        }
+
+        using (var recovery = new ArtworkCacheGeneration(_cacheRoot)) { }
+        Assert.True(File.Exists(Path.Combine(_cacheRoot, Digest(oldBytes) + ".jpg")));
+        Assert.False(File.Exists(Path.Combine(_cacheRoot, Digest(newBytes) + ".jpg")));
+    }
+
+    [Fact]
+    public void RecoveryDefersWhenPublishedSnapshotEvidenceIsExclusivelyLocked()
+    {
+        var oldBytes = new byte[] { 0xFF, 0xD8, 0xFF, 0xD9 };
+        var newBytes = new byte[] { 0xFF, 0xD8, 0x07, 0xFF, 0xD9 };
+        var oldSource = WriteSource(FileIdA, oldBytes);
+        var newSource = WriteSource(FileIdB, newBytes);
+        using (var initial = new ArtworkCacheGeneration(_cacheRoot))
+        {
+            initial.TryImport(GameId, Reference(FileIdA), oldSource, _filesRoot);
+            initial.Activate(); initial.MarkPublished(); initial.Complete();
+        }
+
+        const string token = "2026-11-04T05:34:25.0000000Z";
+        var snapshotPath = Path.Combine(_directory, "catalog-v2.json");
+        var transaction = new ArtworkCacheGeneration(_cacheRoot, snapshotPath: snapshotPath);
+        transaction.TryImport(GameId, Reference(FileIdB), newSource, _filesRoot);
+        transaction.Activate(token);
+        File.WriteAllText(snapshotPath, "{\\"schemaVersion\\":2,\\"generatedAtUtc\\":\\"" + token + "\\",\\"games\\":[]}");
+
+        using (new FileStream(snapshotPath, FileMode.Open, FileAccess.Read, FileShare.None))
+        {
+            Assert.Throws<IOException>(() => new ArtworkCacheGeneration(_cacheRoot, snapshotPath: snapshotPath));
+            Assert.True(File.Exists(_cacheRoot + ".transaction"));
+            Assert.True(File.Exists(Path.Combine(_cacheRoot, Digest(newBytes) + ".jpg")));
+            Assert.True(Directory.GetDirectories(Path.GetDirectoryName(_cacheRoot)!, "artwork-v2.backup-*").Length == 1);
+        }
+
+        using (var recovery = new ArtworkCacheGeneration(_cacheRoot, snapshotPath: snapshotPath)) { }
+        Assert.True(File.Exists(Path.Combine(_cacheRoot, Digest(newBytes) + ".jpg")));
+        Assert.False(File.Exists(Path.Combine(_cacheRoot, Digest(oldBytes) + ".jpg")));
+        Assert.False(File.Exists(_cacheRoot + ".transaction"));
+    }
+
+    [Fact]
     public void CleanupFailureKeepsPublishedTransactionMarkerForRecovery()
     {
         if (!OperatingSystem.IsWindows()) return;
