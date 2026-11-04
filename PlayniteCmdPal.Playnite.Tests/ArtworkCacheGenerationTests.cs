@@ -102,6 +102,31 @@ public sealed class ArtworkCacheGenerationTests : IDisposable
     }
 
     [Fact]
+    public void RevalidationDetectsChangedBytesBehindAnUnchangedPlayniteReference()
+    {
+        var originalBytes = new byte[] { 0xFF, 0xD8, 0xFF, 0xD9 };
+        var updatedBytes = new byte[] { 0xFF, 0xD8, 0x08, 0xFF, 0xD9 };
+        var source = WriteSource(FileIdA, originalBytes);
+        string? originalId;
+        using (var first = new ArtworkCacheGeneration(_cacheRoot))
+        {
+            originalId = first.TryImport(GameId, Reference(FileIdA), source, _filesRoot);
+            first.Activate(); first.MarkPublished(); first.Complete();
+        }
+
+        File.WriteAllBytes(source, updatedBytes);
+        using (var second = new ArtworkCacheGeneration(_cacheRoot))
+        {
+            var updatedId = second.TryImport(GameId, Reference(FileIdA), source, _filesRoot);
+            Assert.NotEqual(originalId, updatedId);
+            second.Activate(); second.MarkPublished(); second.Complete();
+        }
+
+        Assert.False(File.Exists(Path.Combine(_cacheRoot, originalId + ".jpg")));
+        Assert.True(File.Exists(Path.Combine(_cacheRoot, Digest(updatedBytes) + ".jpg")));
+    }
+
+    [Fact]
     public void ReplacesTheWholeCacheGenerationAfterSuccessfulPublication()
     {
         var firstBytes = new byte[] { 0xFF, 0xD8, 0xFF, 0xD9 };
