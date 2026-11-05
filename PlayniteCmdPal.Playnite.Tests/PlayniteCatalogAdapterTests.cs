@@ -282,6 +282,18 @@ public sealed class PlayniteCatalogAdapterTests : IDisposable
     }
 
     [Fact]
+    public void CatalogVerifierArtworkValidationAcceptsNullOrCanonicalSha256Ids()
+    {
+        const string validDigest = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+
+        Assert.True(SnapshotValidation.IsArtworkIdOrNull(null));
+        Assert.True(SnapshotValidation.IsArtworkIdOrNull(validDigest));
+        Assert.False(SnapshotValidation.IsArtworkIdOrNull(validDigest.ToUpperInvariant()));
+        Assert.False(SnapshotValidation.IsArtworkIdOrNull(validDigest.Substring(1)));
+        Assert.False(SnapshotValidation.IsArtworkIdOrNull(new string('g', 64)));
+    }
+
+    [Fact]
     public async Task V2ArtworkIdentifierMapsToTheCoreIconReference()
     {
         const string digest = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
