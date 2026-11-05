@@ -90,6 +90,54 @@ public sealed class ArtworkCacheGenerationTests : IDisposable
     }
 
     [Fact]
+    public void RejectsReparsePointArtworkSource()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+
+        var external = Path.Combine(_directory, "external.jpg");
+        File.WriteAllBytes(external, new byte[] { 0xFF, 0xD8, 0xFF, 0xD9 });
+        var link = Path.Combine(_filesRoot, GameId, FileIdA + ".jpg");
+        try { File.CreateSymbolicLink(link, external); }
+        catch (Exception exception) when (exception is UnauthorizedAccessException or IOException or PlatformNotSupportedException) { return; }
+
+        using var cache = new ArtworkCacheGeneration(_cacheRoot);
+        Assert.Null(cache.TryImport(GameId, Reference(FileIdA), link, _filesRoot));
+        Assert.Empty(Directory.GetFiles(GetStagingDirectory()));
+    }
+
+    [Fact]
+    public void RejectsReparsePointGameDirectory()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+
+        var externalGameDirectory = Path.Combine(_directory, "external-game");
+        Directory.CreateDirectory(externalGameDirectory);
+        File.WriteAllBytes(Path.Combine(externalGameDirectory, FileIdA + ".jpg"), new byte[] { 0xFF, 0xD8, 0xFF, 0xD9 });
+        var gameDirectory = Path.Combine(_filesRoot, GameId);
+        Directory.Delete(gameDirectory);
+        try { Directory.CreateSymbolicLink(gameDirectory, externalGameDirectory); }
+        catch (Exception exception) when (exception is UnauthorizedAccessException or IOException or PlatformNotSupportedException) { return; }
+
+        using var cache = new ArtworkCacheGeneration(_cacheRoot);
+        Assert.Null(cache.TryImport(GameId, Reference(FileIdA), Path.Combine(gameDirectory, FileIdA + ".jpg"), _filesRoot));
+        Assert.Empty(Directory.GetFiles(GetStagingDirectory()));
+    }
+
+    [Fact]
+    public void RejectsReparsePointCacheRootDuringActivation()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+
+        var externalCache = Path.Combine(_directory, "external-cache");
+        Directory.CreateDirectory(externalCache);
+        try { Directory.CreateSymbolicLink(_cacheRoot, externalCache); }
+        catch (Exception exception) when (exception is UnauthorizedAccessException or IOException or PlatformNotSupportedException) { return; }
+
+        using var cache = new ArtworkCacheGeneration(_cacheRoot);
+        Assert.Throws<InvalidDataException>(() => cache.Activate());
+    }
+
+    [Fact]
     public void EnforcesTheCacheLimitWhileImporting()
     {
         var firstBytes = new byte[] { 0xFF, 0xD8, 0xFF, 0xD9 };
