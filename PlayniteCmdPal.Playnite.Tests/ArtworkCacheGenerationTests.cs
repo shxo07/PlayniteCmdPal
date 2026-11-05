@@ -344,7 +344,7 @@ public sealed class ArtworkCacheGenerationTests : IDisposable
     }
 
     [Fact]
-    public void MetadataOnlyFallbackCleanupFailurePreservesPublishedGenerationForRecovery()
+    public async Task MetadataOnlyFallbackPublicationCleanupFailurePreservesGenerationForRecovery()
     {
         if (!OperatingSystem.IsWindows()) return;
 
@@ -357,16 +357,20 @@ public sealed class ArtworkCacheGenerationTests : IDisposable
         Assert.NotNull(artworkId);
         cache.Activate(token);
 
-        // This metadata-only fallback snapshot contains no artwork identifiers.
-        File.WriteAllText(snapshotPath,
-            "{\"schemaVersion\":2,\"generatedAtUtc\":\"" + token + "\",\"games\":[{\"id\":\"" + GameId + "\",\"name\":\"Game\"}]}");
-
         var activeArtwork = Path.Combine(_cacheRoot, artworkId + ".jpg");
         using (new FileStream(activeArtwork, FileMode.Open, FileAccess.Read, FileShare.Read))
         {
-            var snapshotPublished = true;
+            var snapshotPublished = false;
             try
             {
+                // Exercise the production atomic snapshot publisher with a metadata-only
+                // fallback: the published catalog intentionally contains no artwork IDs.
+                await SnapshotFilePublisher.PublishAsync(snapshotPath,
+                    new CatalogSnapshot(
+                        DateTimeOffset.Parse(token, null, System.Globalization.DateTimeStyles.RoundtripKind),
+                        new[] { new SnapshotGame(GameId, "Game", true) },
+                        SnapshotLimits.SchemaVersion));
+                snapshotPublished = true;
                 cache.ClearActiveCache();
             }
             catch
@@ -375,6 +379,7 @@ public sealed class ArtworkCacheGenerationTests : IDisposable
                 else cache.Rollback();
             }
 
+            Assert.True(snapshotPublished);
             Assert.True(File.Exists(_cacheRoot + ".transaction"));
             Assert.True(File.Exists(activeArtwork));
         }
@@ -383,6 +388,7 @@ public sealed class ArtworkCacheGenerationTests : IDisposable
         using (var recovery = new ArtworkCacheGeneration(_cacheRoot, snapshotPath: snapshotPath)) { }
         Assert.False(File.Exists(_cacheRoot + ".transaction"));
         Assert.True(Directory.Exists(_cacheRoot));
+        Assert.True(File.Exists(activeArtwork));
     }
 
     [Fact]
