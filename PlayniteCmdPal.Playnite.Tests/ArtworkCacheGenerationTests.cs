@@ -102,6 +102,31 @@ public sealed class ArtworkCacheGenerationTests : IDisposable
     }
 
     [Fact]
+    public void UnresolvedTemporaryFileCleanupStopsAllSubsequentImports()
+    {
+        var firstBytes = new byte[] { 0xFF, 0xD8, 0xFF, 0xD9 };
+        var secondBytes = new byte[] { 0xFF, 0xD8, 0x09, 0xFF, 0xD9 };
+        var firstSource = WriteSource(FileIdA, firstBytes);
+        var secondSource = WriteSource(FileIdB, secondBytes);
+        using var cache = new ArtworkCacheGeneration(
+            _cacheRoot,
+            SnapshotLimits.MaxArtworkCacheBytes,
+            SnapshotLimits.MaxArtworkBytes,
+            null,
+            (_, _) => throw new IOException("Injected move failure."),
+            _ => { }); // Simulate a filesystem that refuses temporary-file cleanup.
+
+        Assert.Null(cache.TryImport(GameId, Reference(FileIdA), firstSource, _filesRoot));
+        var retainedTemporaryFiles = Directory.GetFiles(GetStagingDirectory());
+        Assert.Single(retainedTemporaryFiles);
+        Assert.EndsWith(".tmp", retainedTemporaryFiles[0]);
+
+        Assert.Null(cache.TryImport(GameId, Reference(FileIdB), secondSource, _filesRoot));
+        Assert.Equal(retainedTemporaryFiles, Directory.GetFiles(GetStagingDirectory()));
+        Assert.Throws<IOException>(() => cache.Activate());
+    }
+
+    [Fact]
     public void RevalidationDetectsChangedBytesBehindAnUnchangedPlayniteReference()
     {
         var originalBytes = new byte[] { 0xFF, 0xD8, 0xFF, 0xD9 };
