@@ -43,7 +43,7 @@ The public API documentation does **not** formally guarantee the exact serialize
 - Maximum source file size: 5 MiB. Empty, larger, or unrecognized-signature files are skipped. Signature checks are transport validation only; they do not prove that a complete image can be decoded.
 - Maximum active cache generation size: 256 MiB. If importing another image would exceed the limit, that image is omitted; catalog export continues. During atomic replacement, the previous generation is temporarily retained for rollback, so transient disk use can approach two generations; the backup is removed immediately after commit or recovery.
 - Only regular files are accepted; reparse-point source files are rejected.
-- Copying reads no more than the configured per-file limit plus one byte, so a changing or misleading file length cannot bypass the limit.
+- Copying uses 16 KiB reads and checks the cumulative byte count after each read. The final read can therefore consume up to one 16 KiB chunk beyond the configured per-file limit before the import is rejected; no oversized asset is retained in staging. The initial file-length check is only an optimization, not the enforcement boundary.
 - The snapshot parser validates opaque IDs independently of the filesystem. Traversal strings, rooted paths, separators, alternate data stream syntax, and malformed identifiers are rejected before path construction.
 
 The cache is not an image decoder. The transport validates container signatures and byte limits only. WERD-80 owns decoding, unsupported-codec handling, and fallback to another candidate image.
