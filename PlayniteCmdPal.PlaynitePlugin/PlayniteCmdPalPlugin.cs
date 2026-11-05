@@ -21,7 +21,6 @@ public sealed class PlayniteCmdPalPlugin : GenericPlugin
     private static readonly TimeSpan Debounce = TimeSpan.FromMilliseconds(750);
     private static readonly TimeSpan ArtworkRevalidationInterval = TimeSpan.FromMinutes(30);
     private static readonly ILogger Logger = LogManager.GetLogger();
-    private static readonly Semaphore ArtworkExportSemaphore = new Semaphore(1, 1, @"Local\PlayniteCmdPal.ArtworkExport");
     private readonly CatalogExportCoordinator _coordinator;
     private readonly Dispatcher _dispatcher;
     private readonly string _snapshotPath;
@@ -193,34 +192,7 @@ public sealed class PlayniteCmdPalPlugin : GenericPlugin
                 () => CreateSnapshot(projection, artwork, cancellationToken),
                 cancellationToken).ConfigureAwait(false);
             artwork.Activate(snapshot.GeneratedAtUtc.UtcDateTime.ToString("O", CultureInfo.InvariantCulture));
-            var snapshotPublished = false;
-            try
-            {
-                try
-                {
-                    await SnapshotFilePublisher.PublishAsync(_snapshotPath, snapshot, cancellationToken).ConfigureAwait(false);
-                }
-                catch (InvalidDataException)
-                {
-                    var withoutArtwork = new CatalogSnapshot(
-                        snapshot.GeneratedAtUtc,
-                        snapshot.Games.Select(g => new SnapshotGame(g.Id, g.Name, g.IsInstalled, g.Source, g.Platform)).ToArray(),
-                        SnapshotLimits.SchemaVersion);
-                    await SnapshotFilePublisher.PublishAsync(_snapshotPath, withoutArtwork, cancellationToken).ConfigureAwait(false);
-                    snapshotPublished = true;
-                    artwork.ClearActiveCache();
-                }
-
-                snapshotPublished = true;
-                artwork.MarkPublished();
-                artwork.Complete();
-            }
-            catch
-            {
-                if (snapshotPublished) artwork.PreserveForRecovery();
-                else artwork.Rollback();
-                throw;
-            }
+            await ArtworkSnapshotPublisher.PublishAsync(_snapshotPath, snapshot, artwork, cancellationToken).ConfigureAwait(false);
         }
     }
 

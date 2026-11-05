@@ -360,26 +360,32 @@ public sealed class ArtworkCacheGenerationTests : IDisposable
         var activeArtwork = Path.Combine(_cacheRoot, artworkId + ".jpg");
         using (new FileStream(activeArtwork, FileMode.Open, FileAccess.Read, FileShare.Read))
         {
-            var snapshotPublished = false;
-            try
+            var publishAttempts = 0;
+            async Task PublishWithInjectedSizeFailure(
+                string path, CatalogSnapshot candidate, CancellationToken cancellationToken)
             {
-                // Exercise the production atomic snapshot publisher with a metadata-only
-                // fallback: the published catalog intentionally contains no artwork IDs.
-                await SnapshotFilePublisher.PublishAsync(snapshotPath,
-                    new CatalogSnapshot(
-                        DateTimeOffset.Parse(token, null, System.Globalization.DateTimeStyles.RoundtripKind),
-                        new[] { new SnapshotGame(GameId, "Game", true) },
-                        SnapshotLimits.SchemaVersion));
-                snapshotPublished = true;
-                cache.ClearActiveCache();
-            }
-            catch
-            {
-                if (snapshotPublished) cache.PreserveForRecovery();
-                else cache.Rollback();
+                publishAttempts++;
+                if (publishAttempts == 1)
+                    throw new InvalidDataException("Injected artwork-bearing snapshot size failure.");
+
+                // The production fallback snapshot is passed to the real atomic publisher.
+                await SnapshotFilePublisher.PublishAsync(path, candidate, cancellationToken);
             }
 
-            Assert.True(snapshotPublished);
+            var oversizedArtworkSnapshot = new CatalogSnapshot(
+                DateTimeOffset.Parse(token, null, System.Globalization.DateTimeStyles.RoundtripKind),
+                new[] { new SnapshotGame(GameId, "Game", true, coverArtworkId: artworkId, iconArtworkId: artworkId) },
+                SnapshotLimits.SchemaVersion);
+
+            await Assert.ThrowsAsync<IOException>(() => ArtworkSnapshotPublisher.PublishAsync(
+                snapshotPath, oversizedArtworkSnapshot, cache, PublishWithInjectedSizeFailure));
+
+            Assert.Equal(2, publishAttempts);
+            var parsed = CatalogSnapshotParser.Parse(await File.ReadAllBytesAsync(snapshotPath));
+            Assert.True(parsed.Snapshot is not null);
+            var publishedGame = Assert.Single(parsed.Snapshot!.Games);
+            Assert.Null(publishedGame.CoverArtworkId);
+            Assert.Null(publishedGame.IconArtworkId);
             Assert.True(File.Exists(_cacheRoot + ".transaction"));
             Assert.True(File.Exists(activeArtwork));
         }

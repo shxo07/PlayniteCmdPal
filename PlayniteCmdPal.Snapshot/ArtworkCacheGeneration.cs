@@ -113,10 +113,20 @@ public sealed class ArtworkCacheGeneration : IDisposable
                 }
                 catch
                 {
-                    _tryDeleteFile(temporary);
-                    _tryDeleteFile(destination);
-                    if (File.Exists(temporary) || File.Exists(destination))
-                        _cleanupFailure = true;
+                    var cleanupVerified = false;
+                    try
+                    {
+                        _tryDeleteFile(temporary);
+                        _tryDeleteFile(destination);
+                        cleanupVerified = !PathExistsOrThrow(temporary) && !PathExistsOrThrow(destination);
+                    }
+                    catch
+                    {
+                        // An inaccessible path is not evidence that cleanup succeeded.
+                        cleanupVerified = false;
+                    }
+
+                    if (!cleanupVerified) _cleanupFailure = true;
                     throw;
                 }
             }
@@ -139,10 +149,10 @@ public sealed class ArtworkCacheGeneration : IDisposable
             throw new IOException("A failed artwork import left temporary data that could not be cleaned; the generation cannot be published.");
         if (_activated) throw new InvalidOperationException("Artwork generation is already active.");
         _backup = _root + ".backup-" + Guid.NewGuid().ToString("N");
-        var rootInfo = new DirectoryInfo(_root);
-        if (rootInfo.Exists && (rootInfo.Attributes & FileAttributes.ReparsePoint) != 0)
+        var rootAttributes = GetPathAttributes(_root);
+        if (rootAttributes.HasValue && (rootAttributes.Value & FileAttributes.ReparsePoint) != 0)
             throw new InvalidDataException("The artwork cache root cannot be a reparse point.");
-        _hadPreviousRoot = Directory.Exists(_root);
+        _hadPreviousRoot = rootAttributes.HasValue;
         _publicationToken = publicationToken ?? string.Empty;
         if (_publicationToken.IndexOfAny(new[] { '\r', '\n' }) >= 0)
             throw new ArgumentException("The publication token cannot contain line breaks.", nameof(publicationToken));
@@ -155,13 +165,13 @@ public sealed class ArtworkCacheGeneration : IDisposable
         }
         catch
         {
-            if (_hadPreviousRoot && Directory.Exists(_backup) && !Directory.Exists(_root))
+            if (_hadPreviousRoot && PathExistsOrThrow(_backup) && !PathExistsOrThrow(_root))
             {
                 // If restoration fails, keep the marker so startup recovery can retry it.
                 Directory.Move(_backup, _root);
             }
 
-            if (Directory.Exists(_root) || !_hadPreviousRoot) TryDeleteFile(_marker);
+            if (PathExistsOrThrow(_root) || !_hadPreviousRoot) TryDeleteFile(_marker);
             throw;
         }
     }
@@ -183,7 +193,7 @@ public sealed class ArtworkCacheGeneration : IDisposable
 
     public void ClearActiveCache()
     {
-        if (!_activated || !Directory.Exists(_root)) return;
+        if (!_activated || !PathExistsOrThrow(_root)) return;
         foreach (var file in Directory.GetFiles(_root)) DeleteFileOrThrow(file);
     }
 
@@ -211,7 +221,7 @@ public sealed class ArtworkCacheGeneration : IDisposable
         if (_activated)
         {
             DeleteDirectoryOrThrow(_root);
-            if (!string.IsNullOrEmpty(_backup) && Directory.Exists(_backup))
+            if (!string.IsNullOrEmpty(_backup) && PathExistsOrThrow(_backup))
                 Directory.Move(_backup, _root);
 
             // Clear activation as soon as restoration is complete. If marker deletion
@@ -238,10 +248,10 @@ public sealed class ArtworkCacheGeneration : IDisposable
             DeleteDirectoryOrThrow(stagingPath);
         foreach (var markerTemporary in Directory.GetFiles(parent, Path.GetFileName(marker) + ".*.tmp"))
             DeleteFileOrThrow(markerTemporary);
-        if (!File.Exists(marker))
+        if (!PathExistsOrThrow(marker))
         {
             var orphanedBackups = Directory.GetDirectories(parent, Path.GetFileName(root) + ".backup-*");
-            if (!Directory.Exists(root) && orphanedBackups.Length > 0)
+            if (!PathExistsOrThrow(root) && orphanedBackups.Length > 0)
             {
                 var recoveryBackup = orphanedBackups.OrderByDescending(Directory.GetCreationTimeUtc).First();
                 Directory.Move(recoveryBackup, root);
@@ -265,19 +275,19 @@ public sealed class ArtworkCacheGeneration : IDisposable
             if (!IsValidBackupPath(root, backup))
                 throw new InvalidDataException("The artwork cache transaction marker contains an invalid backup path.");
             if (published) DeleteDirectoryOrThrow(backup);
-            else if (Directory.Exists(backup))
+            else if (PathExistsOrThrow(backup))
             {
-                var backupInfo = new DirectoryInfo(backup);
-                if ((backupInfo.Attributes & FileAttributes.ReparsePoint) != 0)
+                var backupAttributes = GetPathAttributes(backup);
+                if (backupAttributes.HasValue && (backupAttributes.Value & FileAttributes.ReparsePoint) != 0)
                     throw new InvalidDataException("The artwork cache backup cannot be a reparse point.");
                 DeleteDirectoryOrThrow(root);
-                if (Directory.Exists(root)) throw new IOException("The interrupted artwork cache could not be replaced during recovery.");
+                if (PathExistsOrThrow(root)) throw new IOException("The interrupted artwork cache could not be replaced during recovery.");
                 Directory.Move(backup, root);
             }
             else if (!hadPrevious)
             {
                 DeleteDirectoryOrThrow(root);
-                if (Directory.Exists(root)) throw new IOException("The incomplete artwork cache could not be removed during recovery.");
+                if (PathExistsOrThrow(root)) throw new IOException("The incomplete artwork cache could not be removed during recovery.");
             }
         }
         catch (Exception ex) when (ex is IOException || ex is InvalidDataException || ex is UnauthorizedAccessException || ex is ArgumentException)
@@ -381,18 +391,40 @@ public sealed class ArtworkCacheGeneration : IDisposable
 
     private static void DeleteDirectoryOrThrow(string? path)
     {
-        if (string.IsNullOrEmpty(path) || !Directory.Exists(path)) return;
-        var info = new DirectoryInfo(path);
-        Directory.Delete(path, (info.Attributes & FileAttributes.ReparsePoint) == 0);
-        if (Directory.Exists(path))
+        if (string.IsNullOrEmpty(path)) return;
+        var attributes = GetPathAttributes(path);
+        if (!attributes.HasValue) return;
+
+        // Never recurse through a directory reparse point.
+        Directory.Delete(path, recursive: (attributes.Value & FileAttributes.ReparsePoint) == 0);
+        if (PathExistsOrThrow(path))
             throw new IOException("The artwork directory could not be removed: " + path);
     }
 
     private static void DeleteFileOrThrow(string path)
     {
-        if (File.Exists(path)) File.Delete(path);
-        if (File.Exists(path))
+        if (!PathExistsOrThrow(path)) return;
+        File.Delete(path);
+        if (PathExistsOrThrow(path))
             throw new IOException("The artwork file could not be removed: " + path);
+    }
+
+    private static bool PathExistsOrThrow(string path) => GetPathAttributes(path).HasValue;
+
+    private static FileAttributes? GetPathAttributes(string path)
+    {
+        try
+        {
+            return File.GetAttributes(path);
+        }
+        catch (FileNotFoundException)
+        {
+            return null;
+        }
+        catch (DirectoryNotFoundException)
+        {
+            return null;
+        }
     }
 
 
