@@ -15,7 +15,8 @@
   </ItemGroup>
   <ItemGroup>
     <None Update="extension.yaml" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
-    <!-- The .pext package must carry the third-party notices; see docs/LICENSING-AND-RELEASE.md. -->
+    <!-- The .pext package must carry the project license and third-party notices. -->
+    <None Include="..\LICENSE" Link="LICENSE" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <None Include="..\third-party\THIRD-PARTY-NOTICES.md" Link="THIRD-PARTY-NOTICES.md" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>
