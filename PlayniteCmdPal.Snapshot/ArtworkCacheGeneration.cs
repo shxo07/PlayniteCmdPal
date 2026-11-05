@@ -27,8 +27,19 @@ public sealed class ArtworkCacheGeneration : IDisposable
     private bool _completed;
     private bool _cleanupFailure;
 
+    private readonly Action<string, string> _moveFile;
+    private readonly Action<string> _tryDeleteFile;
+
     public ArtworkCacheGeneration(string root, long maxCacheBytes = SnapshotLimits.MaxArtworkCacheBytes, int maxArtworkBytes = SnapshotLimits.MaxArtworkBytes, string? snapshotPath = null)
+        : this(root, maxCacheBytes, maxArtworkBytes, snapshotPath, File.Move, TryDeleteFile)
     {
+    }
+
+    internal ArtworkCacheGeneration(string root, long maxCacheBytes, int maxArtworkBytes, string? snapshotPath,
+        Action<string, string> moveFile, Action<string> tryDeleteFile)
+    {
+        _moveFile = moveFile ?? throw new ArgumentNullException(nameof(moveFile));
+        _tryDeleteFile = tryDeleteFile ?? throw new ArgumentNullException(nameof(tryDeleteFile));
         if (maxCacheBytes < 0) throw new ArgumentOutOfRangeException(nameof(maxCacheBytes));
         if (maxArtworkBytes <= 0) throw new ArgumentOutOfRangeException(nameof(maxArtworkBytes));
         _maxCacheBytes = maxCacheBytes;
@@ -97,13 +108,13 @@ public sealed class ArtworkCacheGeneration : IDisposable
                         output.Write(bytes, 0, bytes.Length);
                         output.Flush();
                     }
-                    File.Move(temporary, destination);
+                    _moveFile(temporary, destination);
                     _bytes += bytes.Length;
                 }
                 catch
                 {
-                    TryDeleteFile(temporary);
-                    TryDeleteFile(destination);
+                    _tryDeleteFile(temporary);
+                    _tryDeleteFile(destination);
                     if (File.Exists(temporary) || File.Exists(destination))
                         _cleanupFailure = true;
                     throw;
