@@ -45,6 +45,9 @@ public sealed class ArtworkCacheGeneration : IDisposable
 
     public string? TryImport(string gameId, string? databaseReference, string? resolvedPath, string databaseFilesRoot)
     {
+        // Once cleanup has failed, the staging directory may contain unaccounted bytes.
+        // Fail closed immediately; no later import may add more data to this generation.
+        if (_cleanupFailure) return null;
         if (!TryValidateReference(gameId, databaseReference, out var fileName) || string.IsNullOrWhiteSpace(resolvedPath))
             return null;
         try
