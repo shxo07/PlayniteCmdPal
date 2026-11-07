@@ -56,7 +56,7 @@ public sealed class GameSearchFilterTests
 
         var results = GameSearch.Search(Catalog, "halo", state.ToSearchFilters());
 
-        Assert.Equal(new[] { "epic-installed", "steam-installed" },
+        Assert.Equal(new[] { "steam-installed", "epic-installed" },
             results.Select(game => game.GameId));
     }
 
