@@ -302,25 +302,13 @@ public sealed class PlayniteCatalogAdapter : IReadOnlyPlayniteCatalog
     private async Task<CatalogSnapshotParseResult> ReadAndParseAsync()
     {
         var preferred = await _readPathAsync(_snapshotPath).ConfigureAwait(false);
-        if (_legacySnapshotPath is null) return preferred;
-
-        var legacy = await _readPathAsync(_legacySnapshotPath).ConfigureAwait(false);
-        if (legacy.Snapshot is null)
-            return preferred.Snapshot is not null || preferred.Issue?.Code != CatalogErrorCode.Missing ? preferred : legacy;
-
-        if (preferred.Snapshot is { } preferredSnapshot && preferredSnapshot.GeneratedAtUtc >= legacy.Snapshot.GeneratedAtUtc)
+        if (_legacySnapshotPath is null || preferred.Issue?.Code != CatalogErrorCode.Missing)
             return preferred;
 
-        // v1 is published before v2. Re-read v2 to avoid selecting the new v1 during the short publication window.
-        for (var attempt = 0; attempt < 3; attempt++)
-        {
-            await Task.Delay(TimeSpan.FromMilliseconds(25)).ConfigureAwait(false);
-            preferred = await _readPathAsync(_snapshotPath).ConfigureAwait(false);
-            if (preferred.Snapshot is { } refreshed && refreshed.GeneratedAtUtc >= legacy.Snapshot.GeneratedAtUtc)
-                return preferred;
-        }
-
-        return legacy;
+        // The legacy contract is a compatibility fallback only when v2 is absent.
+        // A malformed, unsupported, oversized, or unreadable v2 snapshot must remain
+        // unavailable rather than silently presenting potentially stale v1 data.
+        return await _readPathAsync(_legacySnapshotPath).ConfigureAwait(false);
     }
 
     private static async Task<CatalogSnapshotParseResult> ReadPathAsync(string path)
