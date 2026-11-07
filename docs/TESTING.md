@@ -2,7 +2,7 @@
 
 This page explains what is tested, where each check runs, and how to run it. For installing the toolchain and deploying the extension, see [Developer Setup](DEVELOPER-SETUP.md).
 
-**Status (2026-10-31):** Automated coverage is synthetic and is designed to run without Playnite, PowerToys, a personal game library, or secrets. The test commands below are the ones executed by `scripts/ci.ps1`, which Windows CI and CodeQL run on `windows-latest`. The latest verified Windows CI run passed restore, Release build, 66 core tests, 183 adapter tests, and the .NET Framework smoke test ([run 41190710365](https://github.com/werdscopez7347/PlayniteCmdPal/actions/runs/41190710365)); see the verification evidence section of [Developer Setup](DEVELOPER-SETUP.md) for the evidence trail and its limits.
+**Status (2026-11-07):** Automated coverage is synthetic and is designed to run without Playnite, PowerToys, a personal game library, or secrets. The test commands below are the ones executed by `scripts/ci.ps1`, which Windows CI and CodeQL run on `windows-latest`. The latest verified Windows CI run passed restore, Release build, 101 Core tests, 183 adapter tests, 2 Command Palette command tests, and the .NET Framework smoke test ([run 249](https://github.com/shxo07/PlayniteCmdPal/actions/runs/41304875648)); CodeQL also passed ([run 249](https://github.com/shxo07/PlayniteCmdPal/actions/runs/41304875561)). See the verification evidence section of [Developer Setup](DEVELOPER-SETUP.md) for the evidence trail and its limits.
 
 ## Test projects
 
@@ -228,3 +228,7 @@ These are deliberately not automated yet; each needs a Windows host and, in most
 - The CmdPal presentation layer (search page, ranking display, launch action) has no automated tests; it is exercised by manual deploy/reload and the launch-by-ID smoke test.
 - No test verifies the real Playnite library contents against the snapshot (by design: that would require personal data).
 - Minimum supported versions of Windows, Visual Studio, PowerToys, and Playnite are recorded as "validated once", not as tested minimums. See the contributor environment table in [Developer Setup](DEVELOPER-SETUP.md).
+
+
+- [41304875648](https://github.com/shxo07/PlayniteCmdPal/actions/runs/41304875648) — Windows CI run 249 on the WERD-75 head: Release build, `101/101` Core tests, `183/183` adapter tests, `2/2` Command Palette command tests, and the .NET Framework snapshot smoke step all passed.
+- [41304875561](https://github.com/shxo07/PlayniteCmdPal/actions/runs/41304875561) — CodeQL run 249 on the same WERD-75 head passed.
