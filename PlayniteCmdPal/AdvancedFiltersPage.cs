@@ -43,18 +43,28 @@ internal sealed partial class AdvancedFiltersForm : FormContent
 
     private CommandResult ApplySelections(string inputs, string actionId)
     {
-        var values = JsonNode.Parse(inputs)?.AsObject();
+        if (string.Equals(actionId, "clear-all", StringComparison.Ordinal))
+        {
+            _state.ClearAll();
+            _ = System.Threading.Tasks.Task.Run(_filtersApplied);
+            return CommandResult.GoBack();
+        }
+
+        JsonObject? values;
+        try
+        {
+            values = JsonNode.Parse(inputs)?.AsObject();
+        }
+        catch (JsonException)
+        {
+            return CommandResult.KeepOpen();
+        }
+
         if (values is null)
         {
             return CommandResult.KeepOpen();
         }
 
-        var clearAll = string.Equals(actionId, "clear-all", StringComparison.Ordinal);
-        if (clearAll)
-        {
-            _state.ClearAll();
-        }
-        else
         {
             var statuses = ReadValues(values, "installedStatuses")
                 .Select(value => value switch
@@ -98,7 +108,8 @@ internal sealed partial class AdvancedFiltersForm : FormContent
             }
         }
 
-        _filtersApplied();
+        // Defer page refresh until after the form command has returned its navigation result.
+        _ = System.Threading.Tasks.Task.Run(_filtersApplied);
         return CommandResult.GoBack();
     }
 
