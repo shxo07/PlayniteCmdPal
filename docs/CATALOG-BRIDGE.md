@@ -9,7 +9,7 @@ This document describes the catalog snapshot transport accepted in [ADR-005](DEC
 - `PlayniteCmdPal.PlaynitePlugin` (`net462`): companion Playnite generic plugin that projects `PlayniteApi.Database.Games` and publishes the snapshot.
 - `PlayniteCmdPal.Playnite.Tests`: synthetic-file adapter/protocol tests. `scripts/test-playnite-snapshot-netfx.ps1` additionally exercises the actual `net462` writer/publisher in Windows PowerShell 5.1. Neither requires Playnite, PowerToys, or a personal library.
 
-The canonical file is `%LOCALAPPDATA%\PlayniteCmdPal\catalog-v1.json`. The plugin creates the directory with inherited per-user permissions. The adapter opens the file read-only with `FileShare.ReadWrite | FileShare.Delete`; it never creates, repairs, or deletes the snapshot.
+The plugin publishes two files under `%LOCALAPPDATA%\\PlayniteCmdPal`: `catalog-v1.json` is the frozen backward-compatible contract, and `catalog-v2.json` is the enriched contract used by the current app. The plugin creates the directory with inherited per-user permissions. The adapter opens both files read-only with `FileShare.ReadWrite | FileShare.Delete`; it never creates, repairs, or deletes snapshots.
 
 ## Schema v1 and v2 compatibility
 
@@ -106,7 +106,7 @@ Remaining real-library verification:
 
 1. Install the packaged bridge in Playnite 10.63 or the supported version being tested.
 2. Start Playnite with a small test library containing duplicate display names and at least one installed and one uninstalled game.
-3. Confirm `%LOCALAPPDATA%\PlayniteCmdPal\catalog-v1.json` appears and contains only the allowlisted fields.
+3. Confirm both `%LOCALAPPDATA%\\PlayniteCmdPal\\catalog-v1.json` and `catalog-v2.json` appear. Verify v1 remains `schemaVersion: 1` with no `lastActivity` properties, while v2 is `schemaVersion: 2` and carries `lastActivity` when available.
 4. Run the verifier above or use the Command Palette page; compare stable IDs, names, source/platform, and install state locally with Playnite without sharing library data.
 5. Add/rename/remove a game and change source/platform metadata; confirm the snapshot refreshes after the debounce and that no partial file is observable.
 6. Close Playnite, delete the snapshot, and confirm the adapter reports unavailable on a fresh process. Restart Playnite and confirm explicit refresh reconnects.
