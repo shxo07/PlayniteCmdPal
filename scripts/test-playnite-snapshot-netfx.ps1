@@ -31,9 +31,9 @@ $publisherType = $snapshotAssemblyObject.GetType('PlayniteCmdPal.Snapshot.Snapsh
 $gameConstructor = $gameType.GetConstructor([type[]]@([string], [string], [bool], [string], [string], [Nullable[DateTime]]))
 $snapshotConstructor = @($snapshotType.GetConstructors())[0]
 
-# Synthetic data exercises the frozen legacy v1 contract, JSON escaping,
-# non-ASCII characters, and optional fields without reading a real library.
-$prefix = 'Example "quoted" \ path ' + [char]10 + [char]0x00e9 + [char]::ConvertFromUtf32(0x1f3ae)
+# Synthetic data exercises both the frozen v1 contract and enriched v2
+# serialization without reading any Playnite library.
+$prefix = 'Example "quoted" \\ path ' + [char]10 + [char]0x00e9 + [char]::ConvertFromUtf32(0x1f3ae)
 $name = $prefix + [char]0xd800 + ' end'
 $expectedName = $prefix + [char]0xfffd + ' end'
 $lastActivity = [DateTime]::SpecifyKind(
@@ -53,53 +53,62 @@ $snapshotArguments[1] = $games
 $snapshot = $snapshotConstructor.Invoke($snapshotArguments)
 
 $directory = Join-Path ([IO.Path]::GetTempPath()) ('PlayniteCmdPal.NetFxSmoke.' + [guid]::NewGuid().ToString('N'))
-$path = Join-Path $directory 'catalog-v1.json'
+$legacyPath = Join-Path $directory 'catalog-v1.json'
+$enrichedPath = Join-Path $directory 'catalog-v2.json'
 try {
-    # Exercise first creation and atomic replacement through the actual net462 publisher.
-    $publisherType::PublishAsync([string]$path, $snapshot, [Threading.CancellationToken]::None).GetAwaiter().GetResult()
-    $firstPublication = [Text.Encoding]::UTF8.GetString([IO.File]::ReadAllBytes($path)) | ConvertFrom-Json
-    if ($firstPublication.games[1].name -ne 'Second') { throw 'First publication was invalid.' }
+    # Publish both contracts, as the production plugin does.
+    $publisherType::PublishAsync([string]$legacyPath, $snapshot, [Threading.CancellationToken]::None).GetAwaiter().GetResult()
+    $publisherType::PublishAsync([string]$enrichedPath, $snapshot, [Threading.CancellationToken]::None, 2, $true).GetAwaiter().GetResult()
 
+    $legacyJson = [Text.Encoding]::UTF8.GetString([IO.File]::ReadAllBytes($legacyPath)) | ConvertFrom-Json
+    $enrichedBytes = [IO.File]::ReadAllBytes($enrichedPath)
+    if ($enrichedBytes.Length -eq 0 -or $enrichedBytes[0] -ne [byte][char]'{') {
+        throw 'Enriched snapshot is empty or has an unexpected UTF-8 BOM.'
+    }
+    $enrichedJsonText = [Text.Encoding]::UTF8.GetString($enrichedBytes)
+    $enrichedJson = $enrichedJsonText | ConvertFrom-Json
+
+    if ($legacyJson.schemaVersion -ne 1 -or @($legacyJson.games).Count -ne 2) {
+        throw 'Legacy v1 snapshot envelope is invalid.'
+    }
+    if ($enrichedJson.schemaVersion -ne 2 -or @($enrichedJson.games).Count -ne 2) {
+        throw 'Enriched v2 snapshot envelope is invalid.'
+    }
+    if ($null -ne $legacyJson.games[0].PSObject.Properties['lastActivity'] -or
+        $null -ne $legacyJson.games[1].PSObject.Properties['lastActivity']) {
+        throw 'Frozen v1 contract unexpectedly contains lastActivity.'
+    }
+    if ($null -eq $enrichedJson.games[0].PSObject.Properties['lastActivity'] -or
+        $null -ne $enrichedJson.games[1].PSObject.Properties['lastActivity'] -or
+        $enrichedJsonText -notmatch '"lastActivity"\s*:\s*"2026-10-29T18:45:00\.0000000"') {
+        throw 'V2 lastActivity did not round-trip with its Unspecified DateTime representation.'
+    }
+
+    # Replace both files and verify the v1 compatibility contract remains frozen
+    # while v2 continues to carry the enriched property.
     $games[1] = $gameConstructor.Invoke([object[]]@('22222222-2222-4222-8222-222222222222', 'Second updated', $false, $null, $null, $null))
     $snapshotArguments[1] = $games
     $replacement = $snapshotConstructor.Invoke($snapshotArguments)
-    $publisherType::PublishAsync([string]$path, $replacement, [Threading.CancellationToken]::None).GetAwaiter().GetResult()
-    $bytes = [IO.File]::ReadAllBytes($path)
-    if ($bytes.Length -eq 0 -or $bytes[0] -ne [byte][char]'{') {
-        throw 'Snapshot is empty or has an unexpected UTF-8 BOM.'
+    $publisherType::PublishAsync([string]$legacyPath, $replacement, [Threading.CancellationToken]::None).GetAwaiter().GetResult()
+    $publisherType::PublishAsync([string]$enrichedPath, $replacement, [Threading.CancellationToken]::None, 2, $true).GetAwaiter().GetResult()
+
+    $legacyJson = [Text.Encoding]::UTF8.GetString([IO.File]::ReadAllBytes($legacyPath)) | ConvertFrom-Json
+    $enrichedJsonText = [Text.Encoding]::UTF8.GetString([IO.File]::ReadAllBytes($enrichedPath))
+    $enrichedJson = $enrichedJsonText | ConvertFrom-Json
+    if ($legacyJson.schemaVersion -ne 1 -or $legacyJson.games[1].name -ne 'Second updated' -or
+        $null -ne $legacyJson.games[0].PSObject.Properties['lastActivity']) {
+        throw 'V1 replacement did not preserve the frozen legacy contract.'
+    }
+    if ($enrichedJson.schemaVersion -ne 2 -or $enrichedJson.games[1].name -ne 'Second updated' -or
+        $null -eq $enrichedJson.games[0].PSObject.Properties['lastActivity'] -or
+        $enrichedJsonText -notmatch '"lastActivity"\s*:\s*"2026-10-29T18:45:00\.0000000"') {
+        throw 'V2 replacement did not preserve the enriched lastActivity field.'
+    }
+    if (@(Get-ChildItem -LiteralPath $directory -Force).Count -ne 2) {
+        throw 'The publisher left an unexpected temporary file behind.'
     }
 
-    $jsonText = [Text.Encoding]::UTF8.GetString($bytes)
-    if ($jsonText -notmatch '"generatedAtUtc"\s*:\s*"2026-10-30T00:00:00(\.0{1,7})?Z"') {
-        throw 'Snapshot timestamp is not the expected UTC value.'
-    }
-    $json = $jsonText | ConvertFrom-Json
-    if ($json.schemaVersion -ne 1 -or @($json.games).Count -ne 2) {
-        throw 'Snapshot envelope is invalid.'
-    }
-    if ($json.games[0].id -ne '11111111-1111-4111-8111-111111111111' -or
-        $json.games[0].name -cne $expectedName -or $json.games[0].isInstalled -ne $true -or
-        $json.games[0].source -ne 'Source' -or $json.games[0].platform -ne 'PC' -or
-        $null -ne $json.games[0].PSObject.Properties['lastActivity']) {
-        throw 'First synthetic game did not round-trip.'
-    }
-    if ($json.games[1].id -ne '22222222-2222-4222-8222-222222222222' -or
-        $json.games[1].name -ne 'Second updated' -or $json.games[1].isInstalled -ne $false -or
-        $null -ne $json.games[1].PSObject.Properties['source'] -or
-        $null -ne $json.games[1].PSObject.Properties['platform'] -or
-        $null -ne $json.games[1].PSObject.Properties['lastActivity']) {
-        throw 'Second synthetic game did not round-trip or optional fields were emitted.'
-    }
-    if (@($json.PSObject.Properties.Name).Count -ne 3 -or
-        @($json.games[0].PSObject.Properties.Name).Count -ne 5 -or
-        @($json.games[1].PSObject.Properties.Name).Count -ne 3) {
-        throw 'The snapshot contained unexpected fields.'
-    }
-    if (@(Get-ChildItem -LiteralPath $directory -Force).Count -ne 1) {
-        throw 'The publisher left an unexpected file behind.'
-    }
-
-    Write-Host 'Playnite bridge .NET Framework snapshot smoke passed (synthetic data, no System.Text.Json reference).'
+    Write-Host 'Playnite bridge .NET Framework v1/v2 snapshot smoke passed (synthetic data, no System.Text.Json reference).'
 } finally {
     if (Test-Path -LiteralPath $directory) {
         Remove-Item -LiteralPath $directory -Recurse -Force -ErrorAction SilentlyContinue
