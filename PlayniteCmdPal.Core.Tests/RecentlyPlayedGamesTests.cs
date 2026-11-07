@@ -76,6 +76,56 @@ public sealed class RecentlyPlayedGamesTests
         Assert.Empty(RecentlyPlayedGames.Sort(new[] { new GameEntry("never", "Never played") }));
     }
 
+
+    [Fact]
+    public void FormatsUtcAndLocalValuesInTheSameExplicitDisplayZone()
+    {
+        var displayZone = TimeZoneInfo.CreateCustomTimeZone(
+            "Test/UTC+04", TimeSpan.FromHours(4), "Test UTC+04", "Test UTC+04");
+        var utc = new DateTime(2026, 10, 30, 11, 0, 0, DateTimeKind.Utc);
+        var local = utc.ToLocalTime();
+
+        Assert.Equal("2026-10-30 15:00 +04:00", RecentlyPlayedGames.FormatLastPlayed(utc, displayZone));
+        Assert.Equal("2026-10-30 15:00 +04:00", RecentlyPlayedGames.FormatLastPlayed(local, displayZone));
+    }
+
+    [Fact]
+    public void FormatsUnspecifiedValuesUsingTheDocumentedLocalMachinePolicy()
+    {
+        var displayZone = TimeZoneInfo.CreateCustomTimeZone(
+            "Test/UTC+04", TimeSpan.FromHours(4), "Test UTC+04", "Test UTC+04");
+        var localWallClock = new DateTime(2026, 10, 30, 11, 0, 0, DateTimeKind.Local);
+        var unspecified = DateTime.SpecifyKind(localWallClock, DateTimeKind.Unspecified);
+
+        Assert.Equal(
+            RecentlyPlayedGames.FormatLastPlayed(localWallClock, displayZone),
+            RecentlyPlayedGames.FormatLastPlayed(unspecified, displayZone));
+    }
+
+    [Fact]
+    public void SearchFiltersOnlyGamesAndAlwaysRetainsStatusAndRecoveryItems()
+    {
+        var status = new[] { "Refresh", "Catalog is stale", "Some records were skipped" };
+        var games = new[] { "Halo", "Portal" };
+
+        var visible = RecentlyPlayedGames.ComposeVisibleItems(status, games, "zelda", item => item);
+
+        Assert.Equal(status, visible);
+        Assert.DoesNotContain("Halo", visible);
+        Assert.DoesNotContain("Portal", visible);
+    }
+
+    [Fact]
+    public void BlankSearchIncludesAllStatusAndGameItems()
+    {
+        var status = new[] { "Refresh" };
+        var games = new[] { "Halo", "Portal" };
+
+        Assert.Equal(
+            new[] { "Refresh", "Halo", "Portal" },
+            RecentlyPlayedGames.ComposeVisibleItems(status, games, "  ", item => item));
+    }
+
     [Fact]
     public void RejectsNullCatalog() => Assert.Throws<ArgumentNullException>(() => RecentlyPlayedGames.Sort(null!));
 }
