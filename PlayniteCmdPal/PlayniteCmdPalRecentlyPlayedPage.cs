@@ -79,16 +79,19 @@ internal sealed partial class PlayniteCmdPalRecentlyPlayedPage : DynamicListPage
             var games = RecentlyPlayedGames.Sort(catalog.Games);
             if (games.Count == 0)
             {
-                if (catalog.Games.Count == 0 && catalog.SkippedRecordCount > 0)
+                switch (RecentlyPlayedGames.GetEmptyState(catalog.Games.Count, catalog.SkippedRecordCount))
                 {
-                    statusItems.Add(CreateStatusItem(
-                        "No usable game records were found. Check the companion plugin and refresh the catalog."));
-                }
-                else
-                {
-                    statusItems.Add(CreateRefreshItem(catalog.Games.Count == 0
-                        ? "Your Playnite library is empty. Add games in Playnite, then refresh."
-                        : "No games have a recorded last-played date yet."));
+                    case RecentlyPlayedEmptyState.NoUsableRecords:
+                        statusItems.Add(CreateStatusItem(
+                            "No usable game records were found. Check the companion plugin and refresh the catalog."));
+                        break;
+                    case RecentlyPlayedEmptyState.EmptyLibrary:
+                        statusItems.Add(CreateRefreshItem(
+                            "Your Playnite library is empty. Add games in Playnite, then refresh."));
+                        break;
+                    default:
+                        statusItems.Add(CreateRefreshItem("No games have a recorded last-played date yet."));
+                        break;
                 }
 
                 _statusItems = statusItems.ToArray();
