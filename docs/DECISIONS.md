@@ -54,14 +54,26 @@ PlayniteCmdPal-authored material is licensed under the MIT License in the reposi
 Use Semantic Versioning; before 1.0.0, use `0.y.z` and increment the minor version for incompatible changes. Publish version-tagged releases through GitHub Releases. Use the release description as the release notes; defer a separate `CHANGELOG.md` until release volume justifies it. Mark preview versions as prereleases using SemVer prerelease identifiers. Third-party notices travel inside the artifacts rather than only in the repository: `third-party/THIRD-PARTY-NOTICES.md` and `third-party/Microsoft-PowerToys-LICENSE.txt` are copied to the extension build/publish output by `PlayniteCmdPal/PlayniteCmdPal.csproj`, the notice file is copied to the bridge plugin publish output by `PlayniteCmdPal.PlaynitePlugin/PlayniteCmdPal.PlaynitePlugin.csproj`, and `scripts/package-playnite-plugin.ps1` refuses to package a `.pext` without it. The dependency and redistribution audit is recorded in [Licensing and release readiness](LICENSING-AND-RELEASE.md); its reproducible inventory generator is `scripts/licensing/New-DependencyInventory.ps1`. Before public distribution, close that document's open review items (Windows SDK projection redistributability, the preview Windows SDK targeting pack, .NET runtime notice shipping, unused central package versions), verify the original project artwork, and validate the MSIX identity and signing certificate.
 
 
-## ADR-008: Bridge-owned artwork cache and schema v2
+## ADR-008: Local favorites preferences
+
+**Status:** Accepted for WERD-75
+
+Pinned game IDs belong to the Command Palette extension, not to Playnite's library. Store them in `%LOCALAPPDATA%\PlayniteCmdPal\favorites-v1.json`, scoped to the current Windows user and independent of Playnite's standard or portable install path. The file contains only a schema version and stable Playnite game IDs; it contains no game metadata and is never synchronized to a cloud service.
+
+Write a complete versioned document to a uniquely named temporary file in the same directory, flush it, then replace the destination. A malformed JSON document is treated as an empty preference set and is repaired on the next pin/unpin mutation. An unsupported future schema is not overwritten, to avoid destroying data written by a newer extension version. Missing game IDs remain saved but are omitted from the visible Favorites page until they reappear in the Playnite catalog. The store is SDK-independent and uses an injected file path in tests.
+
+This feature must not read or write Playnite database files, alter the catalog snapshot, or change the companion plugin.
+
+---
+
+## ADR-009: Bridge-owned artwork cache and schema v2
+
 **Status:** Accepted; implementation and verification in review
 
-Use a bridge-owned local cache populated only from canonical, game-owned Playnite database file references resolved through the documented SDK. Export only content-derived opaque SHA-256 identifiers; never export original image references, URLs, or filesystem paths. Schema v1 remains immutable and readable; schema v2 adds optional coverArtworkId and iconArtworkId fields. Malformed optional artwork identifiers are nulled independently without dropping otherwise valid game metadata.
+Use a bridge-owned local cache populated only from canonical, game-owned Playnite database file references resolved through the documented SDK. Export only content-derived opaque SHA-256 identifiers; never export original image references, URLs, or filesystem paths. Schema v1 remains immutable and readable; schema v2 adds optional `coverArtworkId` and `iconArtworkId` fields. Malformed optional artwork identifiers are nulled independently without dropping otherwise valid game metadata.
 
 The cache is bounded per generation, and a single producer owns publication. A producer-side periodic revalidation export is required because bytes can change while a database reference remains unchanged. Cache publication is coordinated with the atomic v2 snapshot; cleanup failure must retain transaction state and block a subsequent generation until recovery succeeds. The reader's returned local path is a short-lived locator, not a lease: consumers accept missing artwork after generation replacement and must re-resolve against the current snapshot.
 
 The threat model excludes a malicious process running as the same Windows user. Reparse-point and normalized-path checks are defense-in-depth, not a claim of race-proof containment against same-user path replacement. Transport signature checks do not prove successful decoding; WERD-80 owns decoding and image fallback. A surviving v2 snapshot remains authoritative after producer downgrade; safe rollback requires the owner to stop the producer, verify the v1 snapshot, and explicitly retire the stale v2 snapshot before v1 fallback can occur.
 
 The complete trust boundary, limits, migration, refresh, cleanup, and failure contract is recorded in [Artwork transport](ARTWORK-TRANSPORT.md).
-
