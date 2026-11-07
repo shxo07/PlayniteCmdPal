@@ -13,7 +13,7 @@ public static class CatalogSnapshotSerializer
         CatalogSnapshot snapshot,
         CancellationToken cancellationToken = default,
         int schemaVersion = 1,
-        bool includeLastActivity = true)
+        bool includeLastActivity = false)
     {
         if (destination is null) throw new ArgumentNullException(nameof(destination));
         if (snapshot is null) throw new ArgumentNullException(nameof(snapshot));
