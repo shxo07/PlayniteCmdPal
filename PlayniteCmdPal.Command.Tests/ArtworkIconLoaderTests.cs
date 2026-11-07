@@ -115,13 +115,13 @@ public sealed class ArtworkIconLoaderTests
     [Fact]
     public async Task ConcurrentRequestsForSameArtworkShareOneDecode()
     {
-        var decodeStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var decodeStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         var releaseDecode = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var decodeCount = 0;
         var loader = CreateLoader(_ => "C:\\artwork\\cover.png", async (_, _) =>
         {
             Interlocked.Increment(ref decodeCount);
-            decodeStarted.TrySetResult();
+            decodeStarted.TrySetResult(true);
             await releaseDecode.Task;
             return true;
         });
@@ -130,10 +130,10 @@ public sealed class ArtworkIconLoaderTests
         var first = loader.GetIconAsync(game, CancellationToken.None);
         await decodeStarted.Task;
         var second = loader.GetIconAsync(game, CancellationToken.None);
-        releaseDecode.TrySetResult();
+        releaseDecode.TrySetResult(true);
 
         var results = await Task.WhenAll(first, second);
-        Assert.All(results, Assert.NotNull);
+        Assert.All(results, result => Assert.NotNull(result));
         Assert.Equal(1, decodeCount);
     }
 
