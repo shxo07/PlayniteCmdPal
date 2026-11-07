@@ -14,45 +14,34 @@ namespace PlayniteCmdPal;
 internal sealed partial class PlayniteCatalogFilters : Filters
 {
     private readonly CatalogFilterState _state = new();
+    private bool _updatingCatalog;
+    private bool _optionsChangedWhileUpdating;
+
+    public event EventHandler? OptionsChanged;
 
     public PlayniteCatalogFilters()
     {
         // Start unfiltered; users can explicitly choose a status or metadata filter.
         CurrentFilterId = CatalogFilterState.AllGamesId;
+        _state.FilterOptionsChanged += State_FilterOptionsChanged;
     }
 
-    public override IFilterItem[] GetFilters()
+    private void State_FilterOptionsChanged(object? sender, EventArgs args)
     {
-        var filters = new List<IFilterItem>
+        if (_updatingCatalog)
         {
-            new Filter { Id = CatalogFilterState.AllGamesId, Name = "All games" },
-            new Separator(),
-            new Filter { Id = CatalogFilterState.InstalledId, Name = "Installed" },
-            new Filter { Id = CatalogFilterState.NotInstalledId, Name = "Not installed" },
-        };
-
-        if (_state.Sources.Count > 0)
-        {
-            filters.Add(new Separator());
-            filters.AddRange(_state.Sources.Select(source => (IFilterItem)new Filter
-            {
-                Id = Encode("source", source),
-                Name = $"Source: {source}",
-            }));
+            _optionsChangedWhileUpdating = true;
+            return;
         }
 
-        if (_state.Platforms.Count > 0)
-        {
-            filters.Add(new Separator());
-            filters.AddRange(_state.Platforms.Select(platform => (IFilterItem)new Filter
-            {
-                Id = Encode("platform", platform),
-                Name = $"Platform: {platform}",
-            }));
-        }
-
-        return filters.ToArray();
+        OptionsChanged?.Invoke(this, EventArgs.Empty);
     }
+
+    public override IFilterItem[] GetFilters() => _state.GetOptions()
+        .Select(option => option.IsSeparator
+            ? (IFilterItem)new Separator()
+            : new Filter { Id = option.Id!, Name = option.Name! })
+        .ToArray();
 
     /// <summary>
     /// Updates the options and selection from the latest catalog. Returns true when the
@@ -61,11 +50,26 @@ internal sealed partial class PlayniteCatalogFilters : Filters
     public bool UpdateCatalog(IEnumerable<GameEntry> games)
     {
         _state.SelectFilter(CurrentFilterId);
-        var optionsChanged = _state.UpdateCatalog(games);
+        _updatingCatalog = true;
+        bool optionsChanged;
+        try
+        {
+            optionsChanged = _state.UpdateCatalog(games);
+        }
+        finally
+        {
+            _updatingCatalog = false;
+        }
 
         if (!string.Equals(CurrentFilterId, _state.CurrentFilterId, StringComparison.Ordinal))
         {
             CurrentFilterId = _state.CurrentFilterId;
+        }
+
+        if (_optionsChangedWhileUpdating)
+        {
+            _optionsChangedWhileUpdating = false;
+            OptionsChanged?.Invoke(this, EventArgs.Empty);
         }
 
         return optionsChanged;
@@ -76,7 +80,5 @@ internal sealed partial class PlayniteCatalogFilters : Filters
         _state.SelectFilter(CurrentFilterId);
         return _state.ToSearchFilters();
     }
-
-    private static string Encode(string dimension, string value) =>
-        $"{dimension}:{Uri.EscapeDataString(value)}";
+ 
 }
