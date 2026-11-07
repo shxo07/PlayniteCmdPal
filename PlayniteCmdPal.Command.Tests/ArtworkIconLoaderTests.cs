@@ -116,7 +116,7 @@ public sealed class ArtworkIconLoaderTests
     public async Task ConcurrentRequestsForSameArtworkShareOneDecode()
     {
         var decodeStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var releaseDecode = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseDecode = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         var decodeCount = 0;
         var loader = CreateLoader(_ => "C:\\artwork\\cover.png", async (_, _) =>
         {
