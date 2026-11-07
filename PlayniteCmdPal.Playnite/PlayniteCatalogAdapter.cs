@@ -31,6 +31,7 @@ public sealed class PlayniteCatalogAdapter : IReadOnlyPlayniteCatalog
     private readonly string _snapshotPath;
     private readonly string? _legacySnapshotPath;
     private readonly TimeProvider _timeProvider;
+    private readonly Func<string, Task<CatalogSnapshotParseResult>> _readPathAsync;
     private readonly SemaphoreSlim _readGate = new(1, 1);
     private readonly object _stateGate = new();
     private CatalogReadResult? _lastGood;
@@ -39,16 +40,26 @@ public sealed class PlayniteCatalogAdapter : IReadOnlyPlayniteCatalog
     private Task<CatalogReadResult>? _inFlight;
 
     public PlayniteCatalogAdapter(string? snapshotPath = null, TimeProvider? timeProvider = null)
-        : this(snapshotPath ?? GetDefaultSnapshotPath(), snapshotPath is null ? GetLegacySnapshotPath() : null, timeProvider)
+        : this(snapshotPath ?? GetDefaultSnapshotPath(), snapshotPath is null ? GetLegacySnapshotPath() : null, timeProvider, null)
     {
     }
 
     public PlayniteCatalogAdapter(string enrichedSnapshotPath, string? legacySnapshotPath, TimeProvider? timeProvider = null)
+        : this(enrichedSnapshotPath, legacySnapshotPath, timeProvider, null)
+    {
+    }
+
+    internal PlayniteCatalogAdapter(
+        string enrichedSnapshotPath,
+        string? legacySnapshotPath,
+        TimeProvider? timeProvider,
+        Func<string, Task<CatalogSnapshotParseResult>>? readPathAsync)
     {
         if (string.IsNullOrWhiteSpace(enrichedSnapshotPath)) throw new ArgumentException("An enriched snapshot path is required.", nameof(enrichedSnapshotPath));
         _snapshotPath = enrichedSnapshotPath;
         _legacySnapshotPath = legacySnapshotPath;
         _timeProvider = timeProvider ?? TimeProvider.System;
+        _readPathAsync = readPathAsync ?? ReadAndParsePathAsync;
     }
 
     public static string GetDefaultSnapshotPath() =>
@@ -113,19 +124,39 @@ public sealed class PlayniteCatalogAdapter : IReadOnlyPlayniteCatalog
 
     private async Task<CatalogSnapshotParseResult> ReadAndParseAsync()
     {
-        var preferred = await ReadAndParsePathAsync(_snapshotPath).ConfigureAwait(false);
+        var preferred = await _readPathAsync(_snapshotPath).ConfigureAwait(false);
         if (_legacySnapshotPath is null) return preferred;
 
-        var legacy = await ReadAndParsePathAsync(_legacySnapshotPath).ConfigureAwait(false);
-        if (preferred.Snapshot is { } preferredSnapshot && legacy.Snapshot is { } legacySnapshot)
+        var legacy = await _readPathAsync(_legacySnapshotPath).ConfigureAwait(false);
+        if (legacy.Snapshot is null)
+            return preferred.Snapshot is not null || preferred.Issue?.Code != CatalogErrorCode.Missing
+                ? preferred
+                : legacy;
+
+        if (preferred.Snapshot is { } preferredSnapshot &&
+            preferredSnapshot.GeneratedAtUtc >= legacy.Snapshot.GeneratedAtUtc)
         {
-            // During rollback, the old plugin updates v1 while the previous v2 file remains.
-            // Select the newest complete export; prefer v2 on equal timestamps because it has play history.
-            return preferredSnapshot.GeneratedAtUtc >= legacySnapshot.GeneratedAtUtc ? preferred : legacy;
+            // v2 wins on equal timestamps because it carries LastActivity.
+            return preferred;
         }
-        if (preferred.Snapshot is not null) return preferred;
-        if (legacy.Snapshot is not null) return legacy;
-        return preferred.Issue?.Code == CatalogErrorCode.Missing ? legacy : preferred;
+
+        // The plugin publishes v1 and then v2. A reader can capture the old/missing v2,
+        // then observe the new v1 after the writer has published both files. Re-read v2
+        // a bounded number of times before treating a newer v1 as a genuine rollback.
+        // This also handles the first v2 publication after a legacy-only snapshot.
+        for (var attempt = 0; attempt < 3; attempt++)
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(25)).ConfigureAwait(false);
+            preferred = await _readPathAsync(_snapshotPath).ConfigureAwait(false);
+            if (preferred.Snapshot is { } refreshedSnapshot &&
+                refreshedSnapshot.GeneratedAtUtc >= legacy.Snapshot.GeneratedAtUtc)
+            {
+                return preferred;
+            }
+        }
+
+        // A persistently newer v1 is expected when an older plugin has been restored.
+        return legacy;
     }
 
     private static async Task<CatalogSnapshotParseResult> ReadAndParsePathAsync(string path)
