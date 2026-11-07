@@ -22,7 +22,8 @@ public sealed class PlayniteCmdPalPlugin : GenericPlugin
     private static readonly ILogger Logger = LogManager.GetLogger();
     private readonly CatalogExportCoordinator _coordinator;
     private readonly Dispatcher _dispatcher;
-    private readonly string _snapshotPath;
+    private readonly string _legacySnapshotPath;
+    private readonly string _enrichedSnapshotPath;
     private readonly object _subscriptionGate = new();
     private bool _subscribed;
     private bool _disposed;
@@ -32,10 +33,11 @@ public sealed class PlayniteCmdPalPlugin : GenericPlugin
     {
         Properties = new GenericPluginProperties { HasSettings = false };
         _dispatcher = api.MainView.UIDispatcher;
-        _snapshotPath = System.IO.Path.Combine(
+        var snapshotDirectory = System.IO.Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "PlayniteCmdPal",
-            "catalog-v1.json");
+            "PlayniteCmdPal");
+        _legacySnapshotPath = System.IO.Path.Combine(snapshotDirectory, "catalog-v1.json");
+        _enrichedSnapshotPath = System.IO.Path.Combine(snapshotDirectory, "catalog-v2.json");
         _coordinator = new CatalogExportCoordinator(ExportAsync, Debounce, exception =>
             Logger.Error(exception, "PlayniteCmdPal catalog export failed; the previous snapshot was preserved."));
     }
@@ -169,7 +171,14 @@ public sealed class PlayniteCmdPalPlugin : GenericPlugin
         // Playnite's database objects are affinity-sensitive. Project on its dispatcher,
         // then serialize/flush/replace the file on a background thread.
         var snapshot = await _dispatcher.InvokeAsync(() => CreateSnapshot(cancellationToken), DispatcherPriority.Background, cancellationToken).Task.ConfigureAwait(false);
-        await SnapshotFilePublisher.PublishAsync(_snapshotPath, snapshot, cancellationToken).ConfigureAwait(false);
+        // Publish the old schema first so already-installed readers always see a compatible
+        // snapshot. Only after that succeeds publish v2 with LastActivity for upgraded readers.
+        await SnapshotFilePublisher.PublishAsync(
+            _legacySnapshotPath, snapshot, cancellationToken,
+            schemaVersion: 1, includeLastActivity: false).ConfigureAwait(false);
+        await SnapshotFilePublisher.PublishAsync(
+            _enrichedSnapshotPath, snapshot, cancellationToken,
+            schemaVersion: 2, includeLastActivity: true).ConfigureAwait(false);
     }
 
     private CatalogSnapshot CreateSnapshot(CancellationToken cancellationToken)
