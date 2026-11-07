@@ -6,6 +6,69 @@ namespace PlayniteCmdPal.Core.Tests;
 public sealed class CatalogFilterStateTests
 {
     [Fact]
+    public void HostRereadsOptionsAfterDelayedCatalogHydrationNotification()
+    {
+        var state = new CatalogFilterState();
+        IReadOnlyList<CatalogFilterOption> hostOptions = state.GetOptions();
+        Assert.DoesNotContain(hostOptions, option => option.Id?.StartsWith("source:", StringComparison.Ordinal) == true);
+        Assert.DoesNotContain(hostOptions, option => option.Id?.StartsWith("platform:", StringComparison.Ordinal) == true);
+
+        var notifications = 0;
+        state.FilterOptionsChanged += (_, _) =>
+        {
+            notifications++;
+            hostOptions = state.GetOptions();
+        };
+
+        Assert.True(state.UpdateCatalog(new[]
+        {
+            new GameEntry("1", "Halo", "Steam", true, Platform: "PC"),
+        }));
+
+        Assert.Equal(1, notifications);
+        Assert.Contains(hostOptions, option => option.Id == "source:Steam" && option.Name == "Source: Steam");
+        Assert.Contains(hostOptions, option => option.Id == "platform:PC" && option.Name == "Platform: PC");
+    }
+
+    [Fact]
+    public void SourceAndPlatformAdditionsRemovalsNotifyButUnchangedOptionsDoNot()
+    {
+        var state = new CatalogFilterState();
+        var notifications = 0;
+        state.FilterOptionsChanged += (_, _) => notifications++;
+
+        var initial = new[] { new GameEntry("1", "Halo", "Steam", true, Platform: "PC") };
+        Assert.True(state.UpdateCatalog(initial));
+        Assert.Equal(1, notifications);
+
+        Assert.False(state.UpdateCatalog(initial.Reverse()));
+        Assert.Equal(1, notifications);
+
+        Assert.True(state.UpdateCatalog(new[]
+        {
+            new GameEntry("1", "Halo", "Steam", true, Platform: "PC"),
+            new GameEntry("2", "Apex", "GOG", true, Platform: "Deck"),
+        }));
+        Assert.Equal(2, notifications);
+        Assert.Contains(state.GetOptions(), option => option.Id == "source:GOG");
+        Assert.Contains(state.GetOptions(), option => option.Id == "platform:Deck");
+
+        Assert.True(state.UpdateCatalog(new[]
+        {
+            new GameEntry("2", "Apex", "GOG", true, Platform: "Deck"),
+        }));
+        Assert.Equal(3, notifications);
+        Assert.DoesNotContain(state.GetOptions(), option => option.Id == "source:Steam");
+        Assert.DoesNotContain(state.GetOptions(), option => option.Id == "platform:PC");
+
+        Assert.False(state.UpdateCatalog(new[]
+        {
+            new GameEntry("2", "Apex", "GOG", true, Platform: "Deck"),
+        }));
+        Assert.Equal(3, notifications);
+    }
+
+    [Fact]
     public void UpdateCatalogReportsOnlyActualOptionChanges()
     {
         var state = new CatalogFilterState();
