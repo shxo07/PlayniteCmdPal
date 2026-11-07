@@ -25,6 +25,7 @@ internal sealed class ArtworkIconLoader
     private readonly Func<string, bool> _fileExists;
     private readonly int _cacheCapacity;
     private readonly object _gate = new();
+    private readonly SemaphoreSlim _loadGate = new(4, 4);
     private readonly Dictionary<string, LinkedListNode<CacheEntry>> _cache = new(StringComparer.Ordinal);
     private readonly LinkedList<CacheEntry> _leastRecentlyUsed = new();
     private readonly Dictionary<string, Task<IconInfo?>> _inFlight = new(StringComparer.Ordinal);
@@ -90,10 +91,18 @@ internal sealed class ArtworkIconLoader
 
     private async Task<IconInfo?> LoadAndCacheAsync(string artworkId, int generation, string inFlightKey)
     {
+        // Ensure the in-flight entry is published before this load can complete.
+        await Task.Yield();
+
         IconInfo? icon = null;
         string? validPath = null;
+        var enteredLoadGate = false;
         try
         {
+            // Bound resolver reads and decoder work across overlapping search requests.
+            await _loadGate.WaitAsync().ConfigureAwait(false);
+            enteredLoadGate = true;
+
             // The bridge resolver verifies ID, containment, signature, size, and SHA-256.
             var path = await Task.Run(() => _resolvePath(artworkId)).ConfigureAwait(false);
             if (path is not null && await _isDecodable(path, CancellationToken.None).ConfigureAwait(false))
@@ -108,6 +117,7 @@ internal sealed class ArtworkIconLoader
         }
         finally
         {
+            if (enteredLoadGate) _loadGate.Release();
             lock (_gate)
             {
                 _inFlight.Remove(inFlightKey);

@@ -156,7 +156,7 @@ public sealed class ArtworkIconLoaderTests
     private static ArtworkIconLoader CreateLoader(
         Func<string, string?> resolvePath,
         Func<string, CancellationToken, Task<bool>> decoder,
-        int capacity = 96) => new(resolvePath, decoder, capacity, _ => true);
+        int capacity = 96) => new(resolvePath, decoder, capacity);
 
     private static GameEntry Game(string? cover = null, string? icon = null) =>
         new(
