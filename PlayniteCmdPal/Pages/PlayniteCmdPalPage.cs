@@ -23,6 +23,7 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage
     private string _searchText = string.Empty;
     private int _requestVersion;
     private readonly object _requestGate = new();
+    private bool _updatingCatalogFilters;
 
     public PlayniteCmdPalPage()
     {
@@ -41,7 +42,13 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage
 
     public override IListItem[] GetItems() => _items;
 
-    private void Filters_PropChanged(object sender, IPropChangedEventArgs args) => BeginSearch();
+    private void Filters_PropChanged(object sender, IPropChangedEventArgs args)
+    {
+        if (!_updatingCatalogFilters)
+        {
+            BeginSearch();
+        }
+    }
 
     internal void RefreshCatalog()
     {
@@ -95,8 +102,24 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage
                     return;
                 }
 
-                _filters.UpdateCatalog(catalog.Games);
-                Filters = _filters;
+                _updatingCatalogFilters = true;
+                bool filterOptionsChanged;
+                try
+                {
+                    filterOptionsChanged = _filters.UpdateCatalog(catalog.Games);
+                }
+                finally
+                {
+                    _updatingCatalogFilters = false;
+                }
+
+                if (filterOptionsChanged)
+                {
+                    // Replacing Filters with the same object is ignored by ListPage's
+                    // equality-checked setter. Notify the host to re-read its options.
+                    OnPropertyChanged(nameof(Filters));
+                }
+
                 _items = BuildItems(catalog, query);
                 RaiseItemsChanged();
             }

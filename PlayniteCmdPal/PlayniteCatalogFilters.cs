@@ -13,42 +13,38 @@ namespace PlayniteCmdPal;
 /// </summary>
 internal sealed partial class PlayniteCatalogFilters : Filters
 {
-    private static readonly string AllGamesId = "all-games";
-    private static readonly string InstalledId = "installed";
-    private static readonly string NotInstalledId = "not-installed";
-    private string[] _sources = [];
-    private string[] _platforms = [];
+    private readonly CatalogFilterState _state = new();
 
     public PlayniteCatalogFilters()
     {
         // Start unfiltered; users can explicitly choose a status or metadata filter.
-        CurrentFilterId = AllGamesId;
+        CurrentFilterId = CatalogFilterState.AllGamesId;
     }
 
     public override IFilterItem[] GetFilters()
     {
         var filters = new List<IFilterItem>
         {
-            new Filter { Id = AllGamesId, Name = "All games" },
+            new Filter { Id = CatalogFilterState.AllGamesId, Name = "All games" },
             new Separator(),
-            new Filter { Id = InstalledId, Name = "Installed" },
-            new Filter { Id = NotInstalledId, Name = "Not installed" },
+            new Filter { Id = CatalogFilterState.InstalledId, Name = "Installed" },
+            new Filter { Id = CatalogFilterState.NotInstalledId, Name = "Not installed" },
         };
 
-        if (_sources.Length > 0)
+        if (_state.Sources.Count > 0)
         {
             filters.Add(new Separator());
-            filters.AddRange(_sources.Select(source => (IFilterItem)new Filter
+            filters.AddRange(_state.Sources.Select(source => (IFilterItem)new Filter
             {
                 Id = Encode("source", source),
                 Name = $"Source: {source}",
             }));
         }
 
-        if (_platforms.Length > 0)
+        if (_state.Platforms.Count > 0)
         {
             filters.Add(new Separator());
-            filters.AddRange(_platforms.Select(platform => (IFilterItem)new Filter
+            filters.AddRange(_state.Platforms.Select(platform => (IFilterItem)new Filter
             {
                 Id = Encode("platform", platform),
                 Name = $"Platform: {platform}",
@@ -58,54 +54,29 @@ internal sealed partial class PlayniteCatalogFilters : Filters
         return filters.ToArray();
     }
 
-    public void UpdateCatalog(IEnumerable<PlayniteCmdPal.Core.GameEntry> games)
+    /// <summary>
+    /// Updates the options and selection from the latest catalog. Returns true when the
+    /// host must re-read the page's Filters property to refresh its dropdown options.
+    /// </summary>
+    public bool UpdateCatalog(IEnumerable<GameEntry> games)
     {
-        _sources = games
-            .Select(game => game.Source?.Trim())
-            .Where(value => !string.IsNullOrWhiteSpace(value))
-            .Select(value => value!)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(value => value, StringComparer.Ordinal)
-            .ToArray();
+        _state.SelectFilter(CurrentFilterId);
+        var optionsChanged = _state.UpdateCatalog(games);
 
-        _platforms = games
-            .Select(game => game.Platform?.Trim())
-            .Where(value => !string.IsNullOrWhiteSpace(value))
-            .Select(value => value!)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(value => value, StringComparer.Ordinal)
-            .ToArray();
+        if (!string.Equals(CurrentFilterId, _state.CurrentFilterId, StringComparison.Ordinal))
+        {
+            CurrentFilterId = _state.CurrentFilterId;
+        }
+
+        return optionsChanged;
     }
 
     public GameSearchFilters ToSearchFilters()
     {
-        var selected = CurrentFilterId is { Length: > 0 } currentFilterId
-            && !string.Equals(currentFilterId, AllGamesId, StringComparison.Ordinal)
-            ? new[] { currentFilterId }
-            : Array.Empty<string>();
-        bool? installed = null;
-        if (selected.Contains(InstalledId, StringComparer.Ordinal))
-        {
-            installed = true;
-        }
-        else if (selected.Contains(NotInstalledId, StringComparer.Ordinal))
-        {
-            installed = false;
-        }
-
-        return new GameSearchFilters(
-            IsInstalled: installed,
-            Sources: DecodeValues(selected, "source"),
-            Platforms: DecodeValues(selected, "platform"));
+        _state.SelectFilter(CurrentFilterId);
+        return _state.ToSearchFilters();
     }
 
     private static string Encode(string dimension, string value) =>
         $"{dimension}:{Uri.EscapeDataString(value)}";
-
-    private static IReadOnlyList<string> DecodeValues(IEnumerable<string> ids, string dimension) =>
-        ids.Where(id => id.StartsWith(dimension + ":", StringComparison.Ordinal))
-            .Select(id => Uri.UnescapeDataString(id[(dimension.Length + 1)..]))
-            .ToArray();
 }
