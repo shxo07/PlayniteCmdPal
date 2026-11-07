@@ -13,15 +13,24 @@ namespace PlayniteCmdPal;
 /// </summary>
 internal sealed partial class PlayniteCatalogFilters : Filters
 {
+    private static readonly string AllGamesId = "all-games";
     private static readonly string InstalledId = "installed";
     private static readonly string NotInstalledId = "not-installed";
     private string[] _sources = [];
     private string[] _platforms = [];
 
+    public PlayniteCatalogFilters()
+    {
+        // Start unfiltered; users can explicitly choose a status or metadata filter.
+        CurrentFilterId = AllGamesId;
+    }
+
     public override IFilterItem[] GetFilters()
     {
         var filters = new List<IFilterItem>
         {
+            new Filter { Id = AllGamesId, Name = "All games (clear filters)" },
+            new Separator(),
             new Filter { Id = InstalledId, Name = "Installed" },
             new Filter { Id = NotInstalledId, Name = "Not installed" },
         };
@@ -73,6 +82,7 @@ internal sealed partial class PlayniteCatalogFilters : Filters
     public GameSearchFilters ToSearchFilters()
     {
         var selected = CurrentFilterId is { Length: > 0 } currentFilterId
+            && !string.Equals(currentFilterId, AllGamesId, StringComparison.Ordinal)
             ? new[] { currentFilterId }
             : Array.Empty<string>();
         bool? installed = null;
