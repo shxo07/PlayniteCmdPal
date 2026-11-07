@@ -31,6 +31,7 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage
         Title = "Playnite";
         Name = "Search games";
         _filters.PropChanged += Filters_PropChanged;
+        _filters.OptionsChanged += Filters_OptionsChanged;
         Filters = _filters;
         BeginSearch();
     }
@@ -48,6 +49,13 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage
         {
             BeginSearch();
         }
+    }
+
+    private void Filters_OptionsChanged(object? sender, EventArgs args)
+    {
+        // The SDK ignores assigning the same Filters instance; invalidate the page property
+        // so the host re-reads the changed dropdown options without starting another search.
+        OnPropertyChanged(nameof(Filters));
     }
 
     internal void RefreshCatalog()
@@ -103,21 +111,13 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage
                 }
 
                 _updatingCatalogFilters = true;
-                bool filterOptionsChanged;
                 try
                 {
-                    filterOptionsChanged = _filters.UpdateCatalog(catalog.Games);
+                    _filters.UpdateCatalog(catalog.Games);
                 }
                 finally
                 {
                     _updatingCatalogFilters = false;
-                }
-
-                if (filterOptionsChanged)
-                {
-                    // Replacing Filters with the same object is ignored by ListPage's
-                    // equality-checked setter. Notify the host to re-read its options.
-                    OnPropertyChanged(nameof(Filters));
                 }
 
                 _items = BuildItems(catalog, query);
