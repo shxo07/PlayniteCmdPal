@@ -29,7 +29,7 @@ internal sealed partial class PlayniteCatalogFilters : Filters
     {
         var filters = new List<IFilterItem>
         {
-            new Filter { Id = AllGamesId, Name = "All games (clear filters)" },
+            new Filter { Id = AllGamesId, Name = "All games" },
             new Separator(),
             new Filter { Id = InstalledId, Name = "Installed" },
             new Filter { Id = NotInstalledId, Name = "Not installed" },
