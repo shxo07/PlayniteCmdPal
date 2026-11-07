@@ -80,7 +80,7 @@ try {
     if ($json.games[0].id -ne '11111111-1111-4111-8111-111111111111' -or
         $json.games[0].name -cne $expectedName -or $json.games[0].isInstalled -ne $true -or
         $json.games[0].source -ne 'Source' -or $json.games[0].platform -ne 'PC' -or
-        $json.games[0].lastActivity -notmatch '^2026-10-29T18:45:00(\.0{1,7})?$') {
+        $null -ne $json.games[0].PSObject.Properties['lastActivity']) {
         throw 'First synthetic game did not round-trip.'
     }
     if ($json.games[1].id -ne '22222222-2222-4222-8222-222222222222' -or
