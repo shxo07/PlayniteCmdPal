@@ -65,8 +65,7 @@ internal sealed partial class PlayniteCmdPalRecentlyPlayedPage : DynamicListPage
                 return;
             }
 
-            // The provider keeps this page instance alive, so expose an explicit refresh action
-            // even when results exist; returning to the page after a launch must not stay stale.
+            // Keep an explicit refresh action because this page instance can outlive a game launch.
             items.Add(CreateRefreshItem("Refresh recently played games"));
             if (catalog.IsStale)
                 items.Add(CreateStatusItem("The Playnite catalog is over 24 hours old."));
@@ -84,6 +83,12 @@ internal sealed partial class PlayniteCmdPalRecentlyPlayedPage : DynamicListPage
                 return;
             }
 
+            var duplicateTitles = games
+                .GroupBy(game => game.Title, StringComparer.OrdinalIgnoreCase)
+                .Where(group => group.Count() > 1)
+                .Select(group => group.Key)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
             foreach (var game in games)
             {
                 var metadata = new List<string>
@@ -92,6 +97,11 @@ internal sealed partial class PlayniteCmdPalRecentlyPlayedPage : DynamicListPage
                 };
                 if (!string.IsNullOrWhiteSpace(game.Source)) metadata.Add(game.Source);
                 if (!string.IsNullOrWhiteSpace(game.Platform)) metadata.Add(game.Platform);
+                if (duplicateTitles.Contains(game.Title))
+                {
+                    var discriminator = game.GameId.Length > 8 ? game.GameId[..8] : game.GameId;
+                    metadata.Add($"ID {discriminator}");
+                }
 
                 items.Add(new ListItem(new LaunchGameCommand(game.GameId))
                 {
