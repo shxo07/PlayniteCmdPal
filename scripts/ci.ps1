@@ -7,8 +7,9 @@ $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $solutionPath = Join-Path $repoRoot 'PlayniteCmdPal.sln'
 $testProjectPath = Join-Path $repoRoot 'PlayniteCmdPal.Core.Tests\PlayniteCmdPal.Core.Tests.csproj'
 $adapterTestProjectPath = Join-Path $repoRoot 'PlayniteCmdPal.Playnite.Tests\PlayniteCmdPal.Playnite.Tests.csproj'
+$commandTestProjectPath = Join-Path $repoRoot 'PlayniteCmdPal.Command.Tests\PlayniteCmdPal.Command.Tests.csproj'
 
-if (-not (Test-Path -LiteralPath $solutionPath) -or -not (Test-Path -LiteralPath $testProjectPath) -or -not (Test-Path -LiteralPath $adapterTestProjectPath)) {
+if (-not (Test-Path -LiteralPath $solutionPath) -or -not (Test-Path -LiteralPath $testProjectPath) -or -not (Test-Path -LiteralPath $adapterTestProjectPath) -or -not (Test-Path -LiteralPath $commandTestProjectPath)) {
     [Console]::Error.WriteLine('ERROR: Expected solution or test project was not found relative to scripts/ci.ps1.')
     exit 1
 }
@@ -44,6 +45,7 @@ Invoke-DotNetStep -Name 'Restore' -Arguments @('restore', $solutionPath)
 Invoke-DotNetStep -Name 'Build (Release)' -Arguments @('build', $solutionPath, '--configuration', 'Release', '--no-restore')
 Invoke-DotNetStep -Name 'Test core search (Release)' -Arguments @('test', $testProjectPath, '--configuration', 'Release', '--no-build', '--no-restore')
 Invoke-DotNetStep -Name 'Test Playnite adapter (Release)' -Arguments @('test', $adapterTestProjectPath, '--configuration', 'Release', '--no-build', '--no-restore')
+Invoke-DotNetStep -Name 'Test Command Palette commands (Release)' -Arguments @('test', $commandTestProjectPath, '--configuration', 'Release', '--no-build', '--no-restore')
 
 $frameworkPowerShell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
 $frameworkSmoke = Join-Path $repoRoot 'scripts\test-playnite-snapshot-netfx.ps1'
