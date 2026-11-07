@@ -11,11 +11,13 @@ This document describes the catalog snapshot transport accepted in [ADR-005](DEC
 
 The canonical file is `%LOCALAPPDATA%\PlayniteCmdPal\catalog-v1.json`. The plugin creates the directory with inherited per-user permissions. The adapter opens the file read-only with `FileShare.ReadWrite | FileShare.Delete`; it never creates, repairs, or deletes the snapshot.
 
-## Schema v1
+## Schema v1 and v2 compatibility
 
-The writer adds the optional `lastActivity` property to each v1 record when Playnite has a value. The reader accepts older records without the property, preserving compatibility with snapshots produced before this feature. It is serialized with the round-trip .NET `DateTime` format (`O`) so the value and `DateTime.Kind` are retained; it is not forced to UTC. Playnite's SDK documents `Game.LastActivity` as the last-played `DateTime?`, but does not promise a universal timezone contract for every persisted value. The view sorts the original ticks and does not invent an offset. This is deterministic within the current Playnite machine/library timezone; a library moved between timezones cannot recover an original offset that the SDK value does not contain. `Modified` is not used.
+Schema v1 remains frozen: its game records contain only `id`, `name`, `isInstalled`, and optional `source`/`platform`. It never contains `lastActivity`. Older installed readers continue reading `catalog-v1.json` without encountering a new property or schema number.
 
-The recently played view sorts by descending `LastActivity.Ticks`. Equal timestamps are resolved by title using `OrdinalIgnoreCase`, then title using `Ordinal`, then the Playnite game ID using `Ordinal`. The page includes an explicit refresh row because Command Palette retains the page instance between visits.
+Schema v2 adds optional `lastActivity`, serialized with the round-trip .NET `DateTime` format (`O`) so the value and `DateTime.Kind` are retained; it is not forced to UTC. The current reader accepts both schemas and prefers the valid snapshot with the newest `generatedAtUtc`. If timestamps tie, it prefers v2. This lets an upgraded app read v2, lets it run against a legacy-only plugin via v1 fallback, and lets a rolled-back older plugin continue updating v1; the current app then chooses that newer v1 instead of displaying stale v2 data. Playnite's SDK does not promise a universal timezone contract for every persisted `LastActivity` value. `Unspecified` values are interpreted as local machine time when sorting. A library moved between timezones cannot recover an original offset that the SDK value does not contain. `Modified` is not used.
+
+The recently played view sorts by descending UTC instant. Equal timestamps are resolved by title using `OrdinalIgnoreCase`, then title using `Ordinal`, then the Playnite game ID using `Ordinal`. The page includes an explicit refresh row because Command Palette retains the page instance between visits.
 
 ```json
 {
@@ -38,6 +40,8 @@ The recently played view sorts by descending `LastActivity.Ticks`. Equal timesta
 The parser rejects input over 32 MiB, JSON deeper than 16 levels, unsupported schema versions, malformed envelopes, and arrays over 100,000 records. Invalid individual records and later duplicate IDs are skipped and counted; the first valid record for an ID wins. An empty `games` array is a valid empty library.
 
 ## Publication and refresh
+
+Each export atomically publishes v1 first and then v2 from the same in-memory Playnite projection. Publishing v1 first preserves compatibility for older installed readers; if v1 publication fails, v2 is not published. A v2 publication failure leaves the last complete v2 file intact while the newly refreshed v1 remains usable by old readers and as a fallback for the current reader.
 
 The plugin requests an export on application start, database open, `OnLibraryUpdated`, game install/uninstall lifecycle events, game collection changes, relevant game updates (including `LastActivity` changes), and source/platform metadata changes. Requests are debounced by 750 ms and serialized. A request arriving during an export schedules one follow-up export, so the final state is not lost. Each export re-enumerates the database; it does not patch an old snapshot from event payloads.
 
