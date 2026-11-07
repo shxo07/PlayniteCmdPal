@@ -38,8 +38,25 @@ internal sealed partial class AdvancedFiltersForm : FormContent
     public override CommandResult SubmitForm(string inputs, string data) =>
         ApplySelections(inputs, "apply");
 
-    public override CommandResult SubmitAction(string actionId, string inputs, string data) =>
-        ApplySelections(inputs, actionId);
+    public override CommandResult SubmitForm(string inputs, string data) =>
+        ApplySelections(inputs, ReadActionId(data));
+
+    private static string ReadActionId(string data)
+    {
+        if (string.IsNullOrWhiteSpace(data))
+        {
+            return "apply";
+        }
+
+        try
+        {
+            return JsonNode.Parse(data)?["action"]?.ToString() ?? "apply";
+        }
+        catch (JsonException)
+        {
+            return "apply";
+        }
+    }
 
     private CommandResult ApplySelections(string inputs, string actionId)
     {
