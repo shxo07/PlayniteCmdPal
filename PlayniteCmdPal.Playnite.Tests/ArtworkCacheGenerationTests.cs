@@ -438,6 +438,37 @@ public sealed class ArtworkCacheGenerationTests : IDisposable
     }
 
     [Fact]
+    public void StartupRecoveryPreservesMarkerWhenPreviousCacheAndBackupAreBothMissing()
+    {
+        var oldBytes = new byte[] { 0xFF, 0xD8, 0xFF, 0xD9 };
+        var newBytes = new byte[] { 0xFF, 0xD8, 0x0A, 0xFF, 0xD9 };
+        var oldSource = WriteSource(FileIdA, oldBytes);
+        var newSource = WriteSource(FileIdB, newBytes);
+        using (var initial = new ArtworkCacheGeneration(_cacheRoot))
+        {
+            initial.TryImport(GameId, Reference(FileIdA), oldSource, _filesRoot);
+            initial.Activate(); initial.MarkPublished(); initial.Complete();
+        }
+
+        var interrupted = new ArtworkCacheGeneration(_cacheRoot);
+        interrupted.TryImport(GameId, Reference(FileIdB), newSource, _filesRoot);
+        interrupted.Activate();
+        var backup = Directory.GetDirectories(
+            Path.GetDirectoryName(_cacheRoot)!, "artwork-v2.backup-*").Single();
+        interrupted.PreserveForRecovery();
+
+        // Simulate loss of both the active generation and the rollback generation.
+        Directory.Delete(_cacheRoot, recursive: true);
+        Directory.Delete(backup, recursive: true);
+
+        var marker = _cacheRoot + ".transaction";
+        Assert.Throws<IOException>(() => new ArtworkCacheGeneration(_cacheRoot));
+        Assert.True(File.Exists(marker));
+        Assert.False(Directory.Exists(_cacheRoot));
+        Assert.False(Directory.Exists(backup));
+    }
+
+    [Fact]
     public void StartupRecoveryRestoresPreviousCacheAfterInterruptedSwap()
     {
         var oldBytes = new byte[] { 0xFF, 0xD8, 0xFF, 0xD9 };
