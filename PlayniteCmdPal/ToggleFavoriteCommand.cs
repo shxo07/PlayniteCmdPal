@@ -37,16 +37,32 @@ internal sealed partial class ToggleFavoriteCommand : InvokableCommand
 
     public override CommandResult Invoke()
     {
+        bool isFavorite;
         try
         {
-            var isFavorite = _store.Toggle(_gameId);
-            _onChanged?.Invoke();
-            return ShowToast(isFavorite ? "Game pinned to Favorites." : "Game removed from Favorites.");
+            isFavorite = _store.Toggle(_gameId);
         }
         catch (Exception)
         {
             return ShowToast("Favorites could not be changed. Check the local preferences file.");
         }
+
+        try
+        {
+            _onChanged?.Invoke();
+        }
+        catch (Exception)
+        {
+            // Persistence already succeeded; only the UI refresh failed.
+            var message = isFavorite
+                ? "Game pinned to Favorites, but the list could not refresh."
+                : "Game removed from Favorites, but the list could not refresh.";
+            return ShowToast(message);
+        }
+
+        return ShowToast(isFavorite
+            ? "Game pinned to Favorites."
+            : "Game removed from Favorites.");
     }
 
     private static CommandResult ShowToast(string message)
