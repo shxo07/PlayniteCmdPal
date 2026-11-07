@@ -126,6 +126,15 @@ public sealed class RecentlyPlayedGamesTests
             RecentlyPlayedGames.ComposeVisibleItems(status, games, "  ", item => item));
     }
 
+
+    [Fact]
+    public void DistinguishesEmptyLibraryFromAllInvalidAndUnplayedRecords()
+    {
+        Assert.Equal(RecentlyPlayedEmptyState.EmptyLibrary, RecentlyPlayedGames.GetEmptyState(0, 0));
+        Assert.Equal(RecentlyPlayedEmptyState.NoUsableRecords, RecentlyPlayedGames.GetEmptyState(0, 4));
+        Assert.Equal(RecentlyPlayedEmptyState.NoPlayHistory, RecentlyPlayedGames.GetEmptyState(5, 2));
+    }
+
     [Fact]
     public void RejectsNullCatalog() => Assert.Throws<ArgumentNullException>(() => RecentlyPlayedGames.Sort(null!));
 }
