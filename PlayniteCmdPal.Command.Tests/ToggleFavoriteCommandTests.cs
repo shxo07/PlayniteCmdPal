@@ -32,6 +32,23 @@ public sealed class ToggleFavoriteCommandTests : IDisposable
         AssertToastKeepsPaletteOpen(result, "Favorites could not be changed. Check the local preferences file.");
     }
 
+    [Fact]
+    public void RefreshFailureReportsSuccessfulChangeAndKeepsPaletteOpen()
+    {
+        var store = new FavoritesStore(FilePath);
+        var command = new ToggleFavoriteCommand(
+            store,
+            "game-id",
+            () => throw new InvalidOperationException("Refresh failed."));
+
+        var result = command.Invoke();
+
+        Assert.True(store.IsFavorite("game-id"));
+        AssertToastKeepsPaletteOpen(
+            result,
+            "Game pinned to Favorites, but the list could not refresh.");
+    }
+
     private static void AssertToastKeepsPaletteOpen(CommandResult result, string expectedMessage)
     {
         Assert.Equal(CommandResultKind.ShowToast, result.Kind);
