@@ -114,6 +114,31 @@ public sealed class FavoritesStoreTests : IDisposable
         Assert.Equal(new[] { "recovered-game" }, new FavoritesStore(FilePath).GetFavoriteIds());
     }
 
+    [Theory]
+    [InlineData("null")]
+    [InlineData("\"version-one\"")]
+    [InlineData("true")]
+    [InlineData("{}")]
+    [InlineData("[]")]
+    [InlineData("1.5")]
+    public void NonIntegerSchemaVersionValuesRecoverOnReadAndAreReplacedByValidVersionOneDocument(string malformedVersion)
+    {
+        Directory.CreateDirectory(_directory);
+        File.WriteAllText(FilePath, $"{{\"schemaVersion\":{malformedVersion},\"favoriteGameIds\":[\"stale-game\"]}}");
+        var store = new FavoritesStore(FilePath);
+
+        Assert.Empty(store.GetFavoriteIds());
+        Assert.False(store.IsFavorite("stale-game"));
+
+        Assert.True(store.Toggle("recovered-game"));
+
+        using var document = JsonDocument.Parse(File.ReadAllText(FilePath));
+        Assert.Equal(JsonValueKind.Number, document.RootElement.GetProperty("schemaVersion").ValueKind);
+        Assert.Equal(FavoritesStore.CurrentSchemaVersion, document.RootElement.GetProperty("schemaVersion").GetInt32());
+        Assert.Equal(new[] { "recovered-game" }, document.RootElement.GetProperty("favoriteGameIds").EnumerateArray().Select(value => value.GetString()));
+        Assert.Equal(new[] { "recovered-game" }, new FavoritesStore(FilePath).GetFavoriteIds());
+    }
+
     [Fact]
     public void MissingGamesCanBeFilteredWithoutDeletingTheirSavedIds()
     {

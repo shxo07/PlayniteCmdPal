@@ -128,6 +128,7 @@ public sealed partial class FavoritesStore
             }
 
             if (!envelope.RootElement.TryGetProperty("schemaVersion", out var schemaVersion)
+                || schemaVersion.ValueKind != JsonValueKind.Number
                 || !schemaVersion.TryGetInt32(out var version)
                 || version < CurrentSchemaVersion)
             {

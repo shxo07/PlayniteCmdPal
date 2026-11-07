@@ -2,7 +2,7 @@
 
 This page explains what is tested, where each check runs, and how to run it. For installing the toolchain and deploying the extension, see [Developer Setup](DEVELOPER-SETUP.md).
 
-**Status (2026-11-07):** Automated coverage is synthetic and is designed to run without Playnite, PowerToys, a personal game library, or secrets. The test commands below are the ones executed by `scripts/ci.ps1`, which Windows CI and CodeQL run on `windows-latest`. The latest verified Windows CI run passed restore, Release build, 101 Core tests, 183 adapter tests, 2 Command Palette command tests, and the .NET Framework smoke test ([run 249](https://github.com/shxo07/PlayniteCmdPal/actions/runs/41304875648)); CodeQL also passed ([run 249](https://github.com/shxo07/PlayniteCmdPal/actions/runs/41304875561)). See the verification evidence section of [Developer Setup](DEVELOPER-SETUP.md) for the evidence trail and its limits.
+**Status (2026-11-07):** Automated coverage is synthetic and is designed to run without Playnite, PowerToys, a personal game library, or secrets. The test commands below are the ones executed by `scripts/ci.ps1`, which Windows CI and CodeQL run on `windows-latest`. The latest verified Windows CI run passed restore, Release build, 101 Core tests, 183 adapter tests, 3 Command Palette command tests, and the .NET Framework smoke test ([run 42331229094](https://github.com/shxo07/PlayniteCmdPal/actions/runs/42331229094)); CodeQL also passed ([run 42331229144](https://github.com/shxo07/PlayniteCmdPal/actions/runs/42331229144)). The six new schema-version cases require a fresh run. See the verification evidence section of [Developer Setup](DEVELOPER-SETUP.md) for the evidence trail and its limits.
 
 ## Test projects
 
@@ -23,7 +23,7 @@ Test data is generated in the test process and written to a temporary directory 
 | File | Covers |
 |---|---|
 | `GameEntryTests` | Required-field validation and parameter names, optional fields defaulting to unknown, record value equality/hashing, `with` expressions preserving identity, display text not being normalized by the model. |
-| `FavoritesStoreTests` | Missing-file behavior, pin/unpin by stable ID, persistence after store recreation, versioned JSON, successful-write temporary-file cleanup, malformed JSON recovery (including array, `null`, string, and numeric root values), missing-schema recovery, missing-game filtering without deleting saved IDs, future-schema preservation before payload deserialization, and failed-write rollback plus temporary-file cleanup. The malformed-root theory verifies both read APIs recover to an empty set and that a subsequent toggle replaces the invalid root with a valid version-1 object document. |
+| `FavoritesStoreTests` | Missing-file behavior, pin/unpin by stable ID, persistence after store recreation, versioned JSON, successful-write temporary-file cleanup, malformed JSON recovery (including array, `null`, string, and numeric root values), missing-schema recovery and malformed schema-version recovery (null, string, boolean, object, array, and fractional number), missing-game filtering without deleting saved IDs, future-schema preservation before payload deserialization, and failed-write rollback plus temporary-file cleanup. The malformed-root and malformed-schema-version theories verify both read APIs recover to an empty set and that a subsequent toggle replaces invalid input with a valid version-1 object document. Schema-version validation checks `JsonValueKind.Number` before integer conversion, avoiding `InvalidOperationException` for non-numeric JSON kinds. |
 | `LatestRequestGateTests` | Deterministic overlapping-request ordering: a stale request cannot publish after a newer query takes ownership. |
 | `GameSearchTests` | Baseline ranking order (exact, prefix, word-prefix, substring), case-insensitivity, duplicate titles, tie-breaks, blank/null query, empty catalog, invalid entries. |
 | `GameSearchRankingTests` | Query trimming versus untrimmed stored titles, multi-word and partial queries, word-boundary rules (only non-alphanumeric characters start a word), earliest-match index ordering, ordinal ID ordering for duplicate titles, canonical duplicate-ID selection independent of input order, returned collection immutability, single enumeration of the catalog, argument precedence (blank query short-circuits), and a 5,000-entry determinism check. |
@@ -145,8 +145,8 @@ dotnet test .\PlayniteCmdPal.Core.Tests\PlayniteCmdPal.Core.Tests.csproj --logge
 
 ### Coverage at a glance
 
-The suites currently contain **287 authored test cases** (facts plus `[InlineData]` rows) split across three
-test projects: **101** for domain/search, **3** for Command Palette favorite command results,
+The suites currently contain **293 authored test cases** (facts plus `[InlineData]` rows) split across three
+test projects: **107** for domain/search, **3** for Command Palette favorite command results,
 and **183** for the snapshot contract, publication, refresh, and adapter policy. Of those, 148 were added for
 [WERD-62](https://linear.app/werdscopez7347/issue/WERD-62/expand-automated-tests-and-finalize-the-developer-setup-guide).
 
@@ -154,11 +154,11 @@ How that number is established, so it can be re-derived rather than trusted:
 
 | Source | Core | Command | Adapter | Total |
 |---|---:|---:|---:|---:|
-| Authored `[Fact]` plus `[InlineData]` cases in this branch | 101 | 3 | 183 | 287 |
+| Authored `[Fact]` plus `[InlineData]` cases after the schema-version regression cases | 107 | 3 | 183 | 293 |
 | Existing Windows CI baseline before command-result tests ([run 41184115994](https://github.com/werdscopez7347/PlayniteCmdPal/actions/runs/41184115994)) | 66 | — | 183 | 249 |
-| Latest Windows CI on this branch ([run 249](https://github.com/shxo07/PlayniteCmdPal/actions/runs/41304875648)) | 101 | 2 | 183 | 286 |
+| Latest verified Windows CI before the schema-version regression cases ([run 42331229094](https://github.com/shxo07/PlayniteCmdPal/actions/runs/42331229094)) | 101 | 3 | 183 | 287 |
 
-The earlier Windows CI baseline reported 249 passing cases (66 Core and 183 adapter). Since then, this branch added 35 Core cases and 2 Command Palette command cases. The latest Windows CI run executed all 286 cases successfully. The new refresh-failure regression test increases the branch's authored total to 287; its execution is pending the next CI run.
+The earlier Windows CI baseline reported 249 passing cases (66 Core and 183 adapter). The branch then added 35 Core cases and 3 Command Palette command cases; Windows CI executed all 287 successfully in run [42331229094](https://github.com/shxo07/PlayniteCmdPal/actions/runs/42331229094). The six malformed-schema-version regression cases increase the authored total to 293; their execution is pending CI on this revision.
 
 Counts drift as tests change. Treat the per-file table above as the authoritative map and re-read each `Passed!` line rather than trusting a number written here. If the written count and `dotnet test` disagree, the `dotnet test` output wins: it is the only measurement that actually executed the tests.
 
@@ -230,5 +230,6 @@ These are deliberately not automated yet; each needs a Windows host and, in most
 - Minimum supported versions of Windows, Visual Studio, PowerToys, and Playnite are recorded as "validated once", not as tested minimums. See the contributor environment table in [Developer Setup](DEVELOPER-SETUP.md).
 
 
-- [41304875648](https://github.com/shxo07/PlayniteCmdPal/actions/runs/41304875648) — Windows CI run 249 on the WERD-75 head: Release build, `101/101` Core tests, `183/183` adapter tests, `2/2` Command Palette command tests, and the .NET Framework snapshot smoke step all passed.
-- [41304875561](https://github.com/shxo07/PlayniteCmdPal/actions/runs/41304875561) — CodeQL run 249 on the same WERD-75 head passed.
+- [42331229094](https://github.com/shxo07/PlayniteCmdPal/actions/runs/42331229094) — Windows CI on the pre-schema-fix WERD-75 head: Release build, `101/101` Core tests, `183/183` adapter tests, `3/3` Command Palette command tests, and the .NET Framework snapshot smoke step all passed.
+- [42331229144](https://github.com/shxo07/PlayniteCmdPal/actions/runs/42331229144) — CodeQL on the same pre-schema-fix head passed.
+- **Current schema-version regression cases:** 6 additional Core cases; CI execution pending on this revision.
