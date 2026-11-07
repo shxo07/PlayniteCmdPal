@@ -17,23 +17,19 @@ namespace PlayniteCmdPal;
 internal sealed partial class PlayniteCmdPalPage : DynamicListPage
 {
     private readonly IReadOnlyPlayniteCatalog _catalog = new PlayniteCatalogAdapter();
-    private readonly PlayniteCatalogFilters _filters = new();
+    private readonly CatalogFilterState _filterState = new();
     private readonly FavoritesStore _favorites = FavoritesPreferences.Store;
     private IListItem[] _items = [CreateStatusItem("Loading your Playnite library…")];
     private CancellationTokenSource? _searchCancellation;
     private string _searchText = string.Empty;
     private int _requestVersion;
     private readonly object _requestGate = new();
-    private bool _updatingCatalogFilters;
 
     public PlayniteCmdPalPage()
     {
         Icon = IconHelpers.FromRelativePath("Assets\\StoreLogo.png");
         Title = "Playnite";
         Name = "Search games";
-        _filters.PropChanged += Filters_PropChanged;
-        _filters.OptionsChanged += Filters_OptionsChanged;
-        Filters = _filters;
         BeginSearch();
     }
 
@@ -43,21 +39,6 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage
     }
 
     public override IListItem[] GetItems() => _items;
-
-    private void Filters_PropChanged(object sender, IPropChangedEventArgs args)
-    {
-        if (!_updatingCatalogFilters)
-        {
-            BeginSearch();
-        }
-    }
-
-    private void Filters_OptionsChanged(object? sender, EventArgs args)
-    {
-        // The SDK ignores assigning the same Filters instance; invalidate the page property
-        // so the host re-reads the changed dropdown options without starting another search.
-        OnPropertyChanged(nameof(Filters));
-    }
 
     internal void RefreshCatalog()
     {
@@ -111,16 +92,7 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage
                     return;
                 }
 
-                _updatingCatalogFilters = true;
-                try
-                {
-                    _filters.UpdateCatalog(catalog.Games);
-                }
-                finally
-                {
-                    _updatingCatalogFilters = false;
-                }
-
+                _filterState.UpdateCatalog(catalog.Games);
                 _items = BuildItems(catalog, query);
                 RaiseItemsChanged();
             }
@@ -138,7 +110,11 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage
                     return;
                 }
 
-                _items = [CreateStatusItem("Couldn't read the Playnite catalog. Check the companion plugin and snapshot permissions, then refresh.")];
+                _items =
+                [
+                    CreateAdvancedFiltersItem(),
+                    CreateStatusItem("Couldn't read the Playnite catalog. Check the companion plugin and snapshot permissions, then refresh."),
+                ];
                 RaiseItemsChanged();
             }
         }
@@ -146,14 +122,15 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage
 
     private IListItem[] BuildItems(CatalogReadResult catalog, string query)
     {
+        var items = new List<IListItem> { CreateAdvancedFiltersItem() };
+
         if (!catalog.IsAvailable)
         {
-            var message = catalog.Issue?.Message
-                ?? "The Playnite catalog is unavailable. Install and start the companion plugin, then refresh.";
-            return [CreateRefreshItem(message)];
+            items.Add(CreateRefreshItem(catalog.Issue?.Message
+                ?? "The Playnite catalog is unavailable. Install and start the companion plugin, then refresh."));
+            return items.ToArray();
         }
 
-        var items = new List<IListItem>();
         if (catalog.IsStale)
         {
             items.Add(CreateStatusItem("The Playnite catalog is over 24 hours old. Open Playnite to refresh it."));
@@ -175,10 +152,10 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage
             return items.ToArray();
         }
 
-        var matches = GameSearch.Search(catalog.Games, query, _filters.ToSearchFilters());
+        var activeFilters = _filterState.ToSearchFilters();
+        var matches = GameSearch.Search(catalog.Games, query, activeFilters);
         if (matches.Count == 0)
         {
-            var activeFilters = _filters.ToSearchFilters();
             var hasActiveFilters = activeFilters.IsInstalled.HasValue
                 || activeFilters.Sources?.Count > 0
                 || activeFilters.Platforms?.Count > 0;
@@ -186,7 +163,9 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage
                 ? string.IsNullOrWhiteSpace(query)
                     ? "No games match the selected filters. Clear one or more filters to see more games."
                     : $"No games match “{query.Trim()}” with the selected filters. Clear a filter or change your search."
-                : $"No games match “{query.Trim()}”.";
+                : string.IsNullOrWhiteSpace(query)
+                    ? "No games are available in the current catalog."
+                    : $"No games match “{query.Trim()}”.";
             items.Add(CreateStatusItem(message));
             return items.ToArray();
         }
@@ -233,6 +212,17 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage
         }
 
         return items.ToArray();
+    }
+
+    private IListItem CreateAdvancedFiltersItem()
+    {
+        var count = _filterState.ActiveFilterCount;
+        return new ListItem(new AdvancedFiltersPage(_filterState, () => BeginSearch()))
+        {
+            Title = count == 0 ? "Advanced filters" : $"Advanced filters ({count})",
+            Subtitle = count == 0 ? "Installed status, source, and platform" : "Filters are active · Select to edit",
+            Icon = new IconInfo("\uE71C"),
+        };
     }
 
     private static IListItem CreateStatusItem(string message) =>
