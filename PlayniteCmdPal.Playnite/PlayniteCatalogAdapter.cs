@@ -39,9 +39,15 @@ public sealed class PlayniteCatalogAdapter : IReadOnlyPlayniteCatalog
     private Task<CatalogReadResult>? _inFlight;
 
     public PlayniteCatalogAdapter(string? snapshotPath = null, TimeProvider? timeProvider = null)
+        : this(snapshotPath ?? GetDefaultSnapshotPath(), snapshotPath is null ? GetLegacySnapshotPath() : null, timeProvider)
     {
-        _snapshotPath = snapshotPath ?? GetDefaultSnapshotPath();
-        _legacySnapshotPath = snapshotPath is null ? GetLegacySnapshotPath() : null;
+    }
+
+    public PlayniteCatalogAdapter(string enrichedSnapshotPath, string? legacySnapshotPath, TimeProvider? timeProvider = null)
+    {
+        if (string.IsNullOrWhiteSpace(enrichedSnapshotPath)) throw new ArgumentException("An enriched snapshot path is required.", nameof(enrichedSnapshotPath));
+        _snapshotPath = enrichedSnapshotPath;
+        _legacySnapshotPath = legacySnapshotPath;
         _timeProvider = timeProvider ?? TimeProvider.System;
     }
 
