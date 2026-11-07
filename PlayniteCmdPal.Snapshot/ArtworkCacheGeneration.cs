@@ -375,9 +375,18 @@ public sealed class ArtworkCacheGeneration : IDisposable
 
             using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
             var json = reader.ReadToEnd();
-            return json.StartsWith(
-                "{\"schemaVersion\":2,\"generatedAtUtc\":\"" + token + "\",\"games\":",
-                StringComparison.Ordinal)
+            if (!DateTimeOffset.TryParse(
+                    token,
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    System.Globalization.DateTimeStyles.RoundtripKind,
+                    out var expectedGeneratedAtUtc))
+            {
+                return SnapshotPublicationState.NotPublished;
+            }
+
+            var parsed = CatalogSnapshotParser.Parse(Encoding.UTF8.GetBytes(json));
+            return parsed.Snapshot is { } snapshot &&
+                   snapshot.GeneratedAtUtc == expectedGeneratedAtUtc
                 ? SnapshotPublicationState.Published
                 : SnapshotPublicationState.NotPublished;
         }
