@@ -2,7 +2,7 @@
 
 This page explains what is tested, where each check runs, and how to run it. For installing the toolchain and deploying the extension, see [Developer Setup](DEVELOPER-SETUP.md).
 
-**Status (2026-10-31):** Automated coverage is synthetic and is designed to run without Playnite, PowerToys, a personal game library, or secrets. The test commands below are the ones executed by `scripts/ci.ps1`, which Windows CI and CodeQL run on `windows-latest`. The latest verified Windows CI run passed restore, Release build, 66 core tests, 183 adapter tests, and the .NET Framework smoke test ([run 41190710365](https://github.com/werdscopez7347/PlayniteCmdPal/actions/runs/41190710365)); see the verification evidence section of [Developer Setup](DEVELOPER-SETUP.md) for the evidence trail and its limits.
+**Status (2026-11-07):** Automated coverage is synthetic and is designed to run without Playnite, PowerToys, a personal game library, or secrets. The last confirmed Windows CI and CodeQL runs passed on the preceding PR head (`7d71499`); the review-fix branch adds deterministic snapshot-interleaving, presentation-helper, and v1/v2 .NET Framework smoke coverage. Its new CI results must be checked before treating those additions as validated. The test commands below are the ones executed by `scripts/ci.ps1` on `windows-latest`.
 
 ## Test projects
 
@@ -24,6 +24,7 @@ Test data is generated in the test process and written to a temporary directory 
 | `GameEntryTests` | Required-field validation and parameter names, optional fields defaulting to unknown, record value equality/hashing, `with` expressions preserving identity, display text not being normalized by the model. |
 | `GameSearchTests` | Baseline ranking order (exact, prefix, word-prefix, substring), case-insensitivity, duplicate titles, tie-breaks, blank/null query, empty catalog, invalid entries. |
 | `GameSearchRankingTests` | Query trimming versus untrimmed stored titles, multi-word and partial queries, word-boundary rules (only non-alphanumeric characters start a word), earliest-match index ordering, ordinal ID ordering for duplicate titles, canonical duplicate-ID selection independent of input order, returned collection immutability, single enumeration of the catalog, argument precedence (blank query short-circuits), and a 5,000-entry determinism check. |
+| `RecentlyPlayedGamesTests` | Newest-first ordering and deterministic tie-breaks; UTC/local/unspecified instant semantics; normalized timestamp formatting in an explicit nonzero-offset display zone; status/recovery item retention while game-only search filters; and distinct empty-library, all-invalid, and no-play-history states. |
 
 ### Snapshot contract (`PlayniteCmdPal.Playnite.Tests`)
 
@@ -44,7 +45,7 @@ Test data is generated in the test process and written to a temporary directory 
 | `SnapshotFilePublisherContractTests` | Validation before filesystem contact, pre-canceled publication creating nothing, repeated replacement, overwriting a corrupt file, concurrent first-creation races, omitted optional fields, and temporary files never remaining after a failed replacement. |
 | `CatalogExportCoordinatorTests` (pre-existing) | Burst coalescing, follow-up scheduling, failure isolation, dispose semantics. |
 | `CatalogExportCoordinatorLifecycleTests` | Constructor validation, zero debounce, requests made before the loop starts, a burst inside the debounce window collapsing to one export, requests during an export scheduling exactly one follow-up, exports never overlapping, error reporting without escaping the loop, faulted-task handling, disposal canceling the delegate's token, single-run enforcement, idempotent disposal, and disposing before or while running. |
-| `PlayniteCatalogAdapterTests` (pre-existing) | Missing file, mapping to `GameEntry`, empty library, staleness boundary, last-known-good retention, reconnect, cache interval, coalescing, skipped records. |
+| `PlayniteCatalogAdapterTests` | Missing file, mapping to `GameEntry`, empty library, staleness boundary, last-known-good retention, reconnect, cache interval, coalescing, skipped records, v1 rollback selection, and deterministic old-v2/new-v1/new-v2 publication interleavings (including initially missing v2). |
 | `PlayniteCatalogAdapterPolicyTests` | Default path and policy constants, the adapter never creating or deleting the snapshot, reading while a writer holds the file open, a directory at the snapshot path being reported as unavailable rather than missing, invalid records keeping the library usable, empty/unsupported files, adapter output ranking through `GameSearch`, interval boundary behavior, repeated failures retaining the same last-known-good data, concurrent callers sharing a read, pre-canceled callers, immutability of returned results, and a 2,000-game round trip through the real publisher and adapter. All of it passed on Windows in run [41184115994](https://github.com/werdscopez7347/PlayniteCmdPal/actions/runs/41184115994). |
 
 ## What runs where
@@ -54,7 +55,7 @@ Test data is generated in the test process and written to a temporary directory 
 | `dotnet restore` / `dotnet build` (Release) | Yes, via `scripts/ci.ps1` | Yes | Yes | Yes (MSIX/WinUI targets) | No |
 | `PlayniteCmdPal.Core.Tests` | Yes | Yes | Yes | No (runs on any OS with the .NET 10 SDK, but the repository's shared script is Windows-only) | No |
 | `PlayniteCmdPal.Playnite.Tests` | Yes | Yes | Yes | No for the unit/contract tests; the shared script itself is Windows-only | No |
-| .NET Framework snapshot smoke test (`scripts/test-playnite-snapshot-netfx.ps1`) | Yes | Yes | Yes | Yes (Windows PowerShell 5.1 / .NET Framework CLR) | No |
+| .NET Framework snapshot smoke test (`scripts/test-playnite-snapshot-netfx.ps1`) | Yes | Yes | Yes | Yes (Windows PowerShell 5.1 / .NET Framework CLR) | No; verifies v1 remains frozen and v2 serializes/replaces `lastActivity`. |
 | CodeQL C# analysis | No | n/a | Yes | Yes (workflow runs on `windows-latest`) | No |
 | MSIX deploy + Command Palette extension reload | Manual | No | No | Yes | PowerToys |
 | Companion plugin packaging (`scripts/package-playnite-plugin.ps1`) | Manual | No | No | Yes | No (publishes and smoke-tests the `.pext`) |
@@ -206,6 +207,6 @@ These are deliberately not automated yet; each needs a Windows host and, in most
 
 - **Clean-machine setup (deferred, not passed):** the [Developer Setup](DEVELOPER-SETUP.md) steps have not been replayed on a freshly imaged Windows machine by an independent contributor. Deferred on 2026-10-31: the maintainer develops and tests on Windows 10 build 19041 and no separate clean Windows machine was available. This is an environmental limitation, not a failure, and the step must not be reported as complete until it actually happens.
 - The companion plugin's Playnite event wiring (`OnDatabaseOpened`, game/source/platform collection changes, relevance filtering of game updates) is compiled but not unit tested, because `PlayniteApi` is supplied by the Playnite host. Its observable behavior is covered manually through the [Catalog Bridge checklist](CATALOG-BRIDGE.md#manual-playnite-verification-still-required).
-- The CmdPal presentation layer (search page, ranking display, launch action) has no automated tests; it is exercised by manual deploy/reload and the launch-by-ID smoke test.
+- The Command Palette host page and launch command are not instantiated in unit tests. Their pure presentation helpers (game-only filtering with persistent status items, timestamp formatting, and empty/skipped-state classification) are covered by `RecentlyPlayedGamesTests`; host wiring still requires manual deploy/reload and launch verification.
 - No test verifies the real Playnite library contents against the snapshot (by design: that would require personal data).
 - Minimum supported versions of Windows, Visual Studio, PowerToys, and Playnite are recorded as "validated once", not as tested minimums. See the contributor environment table in [Developer Setup](DEVELOPER-SETUP.md).
