@@ -75,4 +75,23 @@ public sealed class LastActivitySnapshotTests
         Assert.Equal(1, parsed.SkippedRecordCount);
         Assert.Null(Assert.Single(parsed.Snapshot!.Games).LastActivity);
     }
+    [Fact]
+    public void V1RejectsTheNewPropertyInsteadOfSilentlyChangingItsContract()
+    {
+        var json = $"""{"schemaVersion":1,"generatedAtUtc":"2026-10-30T00:00:00Z","games":[{"id":"{{GameId}}","name":"Legacy reader","isInstalled":true,"lastActivity":"2026-10-30T14:25:00.0000000"}]}""";
+        var parsed = CatalogSnapshotParser.Parse(Encoding.UTF8.GetBytes(json));
+        Assert.Null(parsed.Issue);
+        Assert.Empty(parsed.Snapshot!.Games);
+        Assert.Equal(1, parsed.SkippedRecordCount);
+    }
+
+    [Fact]
+    public void V2AcceptsLastActivityAndV1RemainsASeparateContract()
+    {
+        var json = $"""{"schemaVersion":2,"generatedAtUtc":"2026-10-30T00:00:00Z","games":[{"id":"{{GameId}}","name":"Enriched","isInstalled":true,"lastActivity":"2026-10-30T14:25:00.0000000"}]}""";
+        var parsed = CatalogSnapshotParser.Parse(Encoding.UTF8.GetBytes(json));
+        Assert.Null(parsed.Issue);
+        Assert.Equal(new DateTime(2026, 10, 30, 14, 25, 0, DateTimeKind.Unspecified), Assert.Single(parsed.Snapshot!.Games).LastActivity);
+    }
+
 }
