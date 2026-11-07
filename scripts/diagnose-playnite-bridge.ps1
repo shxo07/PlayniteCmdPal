@@ -233,34 +233,39 @@ foreach ($root in $roots) {
 }
 
 $snapshotDir = Join-Path $env:LOCALAPPDATA 'PlayniteCmdPal'
-$snapshotPath = Join-Path $snapshotDir 'catalog-v1.json'
 Write-Line ''
-Write-Line "Snapshot path: $snapshotPath"
-Write-Line ('Snapshot exists: ' + (Test-Path -LiteralPath $snapshotPath))
+Write-Line "Snapshot directory: $snapshotDir"
 Write-Line ('Snapshot directory exists: ' + (Test-Path -LiteralPath $snapshotDir -PathType Container))
 
-if (Test-Path -LiteralPath $snapshotPath) {
-    $snapshotItem = Get-Item -LiteralPath $snapshotPath
-    Write-Line ('Snapshot length: ' + $snapshotItem.Length)
-    Write-Line ('Snapshot last write UTC: ' + $snapshotItem.LastWriteTimeUtc.ToString('o'))
+foreach ($snapshotName in @('catalog-v1.json', 'catalog-v2.json')) {
+    $snapshotPath = Join-Path $snapshotDir $snapshotName
+    Write-Line ''
+    Write-Line "Snapshot path: $snapshotPath"
+    Write-Line ('Snapshot exists: ' + (Test-Path -LiteralPath $snapshotPath))
 
-    try {
-        $snapshot = Get-Content -LiteralPath $snapshotPath -Raw -ErrorAction Stop | ConvertFrom-Json
-        $schemaProperty = $snapshot.PSObject.Properties['schemaVersion']
-        $timestampProperty = $snapshot.PSObject.Properties['generatedAtUtc']
-        $gamesProperty = $snapshot.PSObject.Properties['games']
-        Write-Line ('schemaVersion: ' + $(if ($schemaProperty) { $schemaProperty.Value } else { '<missing>' }))
-        Write-Line ('generatedAtUtc: ' + $(if ($timestampProperty) { $timestampProperty.Value } else { '<missing>' }))
-        Write-Line ('gameCount: ' + $(if ($gamesProperty) { @($gamesProperty.Value).Count } else { '<missing>' }))
-    } catch {
-        Write-Line 'Snapshot JSON could not be parsed.'
+    if (Test-Path -LiteralPath $snapshotPath) {
+        $snapshotItem = Get-Item -LiteralPath $snapshotPath
+        Write-Line ('Snapshot length: ' + $snapshotItem.Length)
+        Write-Line ('Snapshot last write UTC: ' + $snapshotItem.LastWriteTimeUtc.ToString('o'))
+        try {
+            $snapshot = Get-Content -LiteralPath $snapshotPath -Raw -ErrorAction Stop | ConvertFrom-Json
+            $schemaProperty = $snapshot.PSObject.Properties['schemaVersion']
+            $timestampProperty = $snapshot.PSObject.Properties['generatedAtUtc']
+            $gamesProperty = $snapshot.PSObject.Properties['games']
+            Write-Line ('schemaVersion: ' + $(if ($schemaProperty) { $schemaProperty.Value } else { '<missing>' }))
+            Write-Line ('generatedAtUtc: ' + $(if ($timestampProperty) { $timestampProperty.Value } else { '<missing>' }))
+            Write-Line ('gameCount: ' + $(if ($gamesProperty) { @($gamesProperty.Value).Count } else { '<missing>' }))
+            if ($gamesProperty) {
+                $hasLastActivity = @($gamesProperty.Value | Where-Object { $null -ne $_.PSObject.Properties['lastActivity'] }).Count -gt 0
+                Write-Line ('contains lastActivity: ' + $hasLastActivity)
+            }
+        } catch {
+            Write-Line 'Snapshot JSON could not be parsed.'
+        }
     }
-} else {
-    $tempFiles = Get-ChildItem -LiteralPath $snapshotDir -Force -ErrorAction SilentlyContinue |
-        Select-Object Name, Length |
-        Format-Table -AutoSize |
-        Out-String
-    Write-Output $tempFiles
+}
+if (-not (Test-Path -LiteralPath $snapshotDir -PathType Container)) {
+    Write-Line 'Snapshot directory has not been created yet.'
 }
 
 $logs = foreach ($root in $roots) {
