@@ -154,11 +154,11 @@ How that number is established, so it can be re-derived rather than trusted:
 
 | Source | Core | Command | Adapter | Total |
 |---|---:|---:|---:|---:|
-| Authored `[Fact]` plus `[InlineData]` cases in this branch | 66 | 2 | 183 | 251 |
+| Authored `[Fact]` plus `[InlineData]` cases in this branch | 101 | 3 | 183 | 287 |
 | Existing Windows CI baseline before command-result tests ([run 41184115994](https://github.com/werdscopez7347/PlayniteCmdPal/actions/runs/41184115994)) | 66 | — | 183 | 249 |
-| Updated Windows CI on this branch | Pending | Pending | Pending | Pending |
+| Latest Windows CI on this branch ([run 249](https://github.com/shxo07/PlayniteCmdPal/actions/runs/41304875648)) | 101 | 2 | 183 | 286 |
 
-Before adding the command-result suite, Windows CI reported 249 passing cases across the core and adapter projects. The two new command-result cases bring the authored total to 251; their executed result is pending the updated Windows CI run.
+The earlier Windows CI baseline reported 249 passing cases (66 Core and 183 adapter). Since then, this branch added 35 Core cases and 2 Command Palette command cases. The latest Windows CI run executed all 286 cases successfully. The new refresh-failure regression test increases the branch's authored total to 287; its execution is pending the next CI run.
 
 Counts drift as tests change. Treat the per-file table above as the authoritative map and re-read each `Passed!` line rather than trusting a number written here. If the written count and `dotnet test` disagree, the `dotnet test` output wins: it is the only measurement that actually executed the tests.
 
