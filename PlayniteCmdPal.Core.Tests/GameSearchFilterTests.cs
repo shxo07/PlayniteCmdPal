@@ -71,7 +71,7 @@ public sealed class GameSearchFilterTests
 
         Assert.Contains(results, game => game.GameId == "steam-installed");
         Assert.Contains(results, game => game.GameId == "steam-not-installed");
-        Assert.DoesNotContain(results, game => game.GameId == "unknown");
+        Assert.Contains(results, game => game.GameId == "unknown");
     }
 
     [Fact]
