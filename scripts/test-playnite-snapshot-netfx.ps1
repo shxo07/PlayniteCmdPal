@@ -31,8 +31,8 @@ $publisherType = $snapshotAssemblyObject.GetType('PlayniteCmdPal.Snapshot.Snapsh
 $gameConstructor = $gameType.GetConstructor([type[]]@([string], [string], [bool], [string], [string], [Nullable[DateTime]]))
 $snapshotConstructor = @($snapshotType.GetConstructors())[0]
 
-# Synthetic data exercises JSON escaping, non-ASCII characters, optional
-# fields, and LastActivity without reading any real Playnite library.
+# Synthetic data exercises the frozen legacy v1 contract, JSON escaping,
+# non-ASCII characters, and optional fields without reading a real library.
 $prefix = 'Example "quoted" \ path ' + [char]10 + [char]0x00e9 + [char]::ConvertFromUtf32(0x1f3ae)
 $name = $prefix + [char]0xd800 + ' end'
 $expectedName = $prefix + [char]0xfffd + ' end'
@@ -91,7 +91,7 @@ try {
         throw 'Second synthetic game did not round-trip or optional fields were emitted.'
     }
     if (@($json.PSObject.Properties.Name).Count -ne 3 -or
-        @($json.games[0].PSObject.Properties.Name).Count -ne 6 -or
+        @($json.games[0].PSObject.Properties.Name).Count -ne 5 -or
         @($json.games[1].PSObject.Properties.Name).Count -ne 3) {
         throw 'The snapshot contained unexpected fields.'
     }
