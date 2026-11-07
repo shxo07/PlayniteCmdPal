@@ -5,154 +5,153 @@ namespace PlayniteCmdPal.Core.Tests;
 
 public sealed class CatalogFilterStateTests
 {
+    private static readonly GameEntry[] Catalog =
+    [
+        new("steam-installed", "Halo Infinite", "Steam", true, Platform: "PC"),
+        new("steam-not-installed", "Halo", "Steam", false, Platform: "PC"),
+        new("epic-installed", "Halo Wars", "Epic", true, Platform: "Linux"),
+        new("gog-installed", "Apex Legends", "GOG", true, Platform: "PC"),
+    ];
+
     [Fact]
-    public void HostRereadsOptionsAfterDelayedCatalogHydrationNotification()
+    public void SupportsMultipleSelectionsWithinEveryDimension()
     {
         var state = new CatalogFilterState();
-        IReadOnlyList<CatalogFilterOption> hostOptions = state.GetOptions();
-        Assert.DoesNotContain(hostOptions, option => option.Id?.StartsWith("source:", StringComparison.Ordinal) == true);
-        Assert.DoesNotContain(hostOptions, option => option.Id?.StartsWith("platform:", StringComparison.Ordinal) == true);
+        state.UpdateCatalog(Catalog);
 
-        var notifications = 0;
-        state.FilterOptionsChanged += (_, _) =>
-        {
-            notifications++;
-            hostOptions = state.GetOptions();
-        };
+        state.SetInstalledStatuses([true, false]);
+        state.SetSources(["Steam", "Epic"]);
+        state.SetPlatforms(["PC", "Linux"]);
 
-        Assert.True(state.UpdateCatalog(new[]
-        {
-            new GameEntry("1", "Halo", "Steam", true, Platform: "PC"),
-        }));
-
-        Assert.Equal(1, notifications);
-        Assert.Contains(hostOptions, option => option.Id == "source:Steam" && option.Name == "Source: Steam");
-        Assert.Contains(hostOptions, option => option.Id == "platform:PC" && option.Name == "Platform: PC");
+        var filters = state.ToSearchFilters();
+        Assert.Null(filters.IsInstalled);
+        Assert.Equal(new[] { "Epic", "Steam" }, filters.Sources);
+        Assert.Equal(new[] { "Linux", "PC" }, filters.Platforms);
+        Assert.Equal(4, state.ActiveFilterCount);
     }
 
     [Fact]
-    public void SourceAndPlatformAdditionsRemovalsNotifyButUnchangedOptionsDoNot()
+    public void SingleInstalledStatusAppliesRestrictionButBothOrNoneDoNot()
+    {
+        var state = new CatalogFilterState();
+        state.UpdateCatalog(Catalog);
+
+        state.SetInstalledStatuses([true]);
+        Assert.True(state.ToSearchFilters().IsInstalled);
+
+        state.SetInstalledStatuses([false]);
+        Assert.False(state.ToSearchFilters().IsInstalled);
+
+        state.SetInstalledStatuses([true, false]);
+        Assert.Null(state.ToSearchFilters().IsInstalled);
+
+        state.ClearInstalledStatuses();
+        Assert.Null(state.ToSearchFilters().IsInstalled);
+    }
+
+    [Fact]
+    public void ClearingOneDimensionPreservesSelectionsInOtherDimensions()
+    {
+        var state = new CatalogFilterState();
+        state.UpdateCatalog(Catalog);
+        state.SetInstalledStatuses([true]);
+        state.SetSources(["Steam", "Epic"]);
+        state.SetPlatforms(["PC"]);
+
+        state.ClearSources();
+
+        var filters = state.ToSearchFilters();
+        Assert.True(filters.IsInstalled);
+        Assert.Null(filters.Sources);
+        Assert.Equal(new[] { "PC" }, filters.Platforms);
+    }
+
+    [Fact]
+    public void CatalogRefreshPreservesValidSelectionsAndDropsUnavailableValues()
+    {
+        var state = new CatalogFilterState();
+        state.UpdateCatalog(Catalog);
+        state.SetInstalledStatuses([false]);
+        state.SetSources(["Steam", "Epic"]);
+        state.SetPlatforms(["PC", "Linux"]);
+
+        state.UpdateCatalog(
+        [
+            new GameEntry("steam-installed", "Halo Infinite", "Steam", true, Platform: "PC"),
+            new GameEntry("gog-installed", "Apex Legends", "GOG", true, Platform: "PC"),
+        ]);
+
+        var filters = state.ToSearchFilters();
+        Assert.False(filters.IsInstalled);
+        Assert.Equal(new[] { "Steam" }, filters.Sources);
+        Assert.Equal(new[] { "PC" }, filters.Platforms);
+    }
+
+    [Fact]
+    public void NewCatalogOptionsDoNotDiscardStillValidSelections()
+    {
+        var state = new CatalogFilterState();
+        state.UpdateCatalog([new GameEntry("1", "Halo", "Steam", true, Platform: "PC")]);
+        state.SetSources(["Steam"]);
+        state.SetPlatforms(["PC"]);
+
+        state.UpdateCatalog(
+        [
+            new GameEntry("1", "Halo", "Steam", true, Platform: "PC"),
+            new GameEntry("2", "Apex", "Epic", true, Platform: "Linux"),
+        ]);
+
+        Assert.Equal(new[] { "Steam" }, state.SelectedSources);
+        Assert.Equal(new[] { "PC" }, state.SelectedPlatforms);
+        Assert.Contains("Epic", state.Sources);
+        Assert.Contains("Linux", state.Platforms);
+    }
+
+    [Fact]
+    public void OptionChangesNotifyOnceAndUnchangedCatalogDoesNotNotify()
     {
         var state = new CatalogFilterState();
         var notifications = 0;
         state.FilterOptionsChanged += (_, _) => notifications++;
 
-        var initial = new[] { new GameEntry("1", "Halo", "Steam", true, Platform: "PC") };
-        Assert.True(state.UpdateCatalog(initial));
+        Assert.True(state.UpdateCatalog(Catalog));
         Assert.Equal(1, notifications);
 
-        Assert.False(state.UpdateCatalog(initial.Reverse()));
+        Assert.False(state.UpdateCatalog(Catalog.Reverse()));
         Assert.Equal(1, notifications);
 
-        Assert.True(state.UpdateCatalog(new[]
-        {
-            new GameEntry("1", "Halo", "Steam", true, Platform: "PC"),
-            new GameEntry("2", "Apex", "GOG", true, Platform: "Deck"),
-        }));
+        state.UpdateCatalog([new GameEntry("1", "Halo", "Steam", true, Platform: "PC")]);
         Assert.Equal(2, notifications);
-        Assert.Contains(state.GetOptions(), option => option.Id == "source:GOG");
-        Assert.Contains(state.GetOptions(), option => option.Id == "platform:Deck");
-
-        Assert.True(state.UpdateCatalog(new[]
-        {
-            new GameEntry("2", "Apex", "GOG", true, Platform: "Deck"),
-        }));
-        Assert.Equal(3, notifications);
-        Assert.DoesNotContain(state.GetOptions(), option => option.Id == "source:Steam");
-        Assert.DoesNotContain(state.GetOptions(), option => option.Id == "platform:PC");
-
-        Assert.False(state.UpdateCatalog(new[]
-        {
-            new GameEntry("2", "Apex", "GOG", true, Platform: "Deck"),
-        }));
-        Assert.Equal(3, notifications);
     }
 
     [Fact]
-    public void UpdateCatalogReportsOnlyActualOptionChanges()
+    public void MetadataSelectionsAreCaseInsensitiveAndCanonicalized()
     {
         var state = new CatalogFilterState();
-        var initial = new[]
-        {
-            new GameEntry("1", "Halo", "Steam", true, Platform: "PC"),
-            new GameEntry("2", "Apex", "GOG", false, Platform: "Deck"),
-        };
+        state.UpdateCatalog(Catalog);
 
-        Assert.True(state.UpdateCatalog(initial));
-        Assert.False(state.UpdateCatalog(initial.Reverse()));
-        Assert.Equal(new[] { "GOG", "Steam" }, state.Sources);
-        Assert.Equal(new[] { "Deck", "PC" }, state.Platforms);
+        state.SetSources(["sTeAm"]);
+        state.SetPlatforms(["pc"]);
 
-        Assert.True(state.UpdateCatalog(new[]
-        {
-            new GameEntry("1", "Halo", "Steam", true, Platform: "PC"),
-        }));
-        Assert.Equal(new[] { "Steam" }, state.Sources);
-        Assert.Equal(new[] { "PC" }, state.Platforms);
+        Assert.Equal(new[] { "Steam" }, state.SelectedSources);
+        Assert.Equal(new[] { "PC" }, state.SelectedPlatforms);
     }
 
     [Fact]
-    public void RemovedSourceSelectionResetsToAllGames()
+    public void ClearAllResetsEveryDimension()
     {
         var state = new CatalogFilterState();
-        state.UpdateCatalog(new[] { new GameEntry("1", "Halo", "Steam", true) });
-        state.SelectFilter("source:Steam");
+        state.UpdateCatalog(Catalog);
+        state.SetInstalledStatuses([true]);
+        state.SetSources(["Steam"]);
+        state.SetPlatforms(["PC"]);
 
-        state.UpdateCatalog(new[] { new GameEntry("2", "Apex", "GOG", true) });
+        state.ClearAll();
 
-        Assert.Equal(CatalogFilterState.AllGamesId, state.CurrentFilterId);
-        Assert.Null(state.ToSearchFilters().Sources);
-    }
-
-    [Fact]
-    public void RemovedPlatformSelectionResetsToAllGames()
-    {
-        var state = new CatalogFilterState();
-        state.UpdateCatalog(new[] { new GameEntry("1", "Halo", "Steam", true, Platform: "PC") });
-        state.SelectFilter("platform:PC");
-
-        state.UpdateCatalog(new[] { new GameEntry("2", "Apex", "Steam", true, Platform: "Deck") });
-
-        Assert.Equal(CatalogFilterState.AllGamesId, state.CurrentFilterId);
-        Assert.Null(state.ToSearchFilters().Platforms);
-    }
-
-    [Fact]
-    public void SelectedMetadataFilterSurvivesUnchangedCatalog()
-    {
-        var games = new[] { new GameEntry("1", "Halo", "Steam", true, Platform: "PC") };
-        var state = new CatalogFilterState();
-        state.UpdateCatalog(games);
-        state.SelectFilter("source:Steam");
-
-        Assert.False(state.UpdateCatalog(games));
-        Assert.Equal("source:Steam", state.CurrentFilterId);
-        Assert.Equal(new[] { "Steam" }, state.ToSearchFilters().Sources);
-    }
-
-    [Fact]
-    public void SelectedMetadataFilterTracksCanonicalCasingAfterRefresh()
-    {
-        var state = new CatalogFilterState();
-        state.UpdateCatalog(new[] { new GameEntry("1", "Halo", "Steam", true) });
-        state.SelectFilter("source:Steam");
-
-        Assert.True(state.UpdateCatalog(new[] { new GameEntry("1", "Halo", "STEAM", true) }));
-
-        Assert.Equal("source:STEAM", state.CurrentFilterId);
-        Assert.Equal(new[] { "STEAM" }, state.ToSearchFilters().Sources);
-    }
-
-    [Fact]
-    public void UnknownOrMalformedSelectionFallsBackToAllGames()
-    {
-        var state = new CatalogFilterState();
-        state.UpdateCatalog(new[] { new GameEntry("1", "Halo", "Steam", true) });
-
-        state.SelectFilter("source:missing");
-        Assert.Equal(CatalogFilterState.AllGamesId, state.CurrentFilterId);
-
-        state.SelectFilter("unsupported-filter");
-        Assert.Equal(CatalogFilterState.AllGamesId, state.CurrentFilterId);
+        var filters = state.ToSearchFilters();
+        Assert.Null(filters.IsInstalled);
+        Assert.Null(filters.Sources);
+        Assert.Null(filters.Platforms);
+        Assert.Equal(0, state.ActiveFilterCount);
     }
 }
