@@ -4,6 +4,9 @@ using System.Linq;
 
 namespace PlayniteCmdPal.Core;
 
+/// <summary>A host-visible option in the native catalog filter dropdown.</summary>
+public sealed record CatalogFilterOption(string? Id, string? Name, bool IsSeparator = false);
+
 /// <summary>
 /// Keeps the available metadata filter options and selected native filter in sync with a catalog.
 /// The Command Palette SDK supports one selected filter ID at a time.
@@ -13,6 +16,9 @@ public sealed class CatalogFilterState
     public const string AllGamesId = "all-games";
     public const string InstalledId = "installed";
     public const string NotInstalledId = "not-installed";
+
+    /// <summary>Raised after the visible dropdown options change and must be re-read by the host.</summary>
+    public event EventHandler? FilterOptionsChanged;
 
     private string[] _sources = [];
     private string[] _platforms = [];
@@ -42,7 +48,40 @@ public sealed class CatalogFilterState
         _platforms = platforms;
         CurrentFilterId = NormalizeSelection(CurrentFilterId);
 
+        if (optionsChanged)
+        {
+            FilterOptionsChanged?.Invoke(this, EventArgs.Empty);
+        }
+
         return optionsChanged;
+    }
+
+    /// <summary>Returns a stable snapshot of the options currently exposed to the host.</summary>
+    public IReadOnlyList<CatalogFilterOption> GetOptions()
+    {
+        var options = new List<CatalogFilterOption>
+        {
+            new(AllGamesId, "All games"),
+            new(null, null, IsSeparator: true),
+            new(InstalledId, "Installed"),
+            new(NotInstalledId, "Not installed"),
+        };
+
+        if (_sources.Length > 0)
+        {
+            options.Add(new CatalogFilterOption(null, null, IsSeparator: true));
+            options.AddRange(_sources.Select(source => new CatalogFilterOption(
+                Encode("source", source), $"Source: {source}")));
+        }
+
+        if (_platforms.Length > 0)
+        {
+            options.Add(new CatalogFilterOption(null, null, IsSeparator: true));
+            options.AddRange(_platforms.Select(platform => new CatalogFilterOption(
+                Encode("platform", platform), $"Platform: {platform}")));
+        }
+
+        return options;
     }
 
     /// <summary>Applies a filter ID selected by the native Command Palette host.</summary>
