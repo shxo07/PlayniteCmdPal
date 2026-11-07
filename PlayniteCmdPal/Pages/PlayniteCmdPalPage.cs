@@ -184,10 +184,6 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage
             {
                 Title = game.Title,
                 Subtitle = string.Join(" · ", metadata),
-                MoreCommands =
-                [
-                    new CommandContextItem(new ShowGameDetailsCommand(game.GameId)),
-                ],
             });
         }
 
