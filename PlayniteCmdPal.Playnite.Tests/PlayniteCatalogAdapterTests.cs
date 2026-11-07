@@ -138,6 +138,7 @@ public sealed class PlayniteCatalogAdapterTests : IDisposable
     [Theory]
     [InlineData("not json", CatalogErrorCode.Malformed)]
     [InlineData("""{"schemaVersion":3,"generatedAtUtc":"2026-10-30T00:00:00Z","games":[]}""", CatalogErrorCode.UnsupportedSchema)]
+    [InlineData("""{"schemaVersion":3,"generatedAtUtc":"2026-10-30T00:00:00Z","games":[]}""", CatalogErrorCode.UnsupportedSchema)]
     public async Task InvalidLaterFileNeverReplacesLastKnownGood(string json, CatalogErrorCode expected)
     {
         await PublishAsync(NewSnapshot(("Halo", false, null, null)));
@@ -257,6 +258,100 @@ public sealed class PlayniteCatalogAdapterTests : IDisposable
         Assert.True(result.IsAvailable);
         Assert.Single(result.Games);
         Assert.Equal(1, result.SkippedRecordCount);
+    }
+
+
+    [Fact]
+    public async Task FallsBackToV1OnlyWhenV2SnapshotIsMissing()
+    {
+        var v2Path = Path.Combine(_directory, "catalog-v2.json");
+        var v1Path = Path.Combine(_directory, "catalog-v1.json");
+        await SnapshotFilePublisher.PublishAsync(v1Path,
+            new CatalogSnapshot(_time.GetUtcNow(), new[] { new SnapshotGame(GameA, "Legacy Halo", true) }, SnapshotLimits.LegacySchemaVersion));
+
+        var result = await new PlayniteCatalogAdapter(v2Path, _time, v1Path).GetAsync();
+
+        Assert.True(result.IsAvailable);
+        Assert.Null(result.Issue);
+        Assert.Equal("Legacy Halo", Assert.Single(result.Games).Title);
+        Assert.Null(result.Games[0].IconReference);
+    }
+
+    [Fact]
+    public async Task MalformedV2DoesNotSilentlyFallBackToV1()
+    {
+        var v2Path = Path.Combine(_directory, "catalog-v2.json");
+        var v1Path = Path.Combine(_directory, "catalog-v1.json");
+        await File.WriteAllTextAsync(v2Path, "not json");
+        await SnapshotFilePublisher.PublishAsync(v1Path,
+            new CatalogSnapshot(_time.GetUtcNow(), new[] { new SnapshotGame(GameA, "Stale Legacy Halo", true) }, SnapshotLimits.LegacySchemaVersion));
+
+        var result = await new PlayniteCatalogAdapter(v2Path, _time, v1Path).GetAsync();
+
+        Assert.False(result.IsAvailable);
+        Assert.Equal(CatalogErrorCode.Malformed, result.Issue!.Code);
+    }
+
+    [Fact]
+    public void CatalogVerifierArtworkValidationAcceptsNullOrCanonicalSha256Ids()
+    {
+        const string validDigest = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+
+        Assert.True(SnapshotValidation.IsArtworkIdOrNull(null));
+        Assert.True(SnapshotValidation.IsArtworkIdOrNull(validDigest));
+        Assert.False(SnapshotValidation.IsArtworkIdOrNull(validDigest.ToUpperInvariant()));
+        Assert.False(SnapshotValidation.IsArtworkIdOrNull(validDigest.Substring(1)));
+        Assert.False(SnapshotValidation.IsArtworkIdOrNull(new string('g', 64)));
+    }
+
+    [Fact]
+    public async Task V2ArtworkIdentifierMapsToTheCoreIconReference()
+    {
+        const string digest = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+        await File.WriteAllTextAsync(_path, $$"""{"schemaVersion":2,"generatedAtUtc":"2026-10-30T00:00:00Z","games":[{"id":"{{GameA}}","name":"Halo","isInstalled":true,"iconArtworkId":"{{digest}}","coverArtworkId":"{{digest}}"}]}""");
+
+        var result = await new PlayniteCatalogAdapter(_path, _time).GetAsync();
+
+        var game = Assert.Single(result.Games);
+        Assert.Equal(digest, game.IconReference);
+        Assert.Equal(digest, game.CoverArtworkReference);
+    }
+
+    [Fact]
+    public void ArtworkPathResolverAcceptsOnlyOpaqueIdsInsideTheCache()
+    {
+        var bytes = new byte[] { 0xFF, 0xD8, 0xFF, 0xD9 };
+        using var sha = System.Security.Cryptography.SHA256.Create();
+        var digest = string.Concat(sha.ComputeHash(bytes).Select(value => value.ToString("x2")));
+        var cache = Path.Combine(_directory, "artwork");
+        Directory.CreateDirectory(cache);
+        var image = Path.Combine(cache, digest + ".jpg");
+        File.WriteAllBytes(image, bytes);
+
+        Assert.Equal(image, PlayniteCatalogAdapter.ResolveArtworkPath(digest, cache));
+        Assert.Equal(image, PlayniteCatalogAdapter.ResolveArtworkPath(digest, cache + Path.DirectorySeparatorChar));
+        Assert.Null(PlayniteCatalogAdapter.ResolveArtworkPath("../" + digest, cache));
+        Assert.Null(PlayniteCatalogAdapter.ResolveArtworkPath(null, cache));
+        File.WriteAllBytes(image, new byte[] { 1, 2, 3 });
+        Assert.Null(PlayniteCatalogAdapter.ResolveArtworkPath(digest, cache));
+    }
+
+
+    [Fact]
+    public void ArtworkResolverCanReadPreviousGenerationDuringAtomicSnapshotSwap()
+    {
+        var bytes = new byte[] { 0xFF, 0xD8, 0xFF, 0xD9 };
+        using var sha = System.Security.Cryptography.SHA256.Create();
+        var digest = string.Concat(sha.ComputeHash(bytes).Select(value => value.ToString("x2")));
+        var cacheRoot = Path.Combine(_directory, "artwork-v2");
+        var backupRoot = cacheRoot + ".backup-test";
+        Directory.CreateDirectory(cacheRoot);
+        Directory.CreateDirectory(backupRoot);
+        var image = Path.Combine(backupRoot, digest + ".jpg");
+        File.WriteAllBytes(image, bytes);
+
+        Assert.Equal(image, PlayniteCatalogAdapter.ResolveArtworkPath(digest, cacheRoot));
+        Assert.Equal(image, PlayniteCatalogAdapter.ResolveArtworkPath(digest, cacheRoot + Path.DirectorySeparatorChar));
     }
 
     [Fact]

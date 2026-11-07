@@ -1,23 +1,19 @@
 # Playnite Catalog Bridge
 
+> Artwork transport and the schema v2 trust boundary are specified in [Artwork transport](ARTWORK-TRANSPORT.md). The v1 contract below remains unchanged for legacy catalogs. New producers publish v2.
+
 This document describes the catalog snapshot transport accepted in [ADR-005](DECISIONS.md#adr-005-companion-plugin-json-snapshot-for-catalog-access). It does not change the Command Palette search UI; the presentation layer consumes `IReadOnlyPlayniteCatalog`.
 
 ## Components
 
-- `PlayniteCmdPal.Snapshot` (`net462` and `net10.0`): versioned v1/v2 contracts, allowlisted serializer, atomic file publisher, and debounced export coordinator. It has no Playnite or CmdPal SDK dependency.
+- `PlayniteCmdPal.Snapshot` (`net462` and `net10.0`): shared v1 contract, allowlisted serializer, atomic file publisher, and debounced export coordinator. It has no Playnite or CmdPal SDK dependency.
 - `PlayniteCmdPal.Playnite` (`net10.0`): strict parser and read-only adapter/cache mapping snapshots to `PlayniteCmdPal.Core.GameEntry`.
 - `PlayniteCmdPal.PlaynitePlugin` (`net462`): companion Playnite generic plugin that projects `PlayniteApi.Database.Games` and publishes the snapshot.
 - `PlayniteCmdPal.Playnite.Tests`: synthetic-file adapter/protocol tests. `scripts/test-playnite-snapshot-netfx.ps1` additionally exercises the actual `net462` writer/publisher in Windows PowerShell 5.1. Neither requires Playnite, PowerToys, or a personal library.
 
-The plugin publishes two files under `%LOCALAPPDATA%\PlayniteCmdPal`: `catalog-v1.json` is the frozen backward-compatible contract, and `catalog-v2.json` is the enriched contract used by the current app. The plugin creates the directory with inherited per-user permissions. The adapter opens both files read-only with `FileShare.ReadWrite | FileShare.Delete`; it never creates, repairs, or deletes snapshots.
+The canonical file is `%LOCALAPPDATA%\PlayniteCmdPal\catalog-v2.json`. The older `%LOCALAPPDATA%\PlayniteCmdPal\catalog-v1.json` is retained only as a legacy fallback when v2 is absent; it is not the active producer output. The plugin creates the directory with inherited per-user permissions. The adapter opens the file read-only with `FileShare.ReadWrite | FileShare.Delete`; it never creates, repairs, or deletes the snapshot. Artwork transport, v2 fields, cache lifecycle, and rollout policy are specified in [Artwork transport](ARTWORK-TRANSPORT.md).
 
-## Schema v1 and v2 compatibility
-
-Schema v1 remains frozen: its game records contain only `id`, `name`, `isInstalled`, and optional `source`/`platform`. It never contains `lastActivity`. Older installed readers continue reading `catalog-v1.json` without encountering a new property or schema number.
-
-Schema v2 adds optional `lastActivity`, serialized with the round-trip .NET `DateTime` format (`O`) so the value and `DateTime.Kind` are retained; it is not forced to UTC. The current reader accepts both schemas and prefers the valid snapshot with the newest `generatedAtUtc`; ties prefer v2. Because the plugin publishes v1 before v2, a reader that sees a newer v1 re-reads v2 up to three times with a 25 ms interval before accepting v1. This bounded revalidation closes the ordinary publication/read interleaving where the first v2 read captured the previous file but the subsequent v1 read captured the new export. If v2 catches up, it wins; if v1 remains newer after the retries, it is treated as a genuine legacy-plugin rollback. A legacy-only plugin therefore remains supported, with a bounded additional read delay. Playnite's SDK does not promise a universal timezone contract for every persisted `LastActivity` value. `Unspecified` values are interpreted as local machine time. The Recently Played view converts every value to the local display time zone and includes the numeric UTC offset in its timestamp; a library moved between timezones cannot recover an original offset that the SDK value does not contain. `Modified` is not used.
-
-The recently played view sorts by descending UTC instant. Equal timestamps are resolved by title using `OrdinalIgnoreCase`, then title using `Ordinal`, then the Playnite game ID using `Ordinal`. Search filters game rows only; refresh/retry controls and catalog-status warnings remain visible. A nonzero `SkippedRecordCount` is shown as an incomplete-results warning. When no played games are available, the page distinguishes a genuinely empty library, a snapshot with no usable records, and valid games without recorded play history. The page includes an explicit refresh row because Command Palette retains the page instance between visits.
+## Schema v1
 
 ```json
 {
@@ -37,13 +33,17 @@ The recently played view sorts by descending UTC instant. Equal timestamps are r
 
 `generatedAtUtc` is an ISO-8601 UTC timestamp; fractional seconds are optional, and non-UTC offsets are rejected. `id` is Playnite's stable GUID in lowercase canonical D format and is the only identity key. Empty GUIDs, non-canonical IDs, blank names, missing required fields, wrong field types, duplicate JSON properties, and unknown v1 fields are invalid. `source` and `platform` are optional strings or null; the plugin joins multiple platform names with `, ` in ordinal order. No executable paths, launch actions, icons, or full SDK models are exported.
 
-The parser rejects input over 32 MiB, JSON deeper than 16 levels, unsupported schema versions, malformed envelopes, and arrays over 100,000 records. Invalid individual records and later duplicate IDs are skipped and counted; the first valid record for an ID wins. An empty `games` array is a valid empty library.
+The parser rejects input over 32 MiB, JSON deeper than 16 levels, unsupported schema versions, malformed envelopes, and arrays over 100,000 records. Invalid individual records and later duplicate IDs are skipped and counted; the first valid record for an ID wins. In v2, malformed optional artwork identifiers are nulled individually; valid game identity and metadata are retained. An empty `games` array is a valid empty library.
+
+## Schema v2 enrichment: recently played
+
+Schema v2 retains the optional `coverArtworkId` and `iconArtworkId` fields described in [Artwork transport](ARTWORK-TRANSPORT.md), and adds optional `lastActivity`. The value is serialized with the round-trip .NET `DateTime` format (`O`) and preserves its `DateTime.Kind`; v1 remains frozen and never contains it. Missing play history is represented by an omitted or null value. The reader interprets `Unspecified` values as local machine time when ordering and displaying them; the UI formats all values in the local display zone with a numeric UTC offset. It does not use `Modified` as a substitute.
+
+The Recently played page sorts by descending UTC instant, then title using `OrdinalIgnoreCase`, title using `Ordinal`, and stable Playnite game ID using `Ordinal`. Search filters game rows only; status, warning, refresh, and recovery rows remain visible. The adapter re-reads v2 up to three times at 25 ms intervals when v1 appears newer, covering the normal v1-then-v2 publication window before accepting a v1 rollback.
 
 ## Publication and refresh
 
-Each export atomically publishes v1 first and then v2 from the same in-memory Playnite projection. Publishing v1 first preserves compatibility for older installed readers; if v1 publication fails, v2 is not published. A v2 publication failure leaves the last complete v2 file intact while the newly refreshed v1 remains usable by old readers and as a fallback for the current reader.
-
-The plugin requests an export on application start, database open, `OnLibraryUpdated`, game install/uninstall lifecycle events, game collection changes, relevant game updates (including `LastActivity` changes), and source/platform metadata changes. Requests are debounced by 750 ms and serialized. A request arriving during an export schedules one follow-up export, so the final state is not lost. Each export re-enumerates the database; it does not patch an old snapshot from event payloads.
+The plugin requests an export on application start, database open, `OnLibraryUpdated`, game install/uninstall lifecycle events, game collection changes, relevant game updates (including `LastActivity` and artwork-reference changes), and source/platform metadata changes. Requests are debounced by 750 ms and serialized. A request arriving during an export schedules one follow-up export, so the final state is not lost. Each export re-enumerates the database; it does not patch an old snapshot from event payloads.
 
 Projection runs on Playnite's `IMainViewAPI.UIDispatcher` because SDK database objects are affinity-sensitive. Serialization, flush, and file replacement run in the background. The exporter uses .NET Framework's built-in JSON writer and does not reference `System.Text.Json`; the `net10.0` adapter uses its framework's `System.Text.Json` for parsing. Publication is limited to 32 MiB while bytes are written. The publisher writes a complete same-directory temporary file, flushes it to disk, closes it, then uses `File.Replace` (or `File.Move` on first creation). A failed or canceled export leaves the previous snapshot intact and removes only its own temporary file. If the library exceeds 100,000 records, the plugin refuses to publish a truncated catalog.
 
@@ -51,11 +51,11 @@ Projection runs on Playnite's `IMainViewAPI.UIDispatcher` because SDK database o
 
 - First `GetAsync` loads the file. Later `GetAsync` calls revalidate at most once per 30 seconds; between attempts they return the current in-memory result without file I/O.
 - `RefreshAsync` bypasses the interval and is the explicit reconnect/retry trigger. Concurrent callers share one in-flight read.
-- A valid snapshot replaces the cache, including a valid empty library.
+- A valid snapshot replaces the cache, including a valid empty library. The adapter prefers the newer generated timestamp across v1/v2; ties prefer v2.
 - A missing, unreadable, malformed, unsupported, oversized, or over-limit later file never replaces last-known-good data. The result remains available if a valid snapshot was previously loaded and carries the current `Issue`.
 - With no previous valid snapshot, missing/malformed input is `IsAvailable == false`, not an empty library.
 - A snapshot at least 24 hours old is `IsStale == true` but remains searchable. Staleness is recomputed from `generatedAtUtc` on every result, including cached results.
-- `SkippedRecordCount` reports invalid records skipped from the last valid snapshot. The Recently Played view keeps this warning visible during search and distinguishes an all-invalid snapshot from a genuinely empty library. `IsFromCache` distinguishes cached/retained results from a fresh successful read.
+- `SkippedRecordCount` reports invalid records skipped from the last valid snapshot. `IsFromCache` distinguishes cached/retained results from a fresh successful read.
 - All adapter file I/O and parsing are asynchronous/background work. Pre-canceled calls return a canceled task; canceling one caller does not cancel a shared in-flight read. Callers must still avoid blocking on the task from the CmdPal UI thread.
 
 There is no file watcher, network listener, IPC, or Playnite database parsing. Reconnection is an explicit refresh or the next interval-based `GetAsync` after the bridge publishes a file.
@@ -70,25 +70,13 @@ dotnet test .\PlayniteCmdPal.Playnite.Tests\PlayniteCmdPal.Playnite.Tests.csproj
 .\scripts\package-playnite-plugin.ps1
 ```
 
-The packaging script first runs a synthetic .NET Framework smoke test against the published assemblies using Windows PowerShell 5.1. The smoke test publishes and replaces both contracts, verifies that v1 never contains `lastActivity`, and verifies that v2 preserves its round-trip `DateTime` representation. It then creates `artifacts/playnite-plugin/PlayniteCmdPalBridge.pext`. In Playnite 10.63, install it locally by dragging the `.pext` onto the main Playnite window and confirming the install/restart prompts, or by running `Playnite.DesktopApp.exe --installext <path-to.pext>`. For development you can instead register `artifacts/playnite-plugin/publish` under Settings → For developers → External extensions → Add, enable it, and restart Playnite. The top-level Add-ons… window manages installed add-ons (this plugin appears under Installed → Generic); it does not provide an install-from-file button. The Menu → Extensions submenu only lists extension-provided commands. Build output and `.pext` files are not committed.
+The packaging script first runs a synthetic .NET Framework smoke test against the published assemblies using Windows PowerShell 5.1, then creates `artifacts/playnite-plugin/PlayniteCmdPalBridge.pext`. In Playnite 10.63, install it locally by dragging the `.pext` onto the main Playnite window and confirming the install/restart prompts, or by running `Playnite.DesktopApp.exe --installext <path-to.pext>`. For development you can instead register `artifacts/playnite-plugin/publish` under Settings → For developers → External extensions → Add, enable it, and restart Playnite. The top-level Add-ons… window manages installed add-ons (this plugin appears under Installed → Generic); it does not provide an install-from-file button. The Menu → Extensions submenu only lists extension-provided commands. Build output and `.pext` files are not committed.
 
 ## Validation status
 
-The Linux workspace ran Tree-sitter syntax checks over the C#/PowerShell files and XML/solution consistency checks. It could not run `dotnet build`, `dotnet test`, or `scripts/ci.ps1` because no .NET SDK/PowerShell toolchain is installed, and the sandbox cannot reach Microsoft's SDK/CDN hosts or NuGet, so the toolchain cannot be installed either. Syntax checks are not compilation or runtime evidence.
+**Automated verification:** WERD-74 adds deterministic tests for the v1/v2 publication interleaving, initially missing v2, timestamp-kind handling, search/status composition, empty-state classification, and the combined v1/v2 .NET Framework smoke path. Run Windows CI against the final merged pull-request head before merge; earlier green runs do not validate subsequent commits.
 
-**Automated contract coverage.** Reduced output-equality assertions were introduced because the exact byte output of the `net462` JSON writer (line endings, separators) is not part of the recorded evidence; tests assert parsed shape and values instead. The suite now covers the allowlist, envelope/property rules, limit boundaries, cancellation, atomic publication and failure cleanup, coordinator lifecycle, and adapter cache-policy behavior; see [Testing](TESTING.md) for the file-by-file map. These tests exercised real code paths but had not been executed in a .NET environment when reviewed here; their first authoritative run is the next Windows CI build of the pull request that adds them.
-
-A maintainer reported that `scripts/ci.ps1` and the packaging script passed on Windows at commit `398044e`. The installed 0.1.0 bridge subsequently loaded, but export failed with an assembly-load exception for `System.Text.Json` 9.0.0.0 or one of its dependencies. Version 0.1.1 removes that dependency from the export path and adds .NET Framework smoke coverage. At `9ece548`, Windows CI reached the new smoke step but PowerShell reflection rejected a wrapped path argument before publication; the smoke invocation was subsequently corrected.
-
-A maintainer subsequently reported that the default snapshot exists and the verifier introduced in `68ecd29` read four records through the adapter with no skipped records, staleness, or issue. An immediate second read used the cache; an explicit refresh read the file and returned the same IDs.
-
-A later manual Playnite session verified the live bridge behaviours: renaming a game refreshed the snapshot while preserving its ID; adding and removing a temporary game added and removed the corresponding record; changing source/platform metadata refreshed the matching record; and, with Playnite closed and the snapshot moved aside, a fresh verifier process reported `Available: False`, `Game count: 0`, `Skipped records: 0`, `Stale: False`, `Issue: Missing`. Restarting Playnite recreated the snapshot successfully. These are maintainer-reported manual results; the Playnite/Windows versions were not recorded, and no personal library data was committed. This extends real-library evidence to event-driven refresh and missing-file recovery, but does not by itself prove metadata parity for every field or that no partial file can ever be observed.
-
-A maintainer subsequently ran `scripts/package-playnite-plugin.ps1` on Windows. The published-bridge .NET Framework smoke test passed using synthetic data (with no `System.Text.Json` reference), and the script created `artifacts/playnite-plugin/PlayniteCmdPalBridge.pext`. The complete `dotnet build` and `dotnet test` summaries from that run have not yet been reviewed independently, so their outcomes remain unconfirmed here.
-
-## Review-fix validation note (2026-11-07)
-
-The WERD-74 review-fix branch adds deterministic adapter tests for the old-v2/new-v1/new-v2 publication interleaving and for an initially missing v2 file, while retaining the newer-v1 rollback test. Core presentation-helper tests cover game-only search filtering with persistent status/recovery items, mixed-kind timestamp formatting in an explicit nonzero-offset zone, and the distinction between empty, all-invalid, and no-play-history states. The .NET Framework smoke script now exercises both v1 and v2 publication and replacement. Windows CI run [42346952868](https://github.com/werdscopez7347/PlayniteCmdPal/actions/runs/42346952868) passed on this implementation: Release restore/build, 96 core tests, 195 adapter tests, and the v1/v2 .NET Framework smoke test. CodeQL run [42346953020](https://github.com/werdscopez7347/PlayniteCmdPal/actions/runs/42346953020) was still in progress when this note was written. Real Command Palette host-page verification of the new warnings and timestamp display remains a manual check.
+**Manual Playnite verification remains:** CI does not run inside a live Playnite host or inspect a user's library. Install the updated companion plugin in the user's Playnite environment and verify that real cover/icon references are copied into the bridge-owned cache, v2 `lastActivity` is populated and the Recently played page displays the expected local timestamp and UTC offset, the snapshot is refreshed after game/artwork changes, missing artwork remains non-fatal, and the previous cache remains usable if publication is interrupted. Do not share or commit personal game names, IDs, or library exports.
 
 ## Troubleshooting a missing snapshot
 
@@ -110,10 +98,10 @@ Remaining real-library verification:
 
 1. Install the packaged bridge in Playnite 10.63 or the supported version being tested.
 2. Start Playnite with a small test library containing duplicate display names and at least one installed and one uninstalled game.
-3. Confirm both `%LOCALAPPDATA%\PlayniteCmdPal\catalog-v1.json` and `catalog-v2.json` appear. Verify v1 remains `schemaVersion: 1` with no `lastActivity` properties, while v2 is `schemaVersion: 2` and carries `lastActivity` when available.
+3. Confirm `%LOCALAPPDATA%\PlayniteCmdPal\catalog-v2.json` appears and contains only the allowlisted fields.
 4. Run the verifier above or use the Command Palette page; compare stable IDs, names, source/platform, and install state locally with Playnite without sharing library data.
 5. Add/rename/remove a game and change source/platform metadata; confirm the snapshot refreshes after the debounce and that no partial file is observable.
-6. Close Playnite, delete the snapshot, and confirm the adapter reports unavailable on a fresh process. Restart Playnite and confirm explicit refresh reconnects.
+6. Close Playnite and back up both snapshot files outside the bridge directory. With both `catalog-v2.json` and `catalog-v1.json` absent, confirm a fresh adapter process reports unavailable. Next, leave v2 absent and place a known-valid v1 fixture at `catalog-v1.json`; confirm a fresh adapter process reads it through the legacy fallback. Restore the backed-up files (or remove the fixture and let Playnite regenerate v2) before restarting Playnite, then confirm explicit refresh reconnects.
 7. Record the Playnite/Windows versions and observed outcomes without committing game IDs, titles, or library exports.
 
 The existing launch-by-ID URI smoke test is separate from catalog bridge verification and does not verify this bridge.

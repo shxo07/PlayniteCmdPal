@@ -23,9 +23,13 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 $manifest = Join-Path $publishDir 'extension.yaml'
 $module = Join-Path $publishDir 'PlayniteCmdPal.PlaynitePlugin.dll'
 $snapshot = Join-Path $publishDir 'PlayniteCmdPal.Snapshot.dll'
+$license = Join-Path $publishDir 'LICENSE'
 $notices = Join-Path $publishDir 'THIRD-PARTY-NOTICES.md'
 if (-not (Test-Path -LiteralPath $manifest) -or -not (Test-Path -LiteralPath $module) -or -not (Test-Path -LiteralPath $snapshot)) {
     throw 'The publish output is missing extension.yaml, the plugin module, or the snapshot assembly.'
+}
+if (-not (Test-Path -LiteralPath $license)) {
+    throw 'The publish output is missing LICENSE. Do not distribute the package without the project license.'
 }
 if (-not (Test-Path -LiteralPath $notices)) {
     throw 'The publish output is missing THIRD-PARTY-NOTICES.md. Do not distribute the package without the third-party notices.'

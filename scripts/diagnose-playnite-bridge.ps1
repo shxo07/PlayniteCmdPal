@@ -233,39 +233,47 @@ foreach ($root in $roots) {
 }
 
 $snapshotDir = Join-Path $env:LOCALAPPDATA 'PlayniteCmdPal'
+$v2SnapshotPath = Join-Path $snapshotDir 'catalog-v2.json'
+$v1SnapshotPath = Join-Path $snapshotDir 'catalog-v1.json'
+if (Test-Path -LiteralPath $v2SnapshotPath -PathType Leaf) {
+    $snapshotPath = $v2SnapshotPath
+    $snapshotSchema = 'v2 (preferred)'
+} elseif (Test-Path -LiteralPath $v1SnapshotPath -PathType Leaf) {
+    $snapshotPath = $v1SnapshotPath
+    $snapshotSchema = 'v1 (legacy fallback)'
+} else {
+    $snapshotPath = $v2SnapshotPath
+    $snapshotSchema = 'v2 (preferred; missing)'
+}
 Write-Line ''
-Write-Line "Snapshot directory: $snapshotDir"
+Write-Line "Snapshot path: $snapshotPath"
+Write-Line "Snapshot selection: $snapshotSchema"
+Write-Line ('Snapshot exists: ' + (Test-Path -LiteralPath $snapshotPath))
+Write-Line ('Legacy v1 snapshot retained: ' + (Test-Path -LiteralPath $v1SnapshotPath))
 Write-Line ('Snapshot directory exists: ' + (Test-Path -LiteralPath $snapshotDir -PathType Container))
 
-foreach ($snapshotName in @('catalog-v1.json', 'catalog-v2.json')) {
-    $snapshotPath = Join-Path $snapshotDir $snapshotName
-    Write-Line ''
-    Write-Line "Snapshot path: $snapshotPath"
-    Write-Line ('Snapshot exists: ' + (Test-Path -LiteralPath $snapshotPath))
+if (Test-Path -LiteralPath $snapshotPath) {
+    $snapshotItem = Get-Item -LiteralPath $snapshotPath
+    Write-Line ('Snapshot length: ' + $snapshotItem.Length)
+    Write-Line ('Snapshot last write UTC: ' + $snapshotItem.LastWriteTimeUtc.ToString('o'))
 
-    if (Test-Path -LiteralPath $snapshotPath) {
-        $snapshotItem = Get-Item -LiteralPath $snapshotPath
-        Write-Line ('Snapshot length: ' + $snapshotItem.Length)
-        Write-Line ('Snapshot last write UTC: ' + $snapshotItem.LastWriteTimeUtc.ToString('o'))
-        try {
-            $snapshot = Get-Content -LiteralPath $snapshotPath -Raw -ErrorAction Stop | ConvertFrom-Json
-            $schemaProperty = $snapshot.PSObject.Properties['schemaVersion']
-            $timestampProperty = $snapshot.PSObject.Properties['generatedAtUtc']
-            $gamesProperty = $snapshot.PSObject.Properties['games']
-            Write-Line ('schemaVersion: ' + $(if ($schemaProperty) { $schemaProperty.Value } else { '<missing>' }))
-            Write-Line ('generatedAtUtc: ' + $(if ($timestampProperty) { $timestampProperty.Value } else { '<missing>' }))
-            Write-Line ('gameCount: ' + $(if ($gamesProperty) { @($gamesProperty.Value).Count } else { '<missing>' }))
-            if ($gamesProperty) {
-                $hasLastActivity = @($gamesProperty.Value | Where-Object { $null -ne $_.PSObject.Properties['lastActivity'] }).Count -gt 0
-                Write-Line ('contains lastActivity: ' + $hasLastActivity)
-            }
-        } catch {
-            Write-Line 'Snapshot JSON could not be parsed.'
-        }
+    try {
+        $snapshot = Get-Content -LiteralPath $snapshotPath -Raw -ErrorAction Stop | ConvertFrom-Json
+        $schemaProperty = $snapshot.PSObject.Properties['schemaVersion']
+        $timestampProperty = $snapshot.PSObject.Properties['generatedAtUtc']
+        $gamesProperty = $snapshot.PSObject.Properties['games']
+        Write-Line ('schemaVersion: ' + $(if ($schemaProperty) { $schemaProperty.Value } else { '<missing>' }))
+        Write-Line ('generatedAtUtc: ' + $(if ($timestampProperty) { $timestampProperty.Value } else { '<missing>' }))
+        Write-Line ('gameCount: ' + $(if ($gamesProperty) { @($gamesProperty.Value).Count } else { '<missing>' }))
+    } catch {
+        Write-Line 'Snapshot JSON could not be parsed.'
     }
-}
-if (-not (Test-Path -LiteralPath $snapshotDir -PathType Container)) {
-    Write-Line 'Snapshot directory has not been created yet.'
+} else {
+    $tempFiles = Get-ChildItem -LiteralPath $snapshotDir -Force -ErrorAction SilentlyContinue |
+        Select-Object Name, Length |
+        Format-Table -AutoSize |
+        Out-String
+    Write-Output $tempFiles
 }
 
 $logs = foreach ($root in $roots) {

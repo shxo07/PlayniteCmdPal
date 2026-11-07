@@ -9,14 +9,13 @@
   IgnorableNamespaces="uap uap3 rescap">
 
   <Identity
-    Name="PlayniteCmdPal"
-    Publisher="CN=PlayniteCmdPal"
+    Name="werdscopez7347.PlayniteforCommandPalette"
+    Publisher="CN=B5EE8A57-B227-4726-A4E9-AF40E9D47E70"
     Version="0.0.3.0" />
-  <!-- Publisher must match the subject of the certificate used to sign the MSIX. -->
 
   <Properties>
     <DisplayName>PlayniteCmdPal</DisplayName>
-    <PublisherDisplayName>PlayniteCmdPal</PublisherDisplayName>
+    <PublisherDisplayName>werdscopez7347</PublisherDisplayName>
     <Logo>Assets\StoreLogo.png</Logo>
   </Properties>
 

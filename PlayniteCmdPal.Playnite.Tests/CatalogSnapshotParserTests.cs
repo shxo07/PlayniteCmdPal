@@ -174,5 +174,56 @@ public sealed class CatalogSnapshotParserTests
         Assert.Equal("Halo", result.Snapshot!.Games[0].Name);
     }
 
+
+    [Fact]
+    public void ParsesV2ArtworkIdentifiersAndKeepsV1ArtworkAbsent()
+    {
+        const string digest = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+        var v2 = CatalogSnapshotParser.Parse(Json($$"""{"schemaVersion":2,"generatedAtUtc":"2026-10-30T00:00:00Z","games":[{"id":"{{GameA}}","name":"Halo","isInstalled":true,"coverArtworkId":"{{digest}}","iconArtworkId":"{{digest}}"}]}"""));
+        Assert.Null(v2.Issue);
+        Assert.Equal(digest, Assert.Single(v2.Snapshot!.Games).CoverArtworkId);
+        Assert.Equal(digest, v2.Snapshot.Games[0].IconArtworkId);
+
+        var v1 = CatalogSnapshotParser.Parse(Json($$"""{"schemaVersion":1,"generatedAtUtc":"2026-10-30T00:00:00Z","games":[{"id":"{{GameA}}","name":"Halo","isInstalled":true}]}"""));
+        Assert.Null(v1.Issue);
+        Assert.Null(Assert.Single(v1.Snapshot!.Games).CoverArtworkId);
+        Assert.Null(v1.Snapshot.Games[0].IconArtworkId);
+    }
+
+    [Theory]
+    [InlineData("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")]
+    [InlineData("../aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")]
+    [InlineData("C:\\\\temp\\\\art.png")]
+    [InlineData("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")]
+    public void KeepsValidGameAndNullsOnlyUnsafeArtworkIdentifier(string artworkId)
+    {
+        const string validCover = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+        var json = $$"""{"schemaVersion":2,"generatedAtUtc":"2026-10-30T00:00:00Z","games":[{"id":"{{GameA}}","name":"Halo","isInstalled":true,"coverArtworkId":"{{validCover}}","iconArtworkId":"{{artworkId}}"}]}""";
+        var result = CatalogSnapshotParser.Parse(Json(json));
+        Assert.Null(result.Issue);
+        var game = Assert.Single(result.Snapshot!.Games);
+        Assert.Equal(validCover, game.CoverArtworkId);
+        Assert.Null(game.IconArtworkId);
+        Assert.Equal(0, result.SkippedRecordCount);
+    }
+
+    [Theory]
+    [InlineData("\\uD800")]
+    [InlineData("\\uDC00")]
+    public void MalformedUnicodeArtworkIdentifierDoesNotDiscardGameOrSiblingArtwork(string invalidArtworkId)
+    {
+        const string validCover = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+        var json = "{\"schemaVersion\":2,\"generatedAtUtc\":\"2026-10-30T00:00:00Z\",\"games\":[{\"id\":\""
+            + GameA + "\",\"name\":\"Halo\",\"isInstalled\":true,\"coverArtworkId\":\""
+            + validCover + "\",\"iconArtworkId\":\"" + invalidArtworkId + "\"}]}";
+        var result = CatalogSnapshotParser.Parse(Json(json));
+
+        Assert.Null(result.Issue);
+        var game = Assert.Single(result.Snapshot!.Games);
+        Assert.Equal(validCover, game.CoverArtworkId);
+        Assert.Null(game.IconArtworkId);
+        Assert.Equal(0, result.SkippedRecordCount);
+    }
+
     private static byte[] Json(string value) => Encoding.UTF8.GetBytes(value);
 }

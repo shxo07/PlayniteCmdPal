@@ -5,30 +5,23 @@ using System.Xml;
 
 namespace PlayniteCmdPal.Snapshot;
 
-/// <summary>Writes allowlisted catalog fields for the requested snapshot schema.</summary>
+/// <summary>Writes allowlisted catalog fields for the requested snapshot schema without depending on System.Text.Json in the Playnite host.</summary>
 public static class CatalogSnapshotSerializer
 {
-    public static async Task SerializeAsync(
-        Stream destination,
-        CatalogSnapshot snapshot,
-        CancellationToken cancellationToken = default,
-        int schemaVersion = 1,
-        bool includeLastActivity = false)
+    public static async Task SerializeAsync(Stream destination, CatalogSnapshot snapshot, CancellationToken cancellationToken = default)
     {
         if (destination is null) throw new ArgumentNullException(nameof(destination));
         if (snapshot is null) throw new ArgumentNullException(nameof(snapshot));
-        if (schemaVersion is not 1 and not 2) throw new ArgumentOutOfRangeException(nameof(schemaVersion));
-        if (snapshot.Games.Count > SnapshotLimits.MaxGames)
-            throw new InvalidDataException("The snapshot contains too many games.");
-
+        if (snapshot.Games.Count > SnapshotLimits.MaxGames) throw new InvalidDataException("The snapshot contains too many games.");
         cancellationToken.ThrowIfCancellationRequested();
+
         using var limited = new LimitedOutputStream(destination, cancellationToken);
         var writer = JsonReaderWriterFactory.CreateJsonWriter(limited, Encoding.UTF8, ownsStream: false);
         try
         {
             writer.WriteStartElement("root");
             writer.WriteAttributeString("type", "object");
-            WriteNumber(writer, "schemaVersion", schemaVersion);
+            WriteNumber(writer, "schemaVersion", snapshot.SchemaVersion);
             WriteString(writer, "generatedAtUtc", snapshot.GeneratedAtUtc.UtcDateTime.ToString("O", CultureInfo.InvariantCulture), cancellationToken);
             writer.WriteStartElement("games");
             writer.WriteAttributeString("type", "array");
@@ -42,8 +35,13 @@ public static class CatalogSnapshotSerializer
                 WriteBoolean(writer, "isInstalled", game.IsInstalled);
                 if (game.Source is not null) WriteString(writer, "source", game.Source, cancellationToken);
                 if (game.Platform is not null) WriteString(writer, "platform", game.Platform, cancellationToken);
-                if (schemaVersion >= 2 && includeLastActivity && game.LastActivity.HasValue)
-                    WriteString(writer, "lastActivity", game.LastActivity.Value.ToString("O", CultureInfo.InvariantCulture), cancellationToken);
+                if (snapshot.SchemaVersion >= SnapshotLimits.SchemaVersion)
+                {
+                    if (game.CoverArtworkId is not null) WriteString(writer, "coverArtworkId", game.CoverArtworkId, cancellationToken);
+                    if (game.IconArtworkId is not null) WriteString(writer, "iconArtworkId", game.IconArtworkId, cancellationToken);
+                    if (game.LastActivity is { } lastActivity)
+                        WriteString(writer, "lastActivity", lastActivity.ToString("O", CultureInfo.InvariantCulture), cancellationToken);
+                }
                 writer.WriteEndElement();
             }
             writer.WriteEndElement();
@@ -55,15 +53,30 @@ public static class CatalogSnapshotSerializer
             try { writer.Dispose(); } catch { }
             throw;
         }
-
         writer.Dispose();
         await destination.FlushAsync(cancellationToken).ConfigureAwait(false);
     }
 
+    public static Task SerializeAsync(
+        Stream destination,
+        CatalogSnapshot snapshot,
+        CancellationToken cancellationToken = default,
+        int schemaVersion = SnapshotLimits.LegacySchemaVersion,
+        bool includeLastActivity = false)
+    {
+        if (snapshot is null) throw new ArgumentNullException(nameof(snapshot));
+        var games = snapshot.Games.Select(game => new SnapshotGame(
+            game.Id, game.Name, game.IsInstalled, game.Source, game.Platform,
+            schemaVersion >= SnapshotLimits.SchemaVersion ? game.CoverArtworkId : null,
+            schemaVersion >= SnapshotLimits.SchemaVersion ? game.IconArtworkId : null,
+            includeLastActivity && schemaVersion >= SnapshotLimits.SchemaVersion ? game.LastActivity : null)).ToArray();
+        var versioned = new CatalogSnapshot(snapshot.GeneratedAtUtc, games, schemaVersion);
+        return SerializeAsync(destination, versioned, cancellationToken);
+    }
+
     private static void WriteString(XmlDictionaryWriter writer, string name, string value, CancellationToken cancellationToken)
     {
-        if (value.Length > SnapshotLimits.MaxBytes)
-            throw new InvalidDataException("The serialized snapshot exceeds the 32 MiB limit.");
+        if (value.Length > SnapshotLimits.MaxBytes) throw new InvalidDataException("The serialized snapshot exceeds the 32 MiB limit.");
         writer.WriteStartElement(name);
         writer.WriteString(ReplaceInvalidSurrogates(value, cancellationToken));
         writer.WriteEndElement();
@@ -91,11 +104,7 @@ public static class CatalogSnapshotSerializer
         var nextCancellationCheck = 0;
         for (var i = 0; i < value.Length; i++)
         {
-            if (i >= nextCancellationCheck)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                nextCancellationCheck = i + 4096;
-            }
+            if (i >= nextCancellationCheck) { cancellationToken.ThrowIfCancellationRequested(); nextCancellationCheck = i + 4096; }
             var current = value[i];
             if (char.IsHighSurrogate(current) && i + 1 < value.Length && char.IsLowSurrogate(value[i + 1]))
             {
