@@ -130,7 +130,7 @@ public sealed class CatalogSnapshotParserTests
     [Fact]
     public void RejectsUnsupportedSchema()
     {
-        var result = CatalogSnapshotParser.Parse(Json("""{"schemaVersion":2,"generatedAtUtc":"2026-10-30T00:00:00Z","games":[]}"""));
+        var result = CatalogSnapshotParser.Parse(Json("""{"schemaVersion":3,"generatedAtUtc":"2026-10-30T00:00:00Z","games":[]}"""));
         Assert.Equal(CatalogErrorCode.UnsupportedSchema, result.Issue!.Code);
     }
 
