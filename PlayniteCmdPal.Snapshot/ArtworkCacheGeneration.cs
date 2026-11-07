@@ -284,6 +284,13 @@ public sealed class ArtworkCacheGeneration : IDisposable
                 if (PathExistsOrThrow(root)) throw new IOException("The interrupted artwork cache could not be replaced during recovery.");
                 Directory.Move(backup, root);
             }
+            else if (hadPrevious && !PathExistsOrThrow(root))
+            {
+                // Both the previous generation's backup and the active cache are missing.
+                // Do not discard the marker: the published catalog may still reference
+                // artwork from the lost generation, and recovery cannot safely complete.
+                throw new IOException("The previous artwork cache and its recovery backup are both missing.");
+            }
             else if (!hadPrevious)
             {
                 DeleteDirectoryOrThrow(root);
