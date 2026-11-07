@@ -21,7 +21,7 @@ public sealed class LastActivitySnapshotTests
         });
 
         using var stream = new MemoryStream();
-        await CatalogSnapshotSerializer.SerializeAsync(stream, snapshot);
+        await CatalogSnapshotSerializer.SerializeAsync(stream, snapshot, schemaVersion: 2, includeLastActivity: true);
         using var document = JsonDocument.Parse(stream.ToArray());
         var written = document.RootElement.GetProperty("games")[0].GetProperty("lastActivity").GetString();
 
@@ -61,7 +61,7 @@ public sealed class LastActivitySnapshotTests
     {
         var snapshot = new CatalogSnapshot(GeneratedAt, new[] { new SnapshotGame(GameId, "Synthetic game", true, lastActivity: activity) });
         using var stream = new MemoryStream();
-        await CatalogSnapshotSerializer.SerializeAsync(stream, snapshot);
+        await CatalogSnapshotSerializer.SerializeAsync(stream, snapshot, schemaVersion: 2, includeLastActivity: true);
         return stream.ToArray();
     }
 
