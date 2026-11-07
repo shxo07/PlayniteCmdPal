@@ -1,5 +1,12 @@
 namespace PlayniteCmdPal.Core;
 
+public enum RecentlyPlayedEmptyState
+{
+    EmptyLibrary,
+    NoUsableRecords,
+    NoPlayHistory,
+}
+
 /// <summary>Deterministic newest-first ordering for games with recorded play history.</summary>
 public static class RecentlyPlayedGames
 {
@@ -20,6 +27,17 @@ public static class RecentlyPlayedGames
             .ThenBy(game => game.Title, StringComparer.Ordinal)
             .ThenBy(game => game.GameId, StringComparer.Ordinal)
             .ToArray();
+    }
+
+    /// <summary>Distinguishes an empty library from invalid records and games without play history.</summary>
+    public static RecentlyPlayedEmptyState GetEmptyState(int catalogGameCount, int skippedRecordCount)
+    {
+        if (catalogGameCount < 0) throw new ArgumentOutOfRangeException(nameof(catalogGameCount));
+        if (skippedRecordCount < 0) throw new ArgumentOutOfRangeException(nameof(skippedRecordCount));
+        if (catalogGameCount == 0 && skippedRecordCount > 0) return RecentlyPlayedEmptyState.NoUsableRecords;
+        return catalogGameCount == 0
+            ? RecentlyPlayedEmptyState.EmptyLibrary
+            : RecentlyPlayedEmptyState.NoPlayHistory;
     }
 
     /// <summary>
