@@ -2,7 +2,7 @@
 
 This page explains what is tested, where each check runs, and how to run it. For installing the toolchain and deploying the extension, see [Developer Setup](DEVELOPER-SETUP.md).
 
-**Status (2026-11-07):** Automated coverage is synthetic and is designed to run without Playnite, PowerToys, a personal game library, or secrets. The last confirmed Windows CI and CodeQL runs passed on the preceding PR head (`7d71499`); the review-fix branch adds deterministic snapshot-interleaving, presentation-helper, and v1/v2 .NET Framework smoke coverage. Its new CI results must be checked before treating those additions as validated. The test commands below are the ones executed by `scripts/ci.ps1` on `windows-latest`.
+**Status (2026-11-07):** Automated coverage is synthetic and is designed to run without Playnite, PowerToys, a personal game library, or secrets. Windows CI passed on the WERD-74 review-fix head (`f4fda45`): Release restore/build, 96 core tests, 195 adapter tests, and the .NET Framework v1/v2 snapshot smoke test all passed ([run 42346952868](https://github.com/werdscopez7347/PlayniteCmdPal/actions/runs/42346952868)). CodeQL run [42346953020](https://github.com/werdscopez7347/PlayniteCmdPal/actions/runs/42346953020) is still running; check its result before claiming analysis passed. The test commands below are the ones executed by `scripts/ci.ps1` on `windows-latest`.
 
 ## Test projects
 
@@ -66,6 +66,8 @@ Run status: the suites described here were authored in a Linux environment with 
 so they were never executed there — only parsed and reviewed. They have since run for real on
 GitHub-hosted Windows runners:
 
+- [42346952868](https://github.com/werdscopez7347/PlayniteCmdPal/actions/runs/42346952868) — Windows CI on WERD-74 review-fix head `f4fda45`: restore, Release build, `96/96` core tests, `195/195` adapter tests, and the .NET Framework v1/v2 snapshot smoke test all passed.
+- [42346953020](https://github.com/werdscopez7347/PlayniteCmdPal/actions/runs/42346953020) — CodeQL on the same head; status was still in progress when this documentation update was made.
 - [41184115994](https://github.com/werdscopez7347/PlayniteCmdPal/actions/runs/41184115994) — Windows CI on `aec765b`: restore, Release build, `66/66` core tests, `183/183` adapter
   tests, and the .NET Framework snapshot smoke step all passed.
 - [41184115933](https://github.com/werdscopez7347/PlayniteCmdPal/actions/runs/41184115933) — CodeQL on the same commit, running the same shared script, passed.
@@ -122,8 +124,8 @@ dotnet test .\PlayniteCmdPal.Core.Tests\PlayniteCmdPal.Core.Tests.csproj --logge
 
 ### Coverage at a glance
 
-The suites hold **249 test cases** (facts plus `[InlineData]` rows) split across the two
-projects: **66** for domain/search and **183** for the snapshot contract, publication, refresh,
+The suites hold **291 test cases** (facts plus `[InlineData]` rows) split across the two
+projects: **96** for domain/search and **195** for the snapshot contract, publication, refresh,
 and adapter policy. Of those, 148 were added for
 [WERD-62](https://linear.app/werdscopez7347/issue/WERD-62/expand-automated-tests-and-finalize-the-developer-setup-guide).
 
@@ -131,13 +133,12 @@ How that number is established, so it can be re-derived rather than trusted:
 
 | Source | Core | Adapter | Total |
 |---|---|---|---|
-| Count of `[Fact]` plus `[InlineData]` rows in each project in this commit | 66 | 183 | 249 |
-| `dotnet test` totals in Windows CI run [41184115994](https://github.com/werdscopez7347/PlayniteCmdPal/actions/runs/41184115994) | 66 | 183 | 249 |
-| `dotnet test` totals re-captured on commit `82d5afa` | 66 | 183 | 249 |
+| `dotnet test` totals in WERD-74 Windows CI run [42346952868](https://github.com/werdscopez7347/PlayniteCmdPal/actions/runs/42346952868) | 96 | 195 | 291 |
+| Earlier Windows CI run [41184115994](https://github.com/werdscopez7347/PlayniteCmdPal/actions/runs/41184115994) | 66 | 183 | 249 |
+| Earlier totals re-captured on commit `82d5afa` | 66 | 183 | 249 |
 
-All three agree. The count was previously stated here and in an earlier pull-request description
-as 251; that figure was produced by an editing-time estimate before any test had executed, not by
-`dotnet test`, and it was wrong. It has been corrected to 249.
+The current `dotnet test` totals establish 291 cases on the WERD-74 review-fix head. The older
+249-case total is retained above only as historical evidence for the earlier commit.
 
 Counts drift as tests change, so treat the per-file table above as the authoritative map and
 re-read the `Passed!` line rather than trusting a number written here. If the written count and
