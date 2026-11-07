@@ -65,6 +65,30 @@ public sealed class LastActivitySnapshotTests
         return stream.ToArray();
     }
 
+
+    [Fact]
+    public async Task V2PreservesArtworkIdentifiersAndLastActivityTogether()
+    {
+        const string artworkId = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+        var activity = new DateTime(2026, 10, 30, 14, 25, 0, DateTimeKind.Unspecified);
+        var snapshot = new CatalogSnapshot(GeneratedAt, new[]
+        {
+            new SnapshotGame(GameId, "Synthetic game", true,
+                coverArtworkId: artworkId, iconArtworkId: artworkId, lastActivity: activity),
+        }, schemaVersion: 2);
+
+        using var stream = new MemoryStream();
+        await CatalogSnapshotSerializer.SerializeAsync(stream, snapshot);
+        var parsed = CatalogSnapshotParser.Parse(stream.ToArray());
+
+        Assert.Null(parsed.Issue);
+        var game = Assert.Single(parsed.Snapshot!.Games);
+        Assert.Equal(artworkId, game.CoverArtworkId);
+        Assert.Equal(artworkId, game.IconArtworkId);
+        Assert.Equal(activity, game.LastActivity);
+        Assert.Equal(DateTimeKind.Unspecified, game.LastActivity!.Value.Kind);
+    }
+
     [Fact]
     public void MissingLastActivityRemainsNullAndMalformedValuesSkipOnlyTheirRecord()
     {
