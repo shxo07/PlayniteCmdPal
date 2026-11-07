@@ -2,6 +2,8 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
+using System.Runtime.Serialization;
+using System.Runtime.Serialization.Json;
 using System.Text;
 namespace PlayniteCmdPal.Snapshot;
 
@@ -384,9 +386,21 @@ public sealed class ArtworkCacheGeneration : IDisposable
                 return SnapshotPublicationState.NotPublished;
             }
 
-            var parsed = CatalogSnapshotParser.Parse(Encoding.UTF8.GetBytes(json));
-            return parsed.Snapshot is { } snapshot &&
-                   snapshot.GeneratedAtUtc == expectedGeneratedAtUtc
+            // Keep this recovery check inside the Snapshot assembly: the full catalog
+            // parser belongs to the Core layer and must not become a dependency here.
+            // DataContractJsonSerializer ignores the games payload while reading only the
+            // required v2 publication header.
+            using var payload = new MemoryStream(Encoding.UTF8.GetBytes(json));
+            var serializer = new DataContractJsonSerializer(typeof(SnapshotPublicationHeader));
+            var header = serializer.ReadObject(payload) as SnapshotPublicationHeader;
+            return header is not null &&
+                   header.SchemaVersion == SnapshotLimits.SchemaVersion &&
+                   DateTimeOffset.TryParse(
+                       header.GeneratedAtUtc,
+                       System.Globalization.CultureInfo.InvariantCulture,
+                       System.Globalization.DateTimeStyles.RoundtripKind,
+                       out var actualGeneratedAtUtc) &&
+                   actualGeneratedAtUtc == expectedGeneratedAtUtc
                 ? SnapshotPublicationState.Published
                 : SnapshotPublicationState.NotPublished;
         }
@@ -400,6 +414,16 @@ public sealed class ArtworkCacheGeneration : IDisposable
         }
         // Sharing, access, and other IO failures intentionally propagate. Recovery must
         // retain both generations and the marker when publication evidence is unreadable.
+    }
+
+    [DataContract]
+    private sealed class SnapshotPublicationHeader
+    {
+        [DataMember(Name = "schemaVersion", IsRequired = true)]
+        public int SchemaVersion { get; set; }
+
+        [DataMember(Name = "generatedAtUtc", IsRequired = true)]
+        public string GeneratedAtUtc { get; set; } = string.Empty;
     }
 
     private static bool TryDetectFormat(byte[] data, out string extension) =>
