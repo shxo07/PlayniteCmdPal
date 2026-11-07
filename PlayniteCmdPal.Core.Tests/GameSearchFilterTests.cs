@@ -9,7 +9,7 @@ public sealed class GameSearchFilterTests
     [
         new("steam-installed", "Halo Infinite", "Steam", true, Platform: "PC"),
         new("steam-not-installed", "Halo", "Steam", false, Platform: "PC"),
-        new("gog-installed", "Halo Wars", "GOG", true, Platform: "PC"),
+        new("epic-installed", "Halo Wars", "Epic", true, Platform: "Linux"),
         new("xbox-installed", "Halo: Spartan Assault", "Xbox", true, Platform: "Xbox"),
         new("unknown", "Halo: The Master Chief Collection"),
         new("other", "Apex Legends", "Steam", true, Platform: "PC"),
@@ -20,7 +20,7 @@ public sealed class GameSearchFilterTests
     {
         var results = GameSearch.Search(Catalog, null, new GameSearchFilters(IsInstalled: true));
 
-        Assert.Equal(new[] { "gog-installed", "other", "steam-installed", "xbox-installed" },
+        Assert.Equal(new[] { "epic-installed", "other", "steam-installed", "xbox-installed" },
             results.Select(game => game.GameId));
     }
 
@@ -30,19 +30,6 @@ public sealed class GameSearchFilterTests
         var results = GameSearch.Search(Catalog, null, new GameSearchFilters(IsInstalled: false));
 
         Assert.Equal(new[] { "steam-not-installed" }, results.Select(game => game.GameId));
-    }
-
-    [Fact]
-    public void SourceAndPlatformFiltersComposeWithTitleSearch()
-    {
-        var filters = new GameSearchFilters(
-            IsInstalled: true,
-            Sources: new[] { "steam", "GOG" },
-            Platforms: new[] { "PC" });
-
-        var results = GameSearch.Search(Catalog, "halo", filters);
-
-        Assert.Equal(new[] { "steam-installed", "gog-installed" }, results.Select(game => game.GameId));
     }
 
     [Fact]
@@ -59,24 +46,42 @@ public sealed class GameSearchFilterTests
     }
 
     [Fact]
-    public void MissingMetadataDoesNotHideEntriesWhenThatDimensionIsNotFiltered()
+    public void MultipleValuesUseOrWithinDimensionsAndAndAcrossAllDimensions()
     {
-        var filters = new GameSearchFilters(IsInstalled: true);
+        var state = new CatalogFilterState();
+        state.UpdateCatalog(Catalog);
+        state.SetInstalledStatuses([true]);
+        state.SetSources(["Steam", "Epic"]);
+        state.SetPlatforms(["PC", "Linux"]);
 
-        var results = GameSearch.Search(Catalog, "halo", filters);
+        var results = GameSearch.Search(Catalog, "halo", state.ToSearchFilters());
+
+        Assert.Equal(new[] { "epic-installed", "steam-installed" },
+            results.Select(game => game.GameId));
+    }
+
+    [Fact]
+    public void SelectingBothInstalledStatusesLeavesStatusDimensionUnfiltered()
+    {
+        var state = new CatalogFilterState();
+        state.UpdateCatalog(Catalog);
+        state.SetInstalledStatuses([true, false]);
+
+        var results = GameSearch.Search(Catalog, "halo", state.ToSearchFilters());
 
         Assert.Contains(results, game => game.GameId == "steam-installed");
-        Assert.Contains(results, game => game.GameId == "gog-installed");
+        Assert.Contains(results, game => game.GameId == "steam-not-installed");
         Assert.DoesNotContain(results, game => game.GameId == "unknown");
     }
 
     [Fact]
-    public void ActiveSourceFilterExcludesOnlyEntriesWithoutAMatchingSource()
+    public void MissingMetadataDoesNotHideEntriesWhenThatDimensionIsNotFiltered()
     {
-        var results = GameSearch.Search(Catalog, null, new GameSearchFilters(Sources: new[] { "Steam" }));
+        var results = GameSearch.Search(Catalog, "halo", new GameSearchFilters(IsInstalled: true));
 
-        Assert.Equal(new[] { "other", "steam-installed", "steam-not-installed" },
-            results.Select(game => game.GameId));
+        Assert.Contains(results, game => game.GameId == "steam-installed");
+        Assert.Contains(results, game => game.GameId == "epic-installed");
+        Assert.DoesNotContain(results, game => game.GameId == "unknown");
     }
 
     [Fact]
@@ -99,7 +104,7 @@ public sealed class GameSearchFilterTests
             "   ",
             new GameSearchFilters(Platforms: new[] { "PC" }));
 
-        Assert.Equal(new[] { "gog-installed", "other", "steam-installed", "steam-not-installed" },
+        Assert.Equal(new[] { "other", "steam-installed", "steam-not-installed" },
             results.Select(game => game.GameId));
     }
 
@@ -125,22 +130,17 @@ public sealed class GameSearchFilterTests
     }
 
     [Fact]
-    public void InstalledFilterExcludesNotInstalledEntries()
-    {
-        var results = GameSearch.Search(
-            Catalog,
-            null,
-            new GameSearchFilters(IsInstalled: true));
-
-        Assert.DoesNotContain(results, game => game.IsInstalled == false);
-    }
-
-    [Fact]
     public void NoMatchingFiltersReturnAnEmptyCollection()
     {
         Assert.Empty(GameSearch.Search(
             Catalog,
             "halo",
             new GameSearchFilters(Sources: new[] { "PlayStation" })));
+    }
+
+    [Fact]
+    public void EmptyCatalogReturnsNoResults()
+    {
+        Assert.Empty(GameSearch.Search(Array.Empty<GameEntry>(), null, new GameSearchFilters(IsInstalled: true)));
     }
 }
