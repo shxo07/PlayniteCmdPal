@@ -34,6 +34,23 @@ Test data is generated in the test process and written to a temporary directory 
 |---|---|
 | `ToggleFavoriteCommandTests` | Both successful and failed pin/unpin invocations return a `ShowToast` result whose `ToastArgs.Result` is explicitly `KeepOpen`, preserving the current page stack and query. |
 
+### Command Palette artwork (WERD-80)
+
+| File | Covers |
+|---|---|
+| `ArtworkIconLoaderTests` | Cover-before-icon selection, fallback when cover decoding fails, missing artwork isolation, repeated-resolution caching, bounded LRU eviction, catalog-refresh invalidation, concurrent requests sharing one decode, and rejection of malformed opaque identifiers before path resolution. |
+
+Manual verification requires a real Playnite library and the packaged Command Palette extension:
+
+1. Search for games with distinct cover artwork and confirm each result shows the correct image, not another game's image.
+2. Check games with no cover but a valid icon; confirm the icon is used. Check games with neither image, a missing cache file, and an unreadable/unsupported image; confirm a consistent fallback appears and search/launch still work.
+3. Keep a search query open while the catalog refreshes after changing a game's artwork in Playnite. Confirm the new image appears and the previous image is not reused.
+4. Confirm typing remains responsive while images load; rapidly change the query and confirm artwork from the earlier query never appears in newer results.
+5. Confirm Enter still launches the selected game and source, platform, installed state, duplicate-title disambiguation, and More actions remain intact.
+6. Repeat at 100% and 150% (or higher) Windows display scaling. Confirm icons remain correctly sized and do not clip or displace title/subtitle text.
+
+Record the PowerToys version, Windows build, display scaling, and outcome. Do not include real game names, IDs, or library paths in committed evidence.
+
 ### Favorites UI smoke test (manual)
 
 Run with a local Playnite library and the PowerToys Command Palette extension:

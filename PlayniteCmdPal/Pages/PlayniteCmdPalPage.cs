@@ -18,6 +18,7 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage
 {
     private readonly IReadOnlyPlayniteCatalog _catalog = new PlayniteCatalogAdapter();
     private readonly FavoritesStore _favorites = FavoritesPreferences.Store;
+    private readonly ArtworkIconLoader _artwork = new(PlayniteCatalogAdapter.ResolveArtworkPath);
     private IListItem[] _items = [CreateStatusItem("Loading your Playnite library…")];
     private CancellationTokenSource? _searchCancellation;
     private string _searchText = string.Empty;
@@ -84,6 +85,12 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage
                 ? await _catalog.RefreshAsync(cancellationToken).ConfigureAwait(false)
                 : await _catalog.GetAsync(cancellationToken).ConfigureAwait(false);
 
+            if (!catalog.IsFromCache)
+            {
+                _artwork.Invalidate();
+            }
+
+            var built = BuildItems(catalog, query);
             lock (_requestGate)
             {
                 if (version != _requestVersion)
@@ -91,9 +98,11 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage
                     return;
                 }
 
-                _items = BuildItems(catalog, query);
+                _items = built.Items;
                 RaiseItemsChanged();
             }
+
+            _ = LoadArtworkAsync(version, built.ArtworkItems, cancellationToken);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -114,13 +123,13 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage
         }
     }
 
-    private IListItem[] BuildItems(CatalogReadResult catalog, string query)
+    private (IListItem[] Items, IReadOnlyList<(ListItem Item, GameEntry Game)> ArtworkItems) BuildItems(CatalogReadResult catalog, string query)
     {
         if (!catalog.IsAvailable)
         {
             var message = catalog.Issue?.Message
                 ?? "The Playnite catalog is unavailable. Install and start the companion plugin, then refresh.";
-            return [CreateRefreshItem(message)];
+            return ([CreateRefreshItem(message)], Array.Empty<(ListItem Item, GameEntry Game)>());
         }
 
         var items = new List<IListItem>();
@@ -142,14 +151,14 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage
         if (catalog.Games.Count == 0)
         {
             items.Add(CreateRefreshItem("Your Playnite library is empty. Add games in Playnite, then refresh."));
-            return items.ToArray();
+            return (items.ToArray(), Array.Empty<(ListItem Item, GameEntry Game)>());
         }
 
         var matches = GameSearch.Search(catalog.Games, query);
         if (matches.Count == 0)
         {
             items.Add(CreateStatusItem($"No games match “{query.Trim()}”."));
-            return items.ToArray();
+            return (items.ToArray(), Array.Empty<(ListItem Item, GameEntry Game)>());
         }
 
         var duplicateIds = matches
@@ -158,6 +167,7 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage
             .SelectMany(group => group.Select(game => game.GameId))
             .ToHashSet(StringComparer.Ordinal);
 
+        var artworkItems = new List<(ListItem Item, GameEntry Game)>();
         foreach (var game in matches)
         {
             var metadata = new List<string>();
@@ -181,19 +191,56 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage
                 metadata.Add($"ID {game.GameId[..8]}");
             }
 
-            items.Add(new ListItem(new LaunchGameCommand(game.GameId))
+            var item = new ListItem(new LaunchGameCommand(game.GameId))
             {
                 Title = game.Title,
                 Subtitle = string.Join(" · ", metadata),
+                Icon = ArtworkIconLoader.FallbackIcon,
                 MoreCommands =
                 [
                     new CommandContextItem(new ShowGameDetailsCommand(game.GameId)),
                     new CommandContextItem(new ToggleFavoriteCommand(_favorites, game.GameId, () => BeginSearch())),
                 ],
-            });
+            };
+            items.Add(item);
+            artworkItems.Add((item, game));
         }
 
-        return items.ToArray();
+        return (items.ToArray(), artworkItems);
+    }
+
+    private async Task LoadArtworkAsync(
+        int version,
+        IReadOnlyList<(ListItem Item, GameEntry Game)> artworkItems,
+        CancellationToken cancellationToken)
+    {
+        if (artworkItems.Count == 0) return;
+
+        try
+        {
+            await Parallel.ForEachAsync(
+                artworkItems,
+                new ParallelOptions { MaxDegreeOfParallelism = 4, CancellationToken = cancellationToken },
+                async (entry, token) =>
+                {
+                    var icon = await _artwork.GetIconAsync(entry.Game, token).ConfigureAwait(false);
+                    entry.Item.Icon = icon ?? ArtworkIconLoader.FallbackIcon;
+                }).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            return;
+        }
+        catch (Exception)
+        {
+            // Artwork is optional; keep the already-published fallback items.
+            return;
+        }
+
+        lock (_requestGate)
+        {
+            if (version == _requestVersion) RaiseItemsChanged();
+        }
     }
 
     private static IListItem CreateStatusItem(string message) =>
