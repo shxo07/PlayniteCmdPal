@@ -4,34 +4,33 @@ using System.Linq;
 
 namespace PlayniteCmdPal.Core;
 
-/// <summary>A host-visible option in the native catalog filter dropdown.</summary>
-public sealed record CatalogFilterOption(string? Id, string? Name, bool IsSeparator = false);
-
 /// <summary>
-/// Keeps the available metadata filter options and selected native filter in sync with a catalog.
-/// The Command Palette SDK supports one selected filter ID at a time.
+/// Tracks independent multi-select filters and the options available in the current catalog.
 /// </summary>
 public sealed class CatalogFilterState
 {
-    public const string AllGamesId = "all-games";
-    public const string InstalledId = "installed";
-    public const string NotInstalledId = "not-installed";
-
-    /// <summary>Raised after the visible dropdown options change and must be re-read by the host.</summary>
-    public event EventHandler? FilterOptionsChanged;
-
     private string[] _sources = [];
     private string[] _platforms = [];
+    private readonly HashSet<bool> _installedStatuses = [];
+    private readonly HashSet<string> _selectedSources = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _selectedPlatforms = new(StringComparer.OrdinalIgnoreCase);
 
-    public string CurrentFilterId { get; private set; } = AllGamesId;
+    public event EventHandler? FilterOptionsChanged;
 
     public IReadOnlyList<string> Sources => _sources;
-
     public IReadOnlyList<string> Platforms => _platforms;
+    public IReadOnlyCollection<bool> InstalledStatuses => _installedStatuses;
+    public IReadOnlyCollection<string> SelectedSources => _selectedSources.OrderBy(value => value, StringComparer.OrdinalIgnoreCase).ToArray();
+    public IReadOnlyCollection<string> SelectedPlatforms => _selectedPlatforms.OrderBy(value => value, StringComparer.OrdinalIgnoreCase).ToArray();
+
+    public int ActiveFilterCount =>
+        (_installedStatuses.Count == 1 ? 1 : 0) +
+        _selectedSources.Count +
+        _selectedPlatforms.Count;
 
     /// <summary>
-    /// Replaces the available source/platform options and keeps the selected filter valid.
-    /// Returns true only when the visible option lists changed.
+    /// Replaces available metadata values, retaining valid selections and dropping values
+    /// that are no longer represented by the refreshed catalog.
     /// </summary>
     public bool UpdateCatalog(IEnumerable<GameEntry> games)
     {
@@ -41,111 +40,63 @@ public sealed class CatalogFilterState
         var sources = GetValues(entries, game => game.Source);
         var platforms = GetValues(entries, game => game.Platform);
         var optionsChanged =
-            !_sources.SequenceEqual(sources, StringComparer.Ordinal)
-            || !_platforms.SequenceEqual(platforms, StringComparer.Ordinal);
+            !_sources.SequenceEqual(sources, StringComparer.Ordinal) ||
+            !_platforms.SequenceEqual(platforms, StringComparer.Ordinal);
 
         _sources = sources;
         _platforms = platforms;
-        CurrentFilterId = NormalizeSelection(CurrentFilterId);
+
+        var selectionsChanged =
+            RetainAvailable(_selectedSources, _sources) |
+            RetainAvailable(_selectedPlatforms, _platforms);
 
         if (optionsChanged)
         {
             FilterOptionsChanged?.Invoke(this, EventArgs.Empty);
         }
 
-        return optionsChanged;
+        return optionsChanged || selectionsChanged;
     }
 
-    /// <summary>Returns a stable snapshot of the options currently exposed to the host.</summary>
-    public IReadOnlyList<CatalogFilterOption> GetOptions()
+    public void SetInstalledStatuses(IEnumerable<bool>? statuses)
     {
-        var options = new List<CatalogFilterOption>
+        _installedStatuses.Clear();
+        if (statuses is not null)
         {
-            new(AllGamesId, "All games"),
-            new(null, null, IsSeparator: true),
-            new(InstalledId, "Installed"),
-            new(NotInstalledId, "Not installed"),
-        };
-
-        if (_sources.Length > 0)
-        {
-            options.Add(new CatalogFilterOption(null, null, IsSeparator: true));
-            options.AddRange(_sources.Select(source => new CatalogFilterOption(
-                Encode("source", source), $"Source: {source}")));
+            foreach (var status in statuses)
+            {
+                _installedStatuses.Add(status);
+            }
         }
-
-        if (_platforms.Length > 0)
-        {
-            options.Add(new CatalogFilterOption(null, null, IsSeparator: true));
-            options.AddRange(_platforms.Select(platform => new CatalogFilterOption(
-                Encode("platform", platform), $"Platform: {platform}")));
-        }
-
-        return options;
     }
 
-    /// <summary>Applies a filter ID selected by the native Command Palette host.</summary>
-    public void SelectFilter(string? filterId)
+    public void SetSources(IEnumerable<string>? sources) =>
+        SetValues(_selectedSources, sources, _sources);
+
+    public void SetPlatforms(IEnumerable<string>? platforms) =>
+        SetValues(_selectedPlatforms, platforms, _platforms);
+
+    public void ClearInstalledStatuses() => _installedStatuses.Clear();
+    public void ClearSources() => _selectedSources.Clear();
+    public void ClearPlatforms() => _selectedPlatforms.Clear();
+    public void ClearAll()
     {
-        CurrentFilterId = NormalizeSelection(filterId);
+        _installedStatuses.Clear();
+        _selectedSources.Clear();
+        _selectedPlatforms.Clear();
     }
 
     public GameSearchFilters ToSearchFilters()
     {
-        if (CurrentFilterId == InstalledId)
-        {
-            return new GameSearchFilters(IsInstalled: true);
-        }
-
-        if (CurrentFilterId == NotInstalledId)
-        {
-            return new GameSearchFilters(IsInstalled: false);
-        }
-
-        if (TryGetValue(CurrentFilterId, "source:", out var source))
-        {
-            return new GameSearchFilters(Sources: new[] { source });
-        }
-
-        if (TryGetValue(CurrentFilterId, "platform:", out var platform))
-        {
-            return new GameSearchFilters(Platforms: new[] { platform });
-        }
-
-        return new GameSearchFilters();
+        bool? installed = _installedStatuses.Count == 1 ? _installedStatuses.Single() : null;
+        return new GameSearchFilters(
+            IsInstalled: installed,
+            Sources: _selectedSources.Count == 0 ? null : SelectedSources,
+            Platforms: _selectedPlatforms.Count == 0 ? null : SelectedPlatforms);
     }
 
-    private string NormalizeSelection(string? filterId)
-    {
-        if (string.Equals(filterId, AllGamesId, StringComparison.Ordinal)
-            || string.Equals(filterId, InstalledId, StringComparison.Ordinal)
-            || string.Equals(filterId, NotInstalledId, StringComparison.Ordinal))
-        {
-            return filterId!;
-        }
-
-        if (TryGetValue(filterId, "source:", out var selectedSource))
-        {
-            var currentSource = _sources.FirstOrDefault(
-                value => string.Equals(value, selectedSource, StringComparison.OrdinalIgnoreCase));
-            return currentSource is null ? AllGamesId : Encode("source", currentSource);
-        }
-
-        if (TryGetValue(filterId, "platform:", out var selectedPlatform))
-        {
-            var currentPlatform = _platforms.FirstOrDefault(
-                value => string.Equals(value, selectedPlatform, StringComparison.OrdinalIgnoreCase));
-            return currentPlatform is null ? AllGamesId : Encode("platform", currentPlatform);
-        }
-
-        return AllGamesId;
-    }
-
-    private static string[] GetValues(
-        IEnumerable<GameEntry> games,
-        Func<GameEntry, string?> selector) =>
-        games
-            .Select(game => selector(game)?.Trim())
+    private static string[] GetValues(IEnumerable<GameEntry> games, Func<GameEntry, string?> selector) =>
+        games.Select(game => selector(game)?.Trim())
             .Where(value => !string.IsNullOrWhiteSpace(value))
             .Select(value => value!)
             .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -153,18 +104,38 @@ public sealed class CatalogFilterState
             .ThenBy(value => value, StringComparer.Ordinal)
             .ToArray();
 
-    private static string Encode(string dimension, string value) =>
-        $"{dimension}:{Uri.EscapeDataString(value)}";
-
-    private static bool TryGetValue(string? filterId, string prefix, out string value)
+    private static bool RetainAvailable(HashSet<string> selected, IReadOnlyCollection<string> available)
     {
-        if (filterId is not null && filterId.StartsWith(prefix, StringComparison.Ordinal))
+        var stale = selected.Where(value => !available.Contains(value, StringComparer.OrdinalIgnoreCase)).ToArray();
+        foreach (var value in stale)
         {
-            value = Uri.UnescapeDataString(filterId[prefix.Length..]);
-            return value.Length > 0;
+            selected.Remove(value);
         }
 
-        value = string.Empty;
-        return false;
+        return stale.Length > 0;
+    }
+
+    private static void SetValues(HashSet<string> target, IEnumerable<string>? values, IReadOnlyCollection<string> available)
+    {
+        target.Clear();
+        if (values is null)
+        {
+            return;
+        }
+
+        foreach (var value in values)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                continue;
+            }
+
+            var canonical = available.FirstOrDefault(option =>
+                string.Equals(option, value.Trim(), StringComparison.OrdinalIgnoreCase));
+            if (canonical is not null)
+            {
+                target.Add(canonical);
+            }
+        }
     }
 }
