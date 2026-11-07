@@ -18,10 +18,11 @@ internal sealed class ArtworkIconLoader
     private const ulong MaximumDecodedPixelCount = 40_000_000;
     private const int DefaultCacheCapacity = 96;
 
-    internal static IconInfo FallbackIcon { get; } = new("\\uE7FC");
+    internal static IconInfo FallbackIcon { get; } = new("\uE7FC");
 
     private readonly Func<string, string?> _resolvePath;
     private readonly Func<string, CancellationToken, Task<bool>> _isDecodable;
+    private readonly Func<string, bool> _fileExists;
     private readonly int _cacheCapacity;
     private readonly object _gate = new();
     private readonly Dictionary<string, LinkedListNode<CacheEntry>> _cache = new(StringComparer.Ordinal);
@@ -32,10 +33,12 @@ internal sealed class ArtworkIconLoader
     internal ArtworkIconLoader(
         Func<string, string?> resolvePath,
         Func<string, CancellationToken, Task<bool>>? isDecodable = null,
-        int cacheCapacity = DefaultCacheCapacity)
+        int cacheCapacity = DefaultCacheCapacity,
+        Func<string, bool>? fileExists = null)
     {
         _resolvePath = resolvePath ?? throw new ArgumentNullException(nameof(resolvePath));
         _isDecodable = isDecodable ?? IsDecodableImageAsync;
+        _fileExists = fileExists ?? File.Exists;
         if (cacheCapacity < 1) throw new ArgumentOutOfRangeException(nameof(cacheCapacity));
         _cacheCapacity = cacheCapacity;
     }
@@ -96,7 +99,7 @@ internal sealed class ArtworkIconLoader
             if (path is not null && await _isDecodable(path, CancellationToken.None).ConfigureAwait(false))
             {
                 validPath = path;
-                icon = new IconInfo(path);
+                icon = new IconInfo(new Uri(path).AbsoluteUri);
             }
         }
         catch (Exception)
@@ -123,7 +126,7 @@ internal sealed class ArtworkIconLoader
             return false;
         }
 
-        if (node.Value.Path is { } path && !File.Exists(path))
+        if (node.Value.Path is { } path && !_fileExists(path))
         {
             _leastRecentlyUsed.Remove(node);
             _cache.Remove(artworkId);
