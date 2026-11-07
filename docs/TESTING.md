@@ -145,8 +145,8 @@ dotnet test .\PlayniteCmdPal.Core.Tests\PlayniteCmdPal.Core.Tests.csproj --logge
 
 ### Coverage at a glance
 
-The suites hold **251 test cases** (facts plus `[InlineData]` rows) split across three
-test projects: **66** for domain/search, **2** for Command Palette favorite command results,
+The suites currently contain **287 authored test cases** (facts plus `[InlineData]` rows) split across three
+test projects: **101** for domain/search, **3** for Command Palette favorite command results,
 and **183** for the snapshot contract, publication, refresh, and adapter policy. Of those, 148 were added for
 [WERD-62](https://linear.app/werdscopez7347/issue/WERD-62/expand-automated-tests-and-finalize-the-developer-setup-guide).
 
