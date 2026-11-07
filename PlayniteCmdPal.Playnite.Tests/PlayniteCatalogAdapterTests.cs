@@ -360,7 +360,7 @@ public sealed class PlayniteCatalogAdapterTests : IDisposable
         var enrichedPath = Path.Combine(_directory, "catalog-v2.json");
         var legacyPath = Path.Combine(_directory, "catalog-v1.json");
         await SnapshotFilePublisher.PublishAsync(legacyPath, NewSnapshot(("Legacy game", true, null, null)));
-        var result = await new PlayniteCatalogAdapter(enrichedPath, legacyPath, _time).GetAsync();
+        var result = await new PlayniteCatalogAdapter(enrichedPath, _time, legacyPath).GetAsync();
         Assert.True(result.IsAvailable);
         Assert.Equal("Legacy game", Assert.Single(result.Games).Title);
         Assert.Null(result.Games[0].LastActivity);
@@ -377,7 +377,7 @@ public sealed class PlayniteCatalogAdapterTests : IDisposable
         await SnapshotFilePublisher.PublishAsync(legacyPath, older);
         await SnapshotFilePublisher.PublishAsync(enrichedPath, newer, CancellationToken.None, schemaVersion: 2, includeLastActivity: true);
 
-        var result = await new PlayniteCatalogAdapter(enrichedPath, legacyPath, _time).GetAsync();
+        var result = await new PlayniteCatalogAdapter(enrichedPath, _time, legacyPath).GetAsync();
         Assert.Equal("New enriched", Assert.Single(result.Games).Title);
         Assert.Equal(activity, result.Games[0].LastActivity);
     }
@@ -392,7 +392,7 @@ public sealed class PlayniteCatalogAdapterTests : IDisposable
         await SnapshotFilePublisher.PublishAsync(enrichedPath, staleV2, CancellationToken.None, schemaVersion: 2, includeLastActivity: true);
         await SnapshotFilePublisher.PublishAsync(legacyPath, updatedV1);
 
-        var result = await new PlayniteCatalogAdapter(enrichedPath, legacyPath, _time).GetAsync();
+        var result = await new PlayniteCatalogAdapter(enrichedPath, _time, legacyPath).GetAsync();
         Assert.Equal("After rollback", Assert.Single(result.Games).Title);
         Assert.False(result.Games[0].IsInstalled);
         Assert.Null(result.Games[0].LastActivity);
