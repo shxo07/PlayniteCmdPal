@@ -36,9 +36,6 @@ internal sealed partial class AdvancedFiltersForm : FormContent
     }
 
     public override CommandResult SubmitForm(string inputs, string data) =>
-        ApplySelections(inputs, "apply");
-
-    public override CommandResult SubmitForm(string inputs, string data) =>
         ApplySelections(inputs, ReadActionId(data));
 
     private static string ReadActionId(string data)
