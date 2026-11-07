@@ -1,4 +1,5 @@
 using PlayniteCmdPal.Playnite;
+using PlayniteCmdPal.Snapshot;
 
 // This verifier only reads the adapter's default snapshot. It intentionally
 // reports aggregate status and never prints game names, IDs, or file contents.
@@ -21,7 +22,9 @@ try
         Guid.TryParseExact(game.GameId, "D", out var id) && id != Guid.Empty &&
         string.Equals(game.GameId, id.ToString("D"), StringComparison.Ordinal) && ids.Add(game.GameId));
     var mappedFields = initial.Games.All(game =>
-        !string.IsNullOrWhiteSpace(game.Title) && game.IsInstalled.HasValue && game.IconReference is null);
+        !string.IsNullOrWhiteSpace(game.Title) && game.IsInstalled.HasValue &&
+        SnapshotValidation.IsArtworkIdOrNull(game.IconReference) &&
+        SnapshotValidation.IsArtworkIdOrNull(game.CoverArtworkReference));
 
     var cached = await adapter.GetAsync();
     var refreshed = await adapter.RefreshAsync();

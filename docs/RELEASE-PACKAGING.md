@@ -15,23 +15,23 @@ This repository produces two different Windows artifacts:
 
 Do not upload `PlayniteCmdPalBridge.pext` to the Store or list it as the Command Palette extension's Gallery install source. The Gallery installs the CmdPal extension, not its companion Playnite bridge.
 
-The CmdPal project is an MSIX/packaged WinUI-style extension. Its project targets `net10.0-windows10.0.26100.0`, declares `win-x64` and `win-arm64`, and has self-contained publish profiles for both architectures. The package manifest currently declares version `0.0.3.0`, package identity `PlayniteCmdPal`, and provisional publisher subject `CN=PlayniteCmdPal`. The COM registration is an out-of-process executable server (`com:ExeServer`); it is not an InprocServer32 DLL registration.
+The CmdPal project is an MSIX/packaged extension. Its project targets `net10.0-windows10.0.26100.0`, declares `win-x64` and `win-arm64`, and has self-contained publish profiles for both architectures. The package manifest declares version `0.0.3.0`, Partner Center identity `werdscopez7347.PlayniteforCommandPalette`, and publisher `CN=B5EE8A57-B227-4726-A4E9-AF40E9D47E70`. The publisher display name is `werdscopez7347`. The COM registration is an out-of-process executable server (`com:ExeServer`); it is not an InprocServer32 DLL registration.
 
 ## 2. Distribution decision
 
 Microsoft's current guidance says the Extension Gallery is a curated catalogue, not a hosting service. Each listing must point to an extension already published through one of the supported install sources: Microsoft Store or WinGet. Microsoft currently recommends the Store; WinGet is also supported when its manifest uses the `windows-commandpalette-extension` tag.
 
-**Current project decision: retain the packaged MSIX and evaluate Microsoft Store first. Do not create a WinGet EXE installer from the old generic Inno Setup example.** That example changes the project to unpackaged mode and writes an InprocServer32 registration, which does not match this project's packaged out-of-process COM server. A WinGet route may be reconsidered only after a supported installer format, registration model, signing model, upgrade path, and clean-machine test are demonstrated for this exact project.
+**Distribution decision: Microsoft Store via MSIX bundle is the primary channel.** GitHub Releases provide direct-download assets, and WinGet is an additional install route. The Command Palette Gallery will expose Microsoft Store and WinGet as its two install options after both sources are live. Do not create an Inno Setup EXE based on the old generic example: it changes the project to unpackaged mode and uses an InprocServer32 registration, which does not match this project's packaged out-of-process COM server.
 
-This is a direction for investigation, not permission to distribute. Store identity, signing, and licensing gates below remain unresolved. No package should be submitted or published until the maintainer explicitly approves the completed release review.
+Microsoft Store handles production signing for Store-distributed MSIX packages after certification. No publisher-managed production certificate is required for this path. GitHub-hosted packages and WinGet downloads do not inherit Store signing or Store installation reputation; treat their signing/trust requirements separately. No package should be published until the maintainer approves the completed release review.
 
 ## 3. Release version and package identity
 
 - Keep the public version in Semantic Versioning form and map it to the four-part MSIX version. For example, SemVer `0.0.3` maps to MSIX `0.0.3.0`.
 - The current manifest is `0.0.3.0`; do not increment it merely for this documentation change.
-- Before a Store package is built, reserve the product in Partner Center and copy the exact package identity name, publisher, and product display name into the manifest/project configuration. Never guess these values.
-- The manifest `Identity Publisher` must match the signing certificate subject exactly. The current `CN=PlayniteCmdPal` value is provisional; no matching distribution certificate has been validated.
-- Keep the manifest version, project package version (when configured), Store submission version, and release tag aligned.
+- The Partner Center identity supplied by the maintainer is applied in `PlayniteCmdPal/Package.appxmanifest`: Name `werdscopez7347.PlayniteforCommandPalette`, Publisher `CN=B5EE8A57-B227-4726-A4E9-AF40E9D47E70`, and PublisherDisplayName `werdscopez7347`.
+- Keep the manifest version, evaluated package version, Store submission version, and release tag aligned.
+- Microsoft Store performs production signing for Store-distributed packages. Follow [Microsoft Store package identity and MSIX signing](MSIX-SIGNING.md) for the identity record, Store-managed signing model, package validation, and submission evidence.
 
 ## 4. Assets and Gallery metadata
 
@@ -72,7 +72,7 @@ The repository's documented automated baseline is:
 
 That command restores, builds, runs the core and adapter test projects, and executes the .NET Framework snapshot smoke test. It is not an MSIX packaging test.
 
-A release candidate still needs a Windows packaging run for both architectures. Record the exact Visual Studio/.NET SDK versions, commands, exit codes, package filenames, package versions, signing certificate subject/thumbprint (never the private key), and SHA-256 hashes. Inspect each package to confirm the extension manifest, assets, application binaries, project license, PowerToys template notice, and runtime notices are present. Do not commit generated packages, certificates, or private keys.
+A release candidate still needs a Windows packaging run for both architectures. Record the exact Visual Studio/.NET SDK versions, commands, exit codes, package filenames, package versions, and SHA-256 hashes. For Store distribution, retain Partner Center submission and certification evidence; do not invent publisher-certificate thumbprint requirements. Inspect each package to confirm the extension manifest, assets, application binaries, project license, PowerToys template notice, and runtime notices are present. Do not commit generated packages, certificates, or private keys.
 
 Do not copy a generic `dotnet publish` or Inno Setup command into release instructions until it has been run successfully against this exact project and the resulting MSIX has been inspected. The local Visual Studio **Build > Deploy** path in [Developer Setup](DEVELOPER-SETUP.md) is a development deployment, not proof of a distributable release package.
 
@@ -84,7 +84,7 @@ The current audit in [Licensing and release readiness](LICENSING-AND-RELEASE.md)
 2. **Stable Windows SDK targeting pack:** the project currently targets `10.0.26100.68-preview`. Evaluate a compatible stable targeting pack and run Windows build/deploy tests before switching. This is a release blocker until resolved.
 3. **Runtime notices:** the MSBuild copy target exists, but the exact runtime notice file still needs verification in both `win-x64` and `win-arm64` publish outputs.
 4. **Dependency inventory:** run `scripts/licensing/New-DependencyInventory.ps1` after a clean restore on the supported Windows build machine and review every item flagged for manual review.
-5. **Signing and Store identity:** reserve the Store identity and validate a certificate whose subject matches the final manifest publisher. The current provisional identity is not proof of Store ownership or signing readiness.
+5. **Store identity and signing:** Partner Center identity values have been supplied and applied to the manifest. Confirm them against the Partner Center product dashboard, then complete the Store packaging, validation, and certification workflow. No publisher-managed signing certificate is required for Store distribution. Direct GitHub/WinGet downloads need a separately evaluated trust model.
 6. **Clean-machine acceptance:** replay install, first launch, update, uninstall, and rollback on a clean supported Windows environment. The Developer Setup page explicitly says the independent clean-machine walkthrough has not yet been completed.
 
 A successful CI build does not clear these release blockers. Do not publish a binary or submit a Gallery listing while any required gate remains open.
@@ -121,7 +121,7 @@ Do not recommend manually downgrading an MSIX package. For a Store release, prep
 | Symptom | Checks |
 |---|---|
 | Extension does not appear after development deployment | Confirm Command Palette is enabled; redeploy the packaged project; run **Reload Command Palette extensions**; inspect Event Viewer and the extension process logs. |
-| Package fails to install or register | Confirm package signature trust, package identity, architecture, and that the manifest publisher matches the signing certificate subject. |
+| Package fails to install or register | Confirm package signature trust for the distribution source, exact package identity, architecture, and Store certification state where applicable. |
 | Extension activation fails | Confirm the extension CLSID matches in the C# `[Guid]`, `com:Class Id`, and `CreateInstance ClassId`; confirm the manifest still declares the executable COM server and its activation arguments. |
 | Gallery entry is visible but install fails | Confirm the listing's install-source type and identifier exactly match the live Store product or accepted WinGet package. The Gallery does not host the binary. |
 | WinGet package is not discoverable in Command Palette | Confirm the published WinGet locale manifest includes `windows-commandpalette-extension`; verify the package is installable independently of the Gallery. |
@@ -136,7 +136,7 @@ Before the first public release, the maintainer must confirm:
 - [ ] Windows SDK projection redistribution has authoritative clearance, and the targeting-pack decision is recorded.
 - [ ] The dependency inventory has been regenerated and all review items resolved.
 - [ ] Runtime notices are present in both architecture outputs.
-- [ ] Store identity and signing certificate are final and verified (or a separately validated WinGet route is approved).
+- [ ] Partner Center identity is confirmed against the product dashboard; x64 and ARM64 MSIX packages pass validation and Store certification. Direct GitHub/WinGet distribution has a separately documented trust model.
 - [ ] x64 and ARM64 packages build and pass package inspection.
 - [ ] A clean supported Windows machine passes install, first-run, update, uninstall, and rollback checks.
 - [ ] Release notes, support/troubleshooting instructions, version, hashes, and notices are complete.
