@@ -68,7 +68,7 @@ public sealed class LastActivitySnapshotTests
     [Fact]
     public void MissingLastActivityRemainsNullAndMalformedValuesSkipOnlyTheirRecord()
     {
-        var json = $$"""{"schemaVersion":1,"generatedAtUtc":"2026-10-30T00:00:00Z","games":[{"id":"{{GameId}}","name":"No history","isInstalled":false},{"id":"22222222-2222-4222-8222-222222222222","name":"Bad date","isInstalled":false,"lastActivity":"yesterday"}]}""";
+        var json = $"""{"schemaVersion":2,"generatedAtUtc":"2026-10-30T00:00:00Z","games":[{"id":"{{GameId}}","name":"No history","isInstalled":false},{"id":"22222222-2222-4222-8222-222222222222","name":"Bad date","isInstalled":false,"lastActivity":"yesterday"}]}""";
         var parsed = CatalogSnapshotParser.Parse(Encoding.UTF8.GetBytes(json));
 
         Assert.Null(parsed.Issue);
