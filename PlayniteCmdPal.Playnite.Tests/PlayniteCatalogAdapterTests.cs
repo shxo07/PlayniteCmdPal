@@ -71,7 +71,7 @@ public sealed class PlayniteCatalogAdapterTests : IDisposable
     public async Task LastActivitySurvivesSnapshotAdapterMapping()
     {
         var activity = new DateTime(2026, 10, 30, 14, 25, 0, DateTimeKind.Unspecified);
-        await PublishAsync(new CatalogSnapshot(_time.GetUtcNow(), new[] { new SnapshotGame(GameA, "Halo", true, lastActivity: activity) }));
+        await SnapshotFilePublisher.PublishAsync(_path, new CatalogSnapshot(_time.GetUtcNow(), new[] { new SnapshotGame(GameA, "Halo", true, lastActivity: activity) }), CancellationToken.None, schemaVersion: 2, includeLastActivity: true);
         var result = await new PlayniteCatalogAdapter(_path, _time).GetAsync();
         Assert.Equal(activity, Assert.Single(result.Games).LastActivity);
         Assert.Equal(DateTimeKind.Unspecified, result.Games[0].LastActivity!.Value.Kind);
