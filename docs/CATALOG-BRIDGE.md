@@ -95,7 +95,7 @@ Remaining real-library verification:
 3. Confirm `%LOCALAPPDATA%\PlayniteCmdPal\catalog-v2.json` appears and contains only the allowlisted fields.
 4. Run the verifier above or use the Command Palette page; compare stable IDs, names, source/platform, and install state locally with Playnite without sharing library data.
 5. Add/rename/remove a game and change source/platform metadata; confirm the snapshot refreshes after the debounce and that no partial file is observable.
-6. Close Playnite, delete the snapshot, and confirm the adapter reports unavailable on a fresh process. Restart Playnite and confirm explicit refresh reconnects.
+6. Close Playnite and back up both snapshot files outside the bridge directory. With both `catalog-v2.json` and `catalog-v1.json` absent, confirm a fresh adapter process reports unavailable. Next, leave v2 absent and place a known-valid v1 fixture at `catalog-v1.json`; confirm a fresh adapter process reads it through the legacy fallback. Restore the backed-up files (or remove the fixture and let Playnite regenerate v2) before restarting Playnite, then confirm explicit refresh reconnects.
 7. Record the Playnite/Windows versions and observed outcomes without committing game IDs, titles, or library exports.
 
 The existing launch-by-ID URI smoke test is separate from catalog bridge verification and does not verify this bridge.
