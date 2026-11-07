@@ -21,4 +21,40 @@ public static class RecentlyPlayedGames
             .ThenBy(game => game.GameId, StringComparer.Ordinal)
             .ToArray();
     }
+
+    /// <summary>
+    /// Formats a last-played value in one display time zone. Unspecified values retain the
+    /// documented local-machine interpretation; the numeric offset makes the displayed zone
+    /// unambiguous even across daylight-saving transitions.
+    /// </summary>
+    public static string FormatLastPlayed(DateTime lastActivity, TimeZoneInfo displayTimeZone)
+    {
+        if (displayTimeZone is null) throw new ArgumentNullException(nameof(displayTimeZone));
+
+        var utc = lastActivity.ToUniversalTime();
+        var instant = new DateTimeOffset(DateTime.SpecifyKind(utc, DateTimeKind.Utc));
+        return TimeZoneInfo.ConvertTime(instant, displayTimeZone)
+            .ToString("yyyy-MM-dd HH:mm zzz", System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    /// <summary>
+    /// Keeps status and recovery items visible while applying search only to game entries.
+    /// </summary>
+    public static IReadOnlyList<T> ComposeVisibleItems<T>(
+        IEnumerable<T> statusItems,
+        IEnumerable<T> gameItems,
+        string? searchText,
+        Func<T, string> getTitle)
+    {
+        if (statusItems is null) throw new ArgumentNullException(nameof(statusItems));
+        if (gameItems is null) throw new ArgumentNullException(nameof(gameItems));
+        if (getTitle is null) throw new ArgumentNullException(nameof(getTitle));
+
+        var visible = new List<T>();
+        visible.AddRange(statusItems);
+        visible.AddRange(string.IsNullOrWhiteSpace(searchText)
+            ? gameItems
+            : gameItems.Where(item => getTitle(item).Contains(searchText, StringComparison.OrdinalIgnoreCase)));
+        return visible.AsReadOnly();
+    }
 }
