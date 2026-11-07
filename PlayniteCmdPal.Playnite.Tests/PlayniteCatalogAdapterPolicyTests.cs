@@ -30,14 +30,14 @@ public sealed class PlayniteCatalogAdapterPolicyTests : IDisposable
     }
 
     [Fact]
-    public void DefaultSnapshotPathIsUnderLocalAppDataAndNamedForSchemaOne()
+    public void DefaultSnapshotPathIsUnderLocalAppDataAndNamedForSchemaTwo()
     {
         var path = PlayniteCatalogAdapter.GetDefaultSnapshotPath();
 
-        Assert.Equal("catalog-v1.json", Path.GetFileName(path));
+        Assert.Equal("catalog-v2.json", Path.GetFileName(path));
         Assert.Equal("PlayniteCmdPal", Path.GetFileName(Path.GetDirectoryName(path)));
         Assert.EndsWith(
-            Path.Combine("PlayniteCmdPal", "catalog-v1.json"),
+            Path.Combine("PlayniteCmdPal", "catalog-v2.json"),
             path,
             StringComparison.OrdinalIgnoreCase);
     }
@@ -118,7 +118,7 @@ public sealed class PlayniteCatalogAdapterPolicyTests : IDisposable
     [Fact]
     public async Task UnsupportedSchemaOnFirstReadIsUnavailableAndNotAnEmptyLibrary()
     {
-        await File.WriteAllTextAsync(_path, """{"schemaVersion":2,"generatedAtUtc":"2026-10-30T00:00:00Z","games":[]}""");
+        await File.WriteAllTextAsync(_path, """{"schemaVersion":3,"generatedAtUtc":"2026-10-30T00:00:00Z","games":[]}""");
 
         var result = await new PlayniteCatalogAdapter(_path, _time).GetAsync();
 
