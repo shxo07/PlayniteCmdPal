@@ -241,6 +241,7 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage
                         var icon = await _artwork.GetIconAsync(entry.Game, token).ConfigureAwait(false);
                         token.ThrowIfCancellationRequested();
 
+                        var updated = false;
                         lock (_requestGate)
                         {
                             // Do not mutate objects belonging to an obsolete search request.
@@ -250,15 +251,10 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage
                             }
 
                             entry.Item.Icon = icon ?? ArtworkIconLoader.FallbackIcon;
+                            updated = true;
                         }
 
-                        lock (_requestGate)
-                        {
-                            if (version == _requestVersion && !token.IsCancellationRequested)
-                            {
-                                RaiseItemsChanged();
-                            }
-                        }
+                        if (updated) RaiseItemsChanged();
                     }
                     catch (OperationCanceledException) when (token.IsCancellationRequested)
                     {
