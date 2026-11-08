@@ -102,7 +102,8 @@ internal sealed class ArtworkIconLoader
                 if (load.Waiters == 0 && !load.Task.IsCompleted)
                 {
                     // Shared work is cancelled only after its final interested caller leaves.
-                    load.Cancellation.Cancel();
+                    try { load.Cancellation.Cancel(); }
+                    catch (ObjectDisposedException) { /* The shared operation completed concurrently. */ }
                 }
             }
         }
