@@ -13,6 +13,7 @@ internal sealed partial class FavoritesPage : DynamicListPage
 {
     private readonly IReadOnlyPlayniteCatalog _catalog = new PlayniteCatalogAdapter();
     private readonly FavoritesStore _favorites = FavoritesPreferences.Store;
+    private readonly ArtworkIconLoader _artwork = new(artworkId => PlayniteCatalogAdapter.ResolveArtworkPath(artworkId));
     private readonly LatestRequestGate _requestGate = new();
     private IListItem[] _items = [CreateStatusItem("Loading your favorites…")];
     private string _searchText = string.Empty;
@@ -34,9 +35,7 @@ internal sealed partial class FavoritesPage : DynamicListPage
 
     public override IListItem[] GetItems() => _requestGate.Synchronize(() => _items);
 
-    // Never refresh a Command Palette page inline inside the command's Invoke call.
-    // A page notification here can re-enter the extension while it is dispatching the
-    // command result, suppressing the toast and leaving the page in a stale loading state.
+    // Defer page refresh until the command invocation has returned to the host.
     private void OnFavoritesChanged(object? sender, EventArgs e)
     {
         _ = Task.Run(() =>
@@ -85,18 +84,31 @@ internal sealed partial class FavoritesPage : DynamicListPage
                 return;
             }
 
-            var items = matches.Select(game => new ListItem(new LaunchGameCommand(game.GameId))
+            var items = new List<IListItem>();
+            var artworkItems = new List<(ListItem Item, GameEntry Game)>();
+            foreach (var game in matches)
             {
-                Title = game.Title,
-                Subtitle = BuildMetadata(game),
-                MoreCommands =
-                [
-                    new CommandContextItem(new ShowGameDetailsCommand(game.GameId)),
-                    new CommandContextItem(new ToggleFavoriteCommand(_favorites, game.GameId)),
-                ],
-            }).ToArray();
+                var item = new ListItem(new LaunchGameCommand(game.GameId))
+                {
+                    Title = game.Title,
+                    Subtitle = BuildMetadata(game),
+                    Icon = ArtworkIconLoader.FallbackIcon,
+                    MoreCommands =
+                    [
+                        new CommandContextItem(new ShowGameDetailsCommand(game.GameId)),
+                        new CommandContextItem(new ToggleFavoriteCommand(_favorites, game.GameId)),
+                    ],
+                };
+                items.Add(item);
+                artworkItems.Add((item, game));
+            }
 
-            PublishIfCurrent(version, items);
+            if (!PublishIfCurrent(version, items.ToArray()))
+            {
+                return;
+            }
+
+            _ = LoadArtworkAsync(version, artworkItems);
         }
         catch (Exception)
         {
@@ -107,12 +119,34 @@ internal sealed partial class FavoritesPage : DynamicListPage
         }
     }
 
-    // Keep the gate around ownership/state mutation only. Never call the Command Palette
-    // notification API while holding its lock.
-    private void PublishIfCurrent(int version, IListItem[] items)
+    private async Task LoadArtworkAsync(int version, IReadOnlyList<(ListItem Item, GameEntry Game)> artworkItems)
+    {
+        await Parallel.ForEachAsync(
+            artworkItems,
+            new ParallelOptions { MaxDegreeOfParallelism = 4 },
+            async (entry, _) =>
+            {
+                try
+                {
+                    var icon = await _artwork.GetIconAsync(entry.Game, default).ConfigureAwait(false);
+                    var published = _requestGate.TryPublish(version, () =>
+                    {
+                        entry.Item.Icon = icon ?? ArtworkIconLoader.FallbackIcon;
+                    });
+                    if (published) RaiseItemsChanged();
+                }
+                catch (Exception)
+                {
+                    // Artwork is optional; one bad image must not affect other favorites.
+                }
+            }).ConfigureAwait(false);
+    }
+
+    private bool PublishIfCurrent(int version, IListItem[] items)
     {
         var published = _requestGate.TryPublish(version, () => _items = items);
         if (published) RaiseItemsChanged();
+        return published;
     }
 
     private static string BuildMetadata(GameEntry game)
