@@ -16,6 +16,10 @@ internal sealed partial class FavoritesPage : DynamicListPage
     private readonly FavoritesStore _favorites = FavoritesPreferences.Store;
     private readonly ArtworkIconLoader _artwork = new(artworkId => PlayniteCatalogAdapter.ResolveArtworkPath(artworkId));
     private readonly LatestRequestGate _requestGate = new();
+    private readonly object _lifecycleGate = new();
+    private readonly WeakReference<FavoritesPage> _weakSelf;
+    private readonly EventHandler _favoritesChangedHandler;
+    private CancellationTokenSource? _requestCancellation;
     private IListItem[] _items = [CreateStatusItem("Loading your favorites…")];
     private string _searchText = string.Empty;
 
@@ -24,7 +28,23 @@ internal sealed partial class FavoritesPage : DynamicListPage
         Icon = IconHelpers.FromRelativePath("Assets\\StoreLogo.png");
         Title = "Favorites";
         Name = "Pinned games";
-        _favorites.FavoritesChanged += OnFavoritesChanged;
+
+        // The shared store must not keep retired page instances alive. Its event delegate
+        // captures only a WeakReference, so the page can be collected with the host page.
+        _weakSelf = new WeakReference<FavoritesPage>(this);
+        var weakSelf = _weakSelf;
+        _favoritesChangedHandler = (sender, args) =>
+        {
+            if (weakSelf.TryGetTarget(out var page))
+            {
+                page.OnFavoritesChanged(sender, args);
+            }
+            else if (sender is FavoritesStore store)
+            {
+                store.FavoritesChanged -= _favoritesChangedHandler;
+            }
+        };
+        _favorites.FavoritesChanged += _favoritesChangedHandler;
         LoadItems();
     }
 
@@ -36,52 +56,60 @@ internal sealed partial class FavoritesPage : DynamicListPage
 
     public override IListItem[] GetItems() => _requestGate.Synchronize(() => _items);
 
-    // Defer page refresh until the command invocation has returned to the host.
     private void OnFavoritesChanged(object? sender, EventArgs e)
     {
-        _ = Task.Run(() =>
-        {
-            try { LoadItems(); }
-            catch { /* A refresh must not turn a successful pin/unpin into a failed command. */ }
-        });
+        // Do not rebuild the Command Palette page inside the command's Invoke call.
+        _ = Task.Run(() => LoadItems());
     }
 
     private void LoadItems()
     {
-        var request = _requestGate.BeginRequest(() =>
+        CancellationToken token;
+        (int Version, string State) request;
+        lock (_lifecycleGate)
         {
-            _items = [CreateStatusItem("Loading your favorites…")];
-            return _searchText;
-        });
+            _requestCancellation?.Cancel();
+            _requestCancellation?.Dispose();
+            _requestCancellation = new CancellationTokenSource();
+            token = _requestCancellation.Token;
+            request = _requestGate.BeginRequest(() =>
+            {
+                _items = [CreateStatusItem("Loading your favorites…")];
+                return _searchText;
+            });
+        }
+
         RaiseItemsChanged();
-        _ = LoadItemsAsync(request.Version, request.State);
+        _ = LoadItemsAsync(request.Version, request.State, token);
     }
 
-    private async Task LoadItemsAsync(int version, string query)
+    private async Task LoadItemsAsync(int version, string query, CancellationToken cancellationToken)
     {
         try
         {
-            var catalog = await _catalog.GetAsync().ConfigureAwait(false);
+            var catalog = await _catalog.GetAsync(cancellationToken).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
             if (!catalog.IsAvailable)
             {
                 PublishIfCurrent(version,
                 [
                     CreateStatusItem(catalog.Issue?.Message
                         ?? "The Playnite catalog is unavailable. Start Playnite and refresh.")
-                ]);
+                ], cancellationToken);
                 return;
             }
 
             var favoriteIds = _favorites.GetFavoriteIds().ToHashSet(StringComparer.Ordinal);
             var games = catalog.Games.Where(game => favoriteIds.Contains(game.GameId)).ToArray();
             var matches = GameSearch.Search(games, query);
+            cancellationToken.ThrowIfCancellationRequested();
 
             if (matches.Count == 0)
             {
                 var message = favoriteIds.Count == 0
                     ? "No favorites yet. Pin a game from its search result actions."
                     : "No saved favorites match this search in the current Playnite library.";
-                PublishIfCurrent(version, [CreateStatusItem(message)]);
+                PublishIfCurrent(version, [CreateStatusItem(message)], cancellationToken);
                 return;
             }
 
@@ -89,6 +117,7 @@ internal sealed partial class FavoritesPage : DynamicListPage
             var artworkItems = new List<(ListItem Item, GameEntry Game)>();
             foreach (var game in matches)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 var item = new ListItem(new LaunchGameCommand(game.GameId))
                 {
                     Title = game.Title,
@@ -104,47 +133,67 @@ internal sealed partial class FavoritesPage : DynamicListPage
                 artworkItems.Add((item, game));
             }
 
-            if (!PublishIfCurrent(version, items.ToArray()))
+            if (!PublishIfCurrent(version, items.ToArray(), cancellationToken))
             {
                 return;
             }
 
-            _ = LoadArtworkAsync(version, artworkItems);
+            _ = LoadArtworkAsync(version, artworkItems, cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // A newer query or pin/unpin event superseded this request.
         }
         catch (Exception)
         {
             PublishIfCurrent(version,
             [
                 CreateStatusItem("Couldn't load Favorites. Check the local preferences file and Playnite catalog, then try again.")
-            ]);
+            ], cancellationToken);
         }
     }
 
-    private async Task LoadArtworkAsync(int version, IReadOnlyList<(ListItem Item, GameEntry Game)> artworkItems)
+    private async Task LoadArtworkAsync(
+        int version,
+        IReadOnlyList<(ListItem Item, GameEntry Game)> artworkItems,
+        CancellationToken cancellationToken)
     {
-        await Parallel.ForEachAsync(
-            artworkItems,
-            new ParallelOptions { MaxDegreeOfParallelism = 4 },
-            async (entry, _) =>
-            {
-                try
+        try
+        {
+            await Parallel.ForEachAsync(
+                artworkItems,
+                new ParallelOptions { MaxDegreeOfParallelism = 4, CancellationToken = cancellationToken },
+                async (entry, token) =>
                 {
-                    var icon = await _artwork.GetIconAsync(entry.Game, default).ConfigureAwait(false);
-                    var published = _requestGate.TryPublish(version, () =>
+                    try
                     {
-                        entry.Item.Icon = icon ?? ArtworkIconLoader.FallbackIcon;
-                    });
-                    if (published) RaiseItemsChanged();
-                }
-                catch (Exception)
-                {
-                    // Artwork is optional; one bad image must not affect other favorites.
-                }
-            }).ConfigureAwait(false);
+                        var icon = await _artwork.GetIconAsync(entry.Game, token).ConfigureAwait(false);
+                        token.ThrowIfCancellationRequested();
+                        var published = _requestGate.TryPublish(version, () =>
+                        {
+                            entry.Item.Icon = icon ?? ArtworkIconLoader.FallbackIcon;
+                        });
+                        if (published) RaiseItemsChanged();
+                    }
+                    catch (OperationCanceledException) when (token.IsCancellationRequested)
+                    {
+                        throw;
+                    }
+                    catch (Exception)
+                    {
+                        // Artwork is optional; one bad image must not affect other favorites.
+                    }
+                }).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // A newer Favorites request cancelled obsolete artwork work.
+        }
     }
 
-    private bool PublishIfCurrent(int version, IListItem[] items)
+    private bool PublishIfCurrent(int version, IListItem[] items, CancellationToken cancellationToken)
     {
+        if (cancellationToken.IsCancellationRequested) return false;
         var published = _requestGate.TryPublish(version, () => _items = items);
         if (published) RaiseItemsChanged();
         return published;
