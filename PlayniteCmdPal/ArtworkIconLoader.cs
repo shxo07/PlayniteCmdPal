@@ -18,7 +18,7 @@ internal sealed class ArtworkIconLoader
     private const ulong MaximumDecodedPixelCount = 40_000_000;
     private const int DefaultCacheCapacity = 96;
 
-    internal static IconInfo FallbackIcon { get; } = new("\\uE7FC");
+    internal static IconInfo FallbackIcon { get; } = new("\uE7FC");
 
     private readonly Func<string, string?> _resolvePath;
     private readonly Func<string, CancellationToken, Task<bool>> _isDecodable;
