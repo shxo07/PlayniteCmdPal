@@ -67,9 +67,10 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage
             cancellationToken = _searchCancellation.Token;
 
             _items = [CreateStatusItem("Searching your Playnite library…")];
-            RaiseItemsChanged();
         }
 
+        // Notify outside the request lock: the host may synchronously re-enter GetItems.
+        RaiseItemsChanged();
         _ = LoadItemsAsync(version, query, forceRefresh, cancellationToken);
     }
 
@@ -85,7 +86,9 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage
                 ? await _catalog.RefreshAsync(cancellationToken).ConfigureAwait(false)
                 : await _catalog.GetAsync(cancellationToken).ConfigureAwait(false);
 
-            if (!catalog.IsFromCache)
+            // A normal search/pin refresh reuses validated artwork. Only an explicit
+            // catalog refresh should invalidate artwork references and force disk resolution.
+            if (forceRefresh)
             {
                 _artwork.Invalidate();
             }
@@ -199,7 +202,7 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage
                 MoreCommands =
                 [
                     new CommandContextItem(new ShowGameDetailsCommand(game.GameId)),
-                    new CommandContextItem(new ToggleFavoriteCommand(_favorites, game.GameId, () => BeginSearch())),
+                    new CommandContextItem(new ToggleFavoriteCommand(_favorites, game.GameId, QueueSearchRefresh)),
                 ],
             };
             items.Add(item);
@@ -207,6 +210,12 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage
         }
 
         return (items.ToArray(), artworkItems);
+    }
+
+    private void QueueSearchRefresh()
+    {
+        // Do not rebuild/notify this page synchronously inside ToggleFavoriteCommand.Invoke.
+        _ = Task.Run(() => BeginSearch());
     }
 
     private async Task LoadArtworkAsync(
