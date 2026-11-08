@@ -93,7 +93,7 @@ A successful CI build does not clear the separate public-release obligations abo
 
 The WERD-76 branch now pins `Microsoft.Windows.SDK.NET.Ref 10.0.26100.84`, retains the `net10.0-windows10.0.26100.0` application target, and disables `PublishTrimmed` and `PublishReadyToRun` in both x64 and ARM64 Release profiles. The package's `lib/net8.0` assets are explicitly enumerated by the REDIST list, and the isolated Windows builds preserved both shipped SDK DLLs byte-for-byte. NuGet signature verification succeeded and the filtered solution tests passed 341 tests; see [Licensing and release readiness](LICENSING-AND-RELEASE.md) for exact evidence.
 
-Individual written Microsoft confirmation is not an engineering prerequisite for this selected package path. The SDK licence's downstream terms and indemnification conditions remain part of the public-release review. The unsigned candidate MSIX packages were not installed or runtime-tested. CI on this committed branch remains the immediate validation gate. No changes were made to WERD-77, its branch, PR or source files.
+Individual written Microsoft confirmation is not an engineering prerequisite for this selected package path. The SDK licence's downstream terms and indemnification conditions remain part of the public-release review. The unsigned candidate MSIX packages were not installed or runtime-tested. Windows restore/build/test CI and C# analysis passed on PR #23 head `13a3e94022e69788e6d667ed4f92cf934b935c30` on 2026-11-08. The unsigned MSIX candidates have not yet been installed or runtime-tested. No changes were made to WERD-77, its branch, PR or source files.
 ## 7. Installation, update, uninstall, and rollback
 
 ### Development install (not public distribution)
@@ -138,7 +138,7 @@ The repository maintainer owns the release decision and must explicitly approve 
 
 Before the first public release, the maintainer must confirm:
 
-- [ ] Windows SDK projection redistribution is cleared for the exact package/version and distribution model; Microsoft's REDIST scope for the stable `net9.0` package assets, full license conditions, distributor/end-user terms, required notices, and actual x64/ARM64 output inventories are recorded; the targeting-pack decision is recorded.
+- [ ] Confirm the selected `10.0.26100.84` package's `lib/net8.0` assets and exact x64/ARM64 SDK DLL payloads remain within Microsoft's published REDIST scope and unmodified; complete the documented downstream-terms, copyright, indemnification, and distribution-channel review before public release.
 - [ ] The dependency inventory has been regenerated and all review items resolved.
 - [ ] Runtime notices are present in both architecture outputs.
 - [ ] Partner Center identity is confirmed against the product dashboard; x64 and ARM64 MSIX packages pass validation and Store certification. Direct GitHub/WinGet distribution has a separately documented trust model.
