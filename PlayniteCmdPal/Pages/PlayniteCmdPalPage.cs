@@ -38,7 +38,10 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage
         BeginSearch(searchText: newSearch ?? string.Empty);
     }
 
-    public override IListItem[] GetItems() => _items;
+    public override IListItem[] GetItems()
+    {
+        lock (_requestGate) return _items;
+    }
 
     internal void RefreshCatalog()
     {
@@ -102,9 +105,9 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage
                 }
 
                 _items = built.Items;
-                RaiseItemsChanged();
             }
 
+            RaiseItemsChanged();
             _ = LoadArtworkAsync(version, built.ArtworkItems, cancellationToken);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -121,8 +124,9 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage
                 }
 
                 _items = [CreateStatusItem("Couldn't read the Playnite catalog. Check the companion plugin and snapshot permissions, then refresh.")];
-                RaiseItemsChanged();
             }
+
+            RaiseItemsChanged();
         }
     }
 
@@ -246,7 +250,14 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage
                             }
 
                             entry.Item.Icon = icon ?? ArtworkIconLoader.FallbackIcon;
-                            RaiseItemsChanged();
+                        }
+
+                        lock (_requestGate)
+                        {
+                            if (version == _requestVersion && !token.IsCancellationRequested)
+                            {
+                                RaiseItemsChanged();
+                            }
                         }
                     }
                     catch (OperationCanceledException) when (token.IsCancellationRequested)
