@@ -18,7 +18,7 @@ internal sealed class ArtworkIconLoader
     private const ulong MaximumDecodedPixelCount = 40_000_000;
     private const int DefaultCacheCapacity = 96;
 
-    internal static IconInfo FallbackIcon { get; } = new("\uE7FC");
+    internal static IconInfo FallbackIcon { get; } = new("\\uE7FC");
 
     private readonly Func<string, string?> _resolvePath;
     private readonly Func<string, CancellationToken, Task<bool>> _isDecodable;
@@ -28,7 +28,7 @@ internal sealed class ArtworkIconLoader
     private readonly SemaphoreSlim _loadGate = new(4, 4);
     private readonly Dictionary<string, LinkedListNode<CacheEntry>> _cache = new(StringComparer.Ordinal);
     private readonly LinkedList<CacheEntry> _leastRecentlyUsed = new();
-    private readonly Dictionary<string, Task<IconInfo?>> _inFlight = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, InFlightLoad> _inFlight = new(StringComparer.Ordinal);
     private int _generation;
 
     internal ArtworkIconLoader(
@@ -49,7 +49,6 @@ internal sealed class ArtworkIconLoader
         ArgumentNullException.ThrowIfNull(game);
         cancellationToken.ThrowIfCancellationRequested();
 
-        // Prefer cover art for recognition, then fall back to the game's icon.
         var cover = await GetIconForIdAsync(game.CoverArtworkReference, cancellationToken).ConfigureAwait(false);
         return cover ?? await GetIconForIdAsync(game.IconReference, cancellationToken).ConfigureAwait(false);
     }
@@ -61,6 +60,13 @@ internal sealed class ArtworkIconLoader
             _generation++;
             _cache.Clear();
             _leastRecentlyUsed.Clear();
+
+            // Existing callers may finish, but invalidated work must not be retained.
+            foreach (var load in _inFlight.Values)
+            {
+                load.Cancellation.Cancel();
+            }
+            _inFlight.Clear();
         }
     }
 
@@ -68,48 +74,68 @@ internal sealed class ArtworkIconLoader
     {
         if (!IsValidArtworkId(artworkId)) return null;
 
-        Task<IconInfo?> load;
+        var key = artworkId!;
+        InFlightLoad load;
         lock (_gate)
         {
-            if (TryGetCached(artworkId!, out var cached)) return cached;
+            if (TryGetCached(key, out var cached)) return cached;
 
-            var generation = _generation;
-            var key = $"{generation}:{artworkId}";
-            if (!_inFlight.TryGetValue(key, out var existing))
+            if (!_inFlight.TryGetValue(key, out load!) || load.Cancellation.IsCancellationRequested)
             {
-                load = LoadAndCacheAsync(artworkId!, generation, key);
-                _inFlight.Add(key, load);
+                load = new InFlightLoad();
+                _inFlight[key] = load;
+                load.Task = LoadAndCacheAsync(key, _generation, load);
             }
-            else
-            {
-                load = existing;
-            }
+
+            load.Waiters++;
         }
 
-        return await load.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            return await load.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            lock (_gate)
+            {
+                load.Waiters--;
+                if (load.Waiters == 0 && !load.Task.IsCompleted)
+                {
+                    // Shared work is cancelled only after its final interested caller leaves.
+                    load.Cancellation.Cancel();
+                }
+            }
+        }
     }
 
-    private async Task<IconInfo?> LoadAndCacheAsync(string artworkId, int generation, string inFlightKey)
+    private async Task<IconInfo?> LoadAndCacheAsync(string artworkId, int generation, InFlightLoad load)
     {
-        // Ensure the in-flight entry is published before this load can complete.
         await Task.Yield();
-
         IconInfo? icon = null;
         string? validPath = null;
         var enteredLoadGate = false;
         try
         {
-            // Bound resolver reads and decoder work across overlapping search requests.
-            await _loadGate.WaitAsync().ConfigureAwait(false);
+            var token = load.Cancellation.Token;
+            await _loadGate.WaitAsync(token).ConfigureAwait(false);
             enteredLoadGate = true;
+            token.ThrowIfCancellationRequested();
 
-            // The bridge resolver verifies ID, containment, signature, size, and SHA-256.
-            var path = await Task.Run(() => _resolvePath(artworkId)).ConfigureAwait(false);
-            if (path is not null && await _isDecodable(path, CancellationToken.None).ConfigureAwait(false))
+            // The bridge resolver is synchronous; cancellation prevents queued work from
+            // starting and is checked immediately after an active resolver returns.
+            var path = await Task.Run(() => _resolvePath(artworkId), token).ConfigureAwait(false);
+            token.ThrowIfCancellationRequested();
+
+            if (path is not null && await _isDecodable(path, token).ConfigureAwait(false))
             {
+                token.ThrowIfCancellationRequested();
                 validPath = path;
                 icon = new IconInfo(new Uri(path).AbsoluteUri);
             }
+        }
+        catch (OperationCanceledException) when (load.Cancellation.IsCancellationRequested)
+        {
+            throw;
         }
         catch (Exception)
         {
@@ -120,9 +146,19 @@ internal sealed class ArtworkIconLoader
             if (enteredLoadGate) _loadGate.Release();
             lock (_gate)
             {
-                _inFlight.Remove(inFlightKey);
-                if (generation == _generation) AddToCache(artworkId, icon, validPath);
+                if (_inFlight.TryGetValue(artworkId, out var current) && ReferenceEquals(current, load))
+                {
+                    _inFlight.Remove(artworkId);
+                }
+
+                // Never negative-cache a transient resolver or decoder failure.
+                if (icon is not null && validPath is not null && generation == _generation &&
+                    !load.Cancellation.IsCancellationRequested)
+                {
+                    AddToCache(artworkId, icon, validPath);
+                }
             }
+            load.Cancellation.Dispose();
         }
 
         return icon;
@@ -150,7 +186,7 @@ internal sealed class ArtworkIconLoader
         return true;
     }
 
-    private void AddToCache(string artworkId, IconInfo? icon, string? path)
+    private void AddToCache(string artworkId, IconInfo icon, string path)
     {
         if (_cache.Remove(artworkId, out var existing)) _leastRecentlyUsed.Remove(existing);
         var node = _leastRecentlyUsed.AddFirst(new CacheEntry(artworkId, icon, path));
@@ -174,8 +210,11 @@ internal sealed class ArtworkIconLoader
         try
         {
             var file = await StorageFile.GetFileFromPathAsync(path);
+            cancellationToken.ThrowIfCancellationRequested();
             using var stream = await file.OpenReadAsync();
+            cancellationToken.ThrowIfCancellationRequested();
             var decoder = await BitmapDecoder.CreateAsync(stream);
+            cancellationToken.ThrowIfCancellationRequested();
             var width = decoder.PixelWidth;
             var height = decoder.PixelHeight;
             if (width == 0 || height == 0 ||
@@ -185,7 +224,6 @@ internal sealed class ArtworkIconLoader
                 return false;
             }
 
-            // Force a real decode, but retain only a small preview-sized pixel buffer.
             var scale = Math.Min(1d, PreviewEdge / (double)Math.Max(width, height));
             var transform = new BitmapTransform
             {
@@ -213,5 +251,12 @@ internal sealed class ArtworkIconLoader
         }
     }
 
-    private sealed record CacheEntry(string ArtworkId, IconInfo? Icon, string? Path);
+    private sealed record CacheEntry(string ArtworkId, IconInfo Icon, string Path);
+
+    private sealed class InFlightLoad
+    {
+        internal CancellationTokenSource Cancellation { get; } = new();
+        internal Task<IconInfo?> Task { get; set; } = System.Threading.Tasks.Task.FromResult<IconInfo?>(null);
+        internal int Waiters { get; set; }
+    }
 }
