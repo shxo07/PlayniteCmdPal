@@ -216,38 +216,44 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage
     {
         if (artworkItems.Count == 0) return;
 
-        // Handle each result independently. A single bad ListItem/API update must not
-        // fault Parallel.ForEachAsync and leave every remaining row on its fallback icon.
-        var updates = artworkItems.Select(async entry =>
+        try
         {
-            try
-            {
-                var icon = await _artwork.GetIconAsync(entry.Game, cancellationToken).ConfigureAwait(false);
-                cancellationToken.ThrowIfCancellationRequested();
-
-                lock (_requestGate)
+            await Parallel.ForEachAsync(
+                artworkItems,
+                new ParallelOptions { MaxDegreeOfParallelism = 4, CancellationToken = cancellationToken },
+                async (entry, token) =>
                 {
-                    // Do not mutate objects belonging to an obsolete search request.
-                    if (version != _requestVersion || cancellationToken.IsCancellationRequested)
+                    try
                     {
-                        return;
+                        var icon = await _artwork.GetIconAsync(entry.Game, token).ConfigureAwait(false);
+                        token.ThrowIfCancellationRequested();
+
+                        lock (_requestGate)
+                        {
+                            // Do not mutate objects belonging to an obsolete search request.
+                            if (version != _requestVersion || token.IsCancellationRequested)
+                            {
+                                return;
+                            }
+
+                            entry.Item.Icon = icon ?? ArtworkIconLoader.FallbackIcon;
+                            RaiseItemsChanged();
+                        }
                     }
-
-                    entry.Item.Icon = icon ?? ArtworkIconLoader.FallbackIcon;
-                    RaiseItemsChanged();
-                }
-            }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-            {
-                // Expected when a newer query replaces this result set.
-            }
-            catch (Exception)
-            {
-                // A failure for one row must not prevent artwork for other rows.
-            }
-        });
-
-        await Task.WhenAll(updates).ConfigureAwait(false);
+                    catch (OperationCanceledException) when (token.IsCancellationRequested)
+                    {
+                        throw;
+                    }
+                    catch (Exception)
+                    {
+                        // A failure for one row must not prevent artwork for other rows.
+                    }
+                }).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // A newer query replaced this result set.
+        }
     }
 
     private static IListItem CreateStatusItem(string message) =>
