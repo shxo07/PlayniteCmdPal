@@ -2,16 +2,17 @@
 
 This page explains what is tested, where each check runs, and how to run it. For installing the toolchain and deploying the extension, see [Developer Setup](DEVELOPER-SETUP.md).
 
-**Status (2026-10-31):** Automated coverage is synthetic and is designed to run without Playnite, PowerToys, a personal game library, or secrets. The test commands below are the ones executed by `scripts/ci.ps1`, which Windows CI and CodeQL run on `windows-latest`. The latest verified Windows CI run passed restore, Release build, 66 core tests, 183 adapter tests, and the .NET Framework smoke test ([run 41190710365](https://github.com/werdscopez7347/PlayniteCmdPal/actions/runs/41190710365)); see the verification evidence section of [Developer Setup](DEVELOPER-SETUP.md) for the evidence trail and its limits.
+**Status (2026-11-07):** Automated coverage is synthetic and is designed to run without Playnite, PowerToys, a personal game library, or secrets. The test commands below are the ones executed by `scripts/ci.ps1`, which Windows CI and CodeQL run on `windows-latest`. The latest verified Windows CI run passed restore, Release build, 101 Core tests, 183 adapter tests, 3 Command Palette command tests, and the .NET Framework smoke test ([run 42331229094](https://github.com/shxo07/PlayniteCmdPal/actions/runs/42331229094)); CodeQL also passed ([run 42331229144](https://github.com/shxo07/PlayniteCmdPal/actions/runs/42331229144)). The six new schema-version cases require a fresh run. See the verification evidence section of [Developer Setup](DEVELOPER-SETUP.md) for the evidence trail and its limits.
 
 ## Test projects
 
 | Project | Target | References | Needs Playnite installed? |
 |---|---|---|---|
 | `PlayniteCmdPal.Core.Tests` | `net10.0` | `PlayniteCmdPal.Core` | No |
+| `PlayniteCmdPal.Command.Tests` | `net10.0-windows10.0.26100.0` | `PlayniteCmdPal.Core`, linked production `ToggleFavoriteCommand.cs`, Command Palette SDK | No |
 | `PlayniteCmdPal.Playnite.Tests` | `net10.0` | `PlayniteCmdPal.Playnite`, `PlayniteCmdPal.Snapshot` | No |
 
-Neither test project references `PlayniteCmdPal/` (the CmdPal host) or `PlayniteCmdPal.PlaynitePlugin/` (the `net462` companion plugin). The companion plugin is only compiled; its SDK usage is exercised indirectly by the behavior it delegates to the shared snapshot assembly.
+`PlayniteCmdPal.Core.Tests` and `PlayniteCmdPal.Playnite.Tests` do not reference `PlayniteCmdPal/` (the CmdPal host) or `PlayniteCmdPal.PlaynitePlugin/` (the `net462` companion plugin). `PlayniteCmdPal.Command.Tests` compiles the production `ToggleFavoriteCommand.cs` into a focused Windows test assembly so it can assert the actual SDK command-result and toast-follow-up values without loading the full WinUI host. The companion plugin is only compiled; its SDK usage is exercised indirectly by the behavior it delegates to the shared snapshot assembly.
 
 Test data is generated in the test process and written to a temporary directory (`%TEMP%\PlayniteCmdPal.Tests\<guid>`). Each test class that touches disk owns and deletes its directory. No test reads `%LOCALAPPDATA%`, Playnite storage, `playnite.log`, or any real library export.
 
@@ -22,8 +23,30 @@ Test data is generated in the test process and written to a temporary directory 
 | File | Covers |
 |---|---|
 | `GameEntryTests` | Required-field validation and parameter names, optional fields defaulting to unknown, record value equality/hashing, `with` expressions preserving identity, display text not being normalized by the model. |
+| `FavoritesStoreTests` | Missing-file behavior, pin/unpin by stable ID, persistence after store recreation, versioned JSON, successful-write temporary-file cleanup, malformed JSON recovery (including array, `null`, string, and numeric root values), missing-schema recovery and malformed schema-version recovery (null, string, boolean, object, array, and fractional number), missing-game filtering without deleting saved IDs, future-schema preservation before payload deserialization, and failed-write rollback plus temporary-file cleanup. The malformed-root and malformed-schema-version theories verify both read APIs recover to an empty set and that a subsequent toggle replaces invalid input with a valid version-1 object document. Schema-version validation checks `JsonValueKind.Number` before integer conversion, avoiding `InvalidOperationException` for non-numeric JSON kinds. |
+| `LatestRequestGateTests` | Deterministic overlapping-request ordering: a stale request cannot publish after a newer query takes ownership. |
 | `GameSearchTests` | Baseline ranking order (exact, prefix, word-prefix, substring), case-insensitivity, duplicate titles, tie-breaks, blank/null query, empty catalog, invalid entries. |
 | `GameSearchRankingTests` | Query trimming versus untrimmed stored titles, multi-word and partial queries, word-boundary rules (only non-alphanumeric characters start a word), earliest-match index ordering, ordinal ID ordering for duplicate titles, canonical duplicate-ID selection independent of input order, returned collection immutability, single enumeration of the catalog, argument precedence (blank query short-circuits), and a 5,000-entry determinism check. |
+
+### Favorites command results (`PlayniteCmdPal.Command.Tests`)
+
+| File | Covers |
+|---|---|
+| `ToggleFavoriteCommandTests` | Both successful and failed pin/unpin invocations return a `ShowToast` result whose `ToastArgs.Result` is explicitly `KeepOpen`, preserving the current page stack and query. |
+
+### Favorites UI smoke test (manual)
+
+Run with a local Playnite library and the PowerToys Command Palette extension:
+
+1. Open **Search games**, open a game's More actions, and choose **Pin to favorites**. Confirm the toast appears, **Command Palette stays visible on the same Search Games page with the same query**, and the game is still launchable.
+2. Open **Favorites** without changing its query. Confirm the newly pinned game appears immediately.
+3. Unpin the game from **Favorites**. Confirm the toast appears while **Favorites remains visible with its existing query**, and the game disappears immediately; pin it again from **Search games** and confirm it reappears without closing the palette.
+4. Search Favorites for a non-matching title and confirm the no-match state; clear the query and confirm the pinned game returns.
+5. Restart the Command Palette extension and Playnite, then confirm the favorite remains.
+6. Remove a favorited game from the current Playnite library (or test with a known missing ID) and confirm it is hidden from Favorites without deleting its saved preference.
+7. With an unsupported future-schema or unreadable preferences file, confirm normal Search results still appear and can still launch; the Favorites action should report that preferences are unavailable rather than breaking the result list. Confirm its error toast also leaves the current page/query open.
+
+Capture screenshots of Search actions, populated Favorites, and empty/no-match states. A short before/after capture of pinning and unpinning without editing the query is useful evidence.
 
 ### Snapshot contract (`PlayniteCmdPal.Playnite.Tests`)
 
@@ -52,6 +75,7 @@ Test data is generated in the test process and written to a temporary directory 
 |---|---|---|---|---|---|
 | `dotnet restore` / `dotnet build` (Release) | Yes, via `scripts/ci.ps1` | Yes | Yes | Yes (MSIX/WinUI targets) | No |
 | `PlayniteCmdPal.Core.Tests` | Yes | Yes | Yes | No (runs on any OS with the .NET 10 SDK, but the repository's shared script is Windows-only) | No |
+| `PlayniteCmdPal.Command.Tests` | Yes (Windows) | Yes | Yes | Yes (Command Palette SDK target) | No |
 | `PlayniteCmdPal.Playnite.Tests` | Yes | Yes | Yes | No for the unit/contract tests; the shared script itself is Windows-only | No |
 | .NET Framework snapshot smoke test (`scripts/test-playnite-snapshot-netfx.ps1`) | Yes | Yes | Yes | Yes (Windows PowerShell 5.1 / .NET Framework CLR) | No |
 | CodeQL C# analysis | No | n/a | Yes | Yes (workflow runs on `windows-latest`) | No |
@@ -100,6 +124,7 @@ It prints the exact `dotnet` command it runs before each step, stops at the firs
 
 ```powershell
 dotnet test .\PlayniteCmdPal.Core.Tests\PlayniteCmdPal.Core.Tests.csproj
+dotnet test .\PlayniteCmdPal.Command.Tests\PlayniteCmdPal.Command.Tests.csproj
 dotnet test .\PlayniteCmdPal.Playnite.Tests\PlayniteCmdPal.Playnite.Tests.csproj
 ```
 
@@ -120,27 +145,22 @@ dotnet test .\PlayniteCmdPal.Core.Tests\PlayniteCmdPal.Core.Tests.csproj --logge
 
 ### Coverage at a glance
 
-The suites hold **249 test cases** (facts plus `[InlineData]` rows) split across the two
-projects: **66** for domain/search and **183** for the snapshot contract, publication, refresh,
-and adapter policy. Of those, 148 were added for
+The suites currently contain **293 authored test cases** (facts plus `[InlineData]` rows) split across three
+test projects: **107** for domain/search, **3** for Command Palette favorite command results,
+and **183** for the snapshot contract, publication, refresh, and adapter policy. Of those, 148 were added for
 [WERD-62](https://linear.app/werdscopez7347/issue/WERD-62/expand-automated-tests-and-finalize-the-developer-setup-guide).
 
 How that number is established, so it can be re-derived rather than trusted:
 
-| Source | Core | Adapter | Total |
-|---|---|---|---|
-| Count of `[Fact]` plus `[InlineData]` rows in each project in this commit | 66 | 183 | 249 |
-| `dotnet test` totals in Windows CI run [41184115994](https://github.com/werdscopez7347/PlayniteCmdPal/actions/runs/41184115994) | 66 | 183 | 249 |
-| `dotnet test` totals re-captured on commit `82d5afa` | 66 | 183 | 249 |
+| Source | Core | Command | Adapter | Total |
+|---|---:|---:|---:|---:|
+| Authored `[Fact]` plus `[InlineData]` cases after the schema-version regression cases | 107 | 3 | 183 | 293 |
+| Existing Windows CI baseline before command-result tests ([run 41184115994](https://github.com/werdscopez7347/PlayniteCmdPal/actions/runs/41184115994)) | 66 | — | 183 | 249 |
+| Latest verified Windows CI before the schema-version regression cases ([run 42331229094](https://github.com/shxo07/PlayniteCmdPal/actions/runs/42331229094)) | 101 | 3 | 183 | 287 |
 
-All three agree. The count was previously stated here and in an earlier pull-request description
-as 251; that figure was produced by an editing-time estimate before any test had executed, not by
-`dotnet test`, and it was wrong. It has been corrected to 249.
+The earlier Windows CI baseline reported 249 passing cases (66 Core and 183 adapter). The branch then added 35 Core cases and 3 Command Palette command cases; Windows CI executed all 287 successfully in run [42331229094](https://github.com/shxo07/PlayniteCmdPal/actions/runs/42331229094). The six malformed-schema-version regression cases increase the authored total to 293; their execution is pending CI on this revision.
 
-Counts drift as tests change, so treat the per-file table above as the authoritative map and
-re-read the `Passed!` line rather than trusting a number written here. If the written count and
-`dotnet test` disagree, the `dotnet test` output wins: it is the only measurement that actually
-executed the tests.
+Counts drift as tests change. Treat the per-file table above as the authoritative map and re-read each `Passed!` line rather than trusting a number written here. If the written count and `dotnet test` disagree, the `dotnet test` output wins: it is the only measurement that actually executed the tests.
 
 ### Expected outcome
 
@@ -208,3 +228,8 @@ These are deliberately not automated yet; each needs a Windows host and, in most
 - The CmdPal presentation layer (search page, ranking display, launch action) has no automated tests; it is exercised by manual deploy/reload and the launch-by-ID smoke test.
 - No test verifies the real Playnite library contents against the snapshot (by design: that would require personal data).
 - Minimum supported versions of Windows, Visual Studio, PowerToys, and Playnite are recorded as "validated once", not as tested minimums. See the contributor environment table in [Developer Setup](DEVELOPER-SETUP.md).
+
+
+- [42331229094](https://github.com/shxo07/PlayniteCmdPal/actions/runs/42331229094) — Windows CI on the pre-schema-fix WERD-75 head: Release build, `101/101` Core tests, `183/183` adapter tests, `3/3` Command Palette command tests, and the .NET Framework snapshot smoke step all passed.
+- [42331229144](https://github.com/shxo07/PlayniteCmdPal/actions/runs/42331229144) — CodeQL on the same pre-schema-fix head passed.
+- **Current schema-version regression cases:** 6 additional Core cases; CI execution pending on this revision.

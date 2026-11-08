@@ -1,0 +1,94 @@
+using System.Diagnostics;
+using Xunit;
+
+namespace PlayniteCmdPal.Playnite.Tests;
+
+public sealed class ArtworkExportLockTests
+{
+    [Fact]
+    public async Task ExclusiveLockFileIsReleasedWhenOwningProcessTerminates()
+    {
+        if (!OperatingSystem.IsWindows())
+            return;
+
+        var directory = Path.Combine(Path.GetTempPath(), "PlayniteCmdPal.LockTests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var lockPath = Path.Combine(directory, "artwork-v2.export.lock");
+        var escapedPath = lockPath.Replace("'", "''");
+        var command = "$stream = [System.IO.File]::Open('" + escapedPath +
+            "', [System.IO.FileMode]::OpenOrCreate, [System.IO.FileAccess]::ReadWrite, [System.IO.FileShare]::None); " +
+            "[Console]::WriteLine('LOCKED'); [Threading.Thread]::Sleep([Threading.Timeout]::Infinite)";
+        var powerShell7 = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
+            "PowerShell",
+            "7",
+            "pwsh.exe");
+        var startInfo = new ProcessStartInfo
+        {
+            // Prefer PowerShell 7: it runs the lock holder in one process without
+            // Windows PowerShell's legacy console-host process behavior.
+            FileName = File.Exists(powerShell7) ? powerShell7 : "pwsh.exe",
+            Arguments = "-NoLogo -NoProfile -NonInteractive -Command \"" + command.Replace("\"", "\\\"") + "\"",
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true,
+        };
+
+        Process? owner = null;
+        try
+        {
+            owner = Process.Start(startInfo);
+            Assert.NotNull(owner);
+            var ready = await owner!.StandardOutput.ReadLineAsync().WaitAsync(TimeSpan.FromSeconds(15));
+            Assert.Equal("LOCKED", ready);
+
+            Assert.Throws<IOException>(() =>
+            {
+                using var competing = new FileStream(lockPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+            });
+
+            // Terminate the lock holder and any host descendants, then wait for the OS
+            // to close every handle before attempting to acquire the lock again.
+            owner.Kill(entireProcessTree: true);
+            await owner.WaitForExitAsync();
+            owner.Dispose();
+            owner = null;
+
+            FileStream? recovered = null;
+            var releaseDeadline = DateTime.UtcNow + TimeSpan.FromSeconds(5);
+            while (recovered is null && DateTime.UtcNow < releaseDeadline)
+            {
+                try
+                {
+                    recovered = new FileStream(lockPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+                }
+                catch (IOException)
+                {
+                    await Task.Delay(50);
+                }
+            }
+
+            Assert.NotNull(recovered);
+            using (recovered)
+                Assert.True(recovered.CanWrite);
+        }
+        finally
+        {
+            if (owner is not null)
+            {
+                try
+                {
+                    if (!owner.HasExited)
+                        owner.Kill(entireProcessTree: true);
+                    owner.Dispose();
+                }
+                catch (InvalidOperationException) { }
+            }
+
+            try { Directory.Delete(directory, recursive: true); }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
+        }
+    }
+}

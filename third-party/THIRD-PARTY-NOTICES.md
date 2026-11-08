@@ -16,8 +16,12 @@ PlayniteCmdPal-authored material is licensed under the MIT License; see the root
 | Playnite catalog bridge plugin (`.pext`, `net462`) | PlayniteCmdPal plugin and snapshot assemblies; Playnite SDK is provided by Playnite and is not redistributed | `THIRD-PARTY-NOTICES.md` in the package root |
 
 `PlayniteCmdPal/PlayniteCmdPal.csproj` copies this file and
-`Microsoft-PowerToys-LICENSE.txt` to the extension's build and publish output, so both
-are part of the MSIX payload. `PlayniteCmdPal.PlaynitePlugin/PlayniteCmdPal.PlaynitePlugin.csproj`
+`Microsoft-PowerToys-LICENSE.txt` to the extension's build and filesystem-publish output.
+Inspection of the x64 and ARM64 MSIX archives confirmed that both files, the root
+`LICENSE`, and `dotnet-runtime-THIRD-PARTY-NOTICES.txt` are present. The runtime notice
+is sourced from each RID's restored runtime pack and added directly to the MSIX payload.
+The maintainer also signed, installed and activated the x64 test package successfully;
+ARM64 installation/activation remains unverified. `PlayniteCmdPal.PlaynitePlugin/PlayniteCmdPal.PlaynitePlugin.csproj`
 copies this file to the plugin's build and publish output, and
 `scripts/package-playnite-plugin.ps1` fails if it is missing. The audit behind this list
 is recorded in `docs/LICENSING-AND-RELEASE.md`.
@@ -31,7 +35,7 @@ copyright line is reproduced with the license text below it.
 | --- | --- | --- | --- |
 | Microsoft.CommandPalette.Extensions (Command Palette Extension SDK) | 0.9.260303001 | Copyright (c) Microsoft Corporation. | <https://www.nuget.org/packages/Microsoft.CommandPalette.Extensions/0.9.260303001/license> |
 | Microsoft.Windows.CsWinRT | 2.2.0 | Copyright (c) Microsoft Corporation. | <https://www.nuget.org/packages/Microsoft.Windows.CsWinRT/2.2.0/license> |
-| Shmuelie.WinRTServer | 2.1.1 | Copyright (c) 2025 Shmueli Englard | <https://www.nuget.org/packages/Shmuelie.WinRTServer/2.1.1/license> |
+| Shmuelie.WinRTServer | 2.1.1 | Copyright (c) 2022 Shmueli Englard | <https://www.nuget.org/packages/Shmuelie.WinRTServer/2.1.1/license> |
 | Microsoft PowerToys template material (generated project files) | n/a | Copyright (c) Microsoft Corporation. All rights reserved. | [`Microsoft-PowerToys-LICENSE.txt`](Microsoft-PowerToys-LICENSE.txt) |
 
 ```text
@@ -92,12 +96,15 @@ Obligations for each release:
 
 - The `CopyDotNetRuntimeThirdPartyNotices` MSBuild target copies the runtime's
   `THIRD-PARTY-NOTICES.TXT` to `dotnet-runtime-THIRD-PARTY-NOTICES.txt` after a
-  self-contained publish. It resolves the file from the restored
+  self-contained filesystem publish. It resolves the file from the restored
   `Microsoft.NETCore.App.Runtime.<RID>` package under `$(NuGetPackageRoot)`, so it does
   not depend on `RuntimeFrameworkVersion` (which can be empty at publish time) and does
   not pick up the Windows Desktop, ASP.NET Core or Windows SDK packs. The target fails
-  the publish when no notice file or more than one notice file is found. Verify both
-  `win-x64` and `win-arm64` publish outputs on Windows before release.
+  the publish when no notice file or more than one notice file is found. The project now
+  also adds that exact runtime-pack file directly to `AppxPackagePayload` immediately
+  before `_GenerateAppxPackageFile`. The maintainer inspected the rebuilt x64 and ARM64
+  MSIX archives and confirmed the runtime notice is present in both. Re-verify this
+  requirement for every release build and RID.
 - Reproduce the .NET Library License reference and this notice in the release notes, or
   ship the license text alongside the package.
 - Re-check the runtime version and notices for every release; a repository copy would go
