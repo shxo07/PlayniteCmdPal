@@ -159,7 +159,7 @@ public sealed class ArtworkIconLoaderTests
         var attempts = 0;
         var loader = CreateLoader(_ =>
         {
-            return Interlocked.Increment(ref attempts) == 1 ? null : "C:\\\\artwork\\\\recovered.png";
+            return Interlocked.Increment(ref attempts) == 1 ? null : "C:\\artwork\\recovered.png";
         }, (_, _) => Task.FromResult(true));
         var game = Game(cover: CoverId);
 
@@ -174,7 +174,7 @@ public sealed class ArtworkIconLoaderTests
         var decodeStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         var releaseDecode = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         var decodeCount = 0;
-        var loader = CreateLoader(_ => "C:\\\\artwork\\\\shared.png", async (_, token) =>
+        var loader = CreateLoader(_ => "C:\\artwork\\shared.png", async (_, token) =>
         {
             Interlocked.Increment(ref decodeCount);
             decodeStarted.TrySetResult(true);
@@ -200,7 +200,7 @@ public sealed class ArtworkIconLoaderTests
     {
         var decodeStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         var decodeCancelled = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var loader = CreateLoader(_ => "C:\\\\artwork\\\\cancel.png", async (_, token) =>
+        var loader = CreateLoader(_ => "C:\\artwork\\cancel.png", async (_, token) =>
         {
             decodeStarted.TrySetResult(true);
             using var registration = token.Register(() => decodeCancelled.TrySetResult(true));
