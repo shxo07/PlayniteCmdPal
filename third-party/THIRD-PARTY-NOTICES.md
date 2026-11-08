@@ -16,8 +16,12 @@ PlayniteCmdPal-authored material is licensed under the MIT License; see the root
 | Playnite catalog bridge plugin (`.pext`, `net462`) | PlayniteCmdPal plugin and snapshot assemblies; Playnite SDK is provided by Playnite and is not redistributed | `THIRD-PARTY-NOTICES.md` in the package root |
 
 `PlayniteCmdPal/PlayniteCmdPal.csproj` copies this file and
-`Microsoft-PowerToys-LICENSE.txt` to the extension's build and publish output, so both
-are part of the MSIX payload. `PlayniteCmdPal.PlaynitePlugin/PlayniteCmdPal.PlaynitePlugin.csproj`
+`Microsoft-PowerToys-LICENSE.txt` to the extension's build and filesystem-publish output.
+Inspection of the x64 and ARM64 MSIX archives confirmed that both files, the root
+`LICENSE`, and `dotnet-runtime-THIRD-PARTY-NOTICES.txt` are present. The runtime notice
+is sourced from each RID's restored runtime pack and added directly to the MSIX payload.
+The maintainer also signed, installed and activated the x64 test package successfully;
+ARM64 installation/activation remains unverified. `PlayniteCmdPal.PlaynitePlugin/PlayniteCmdPal.PlaynitePlugin.csproj`
 copies this file to the plugin's build and publish output, and
 `scripts/package-playnite-plugin.ps1` fails if it is missing. The audit behind this list
 is recorded in `docs/LICENSING-AND-RELEASE.md`.
@@ -31,7 +35,7 @@ copyright line is reproduced with the license text below it.
 | --- | --- | --- | --- |
 | Microsoft.CommandPalette.Extensions (Command Palette Extension SDK) | 0.9.260303001 | Copyright (c) Microsoft Corporation. | <https://www.nuget.org/packages/Microsoft.CommandPalette.Extensions/0.9.260303001/license> |
 | Microsoft.Windows.CsWinRT | 2.2.0 | Copyright (c) Microsoft Corporation. | <https://www.nuget.org/packages/Microsoft.Windows.CsWinRT/2.2.0/license> |
-| Shmuelie.WinRTServer | 2.1.1 | Copyright (c) 2025 Shmueli Englard | <https://www.nuget.org/packages/Shmuelie.WinRTServer/2.1.1/license> |
+| Shmuelie.WinRTServer | 2.1.1 | Copyright (c) 2022 Shmueli Englard | <https://www.nuget.org/packages/Shmuelie.WinRTServer/2.1.1/license> |
 | Microsoft PowerToys template material (generated project files) | n/a | Copyright (c) Microsoft Corporation. All rights reserved. | [`Microsoft-PowerToys-LICENSE.txt`](Microsoft-PowerToys-LICENSE.txt) |
 
 ```text
@@ -61,17 +65,28 @@ headers and the PowerToys copyright notice. Do not remove those headers.
 
 ## Microsoft Windows SDK projections
 
-`Microsoft.Windows.SDK.NET.Ref` 10.0.26100.68-preview supplies the Windows SDK
-projection assemblies (`Microsoft.Windows.SDK.NET.dll`, `WinRT.Runtime.dll`) that a
-self-contained build of the extension may copy into the package. The package declares
-a **Microsoft Windows SDK (preview) license** (`https://aka.ms/WinSDKPreviewLicenseURL`)
-and sets `requireLicenseAcceptance`; it is not MIT-licensed.
+`Microsoft.Windows.SDK.NET.Ref` 10.0.26100.84 is the selected Windows SDK targeting-pack package for the `net10.0-windows10.0.26100.0` extension. NuGet identifies it as a stable package with `lib/net8.0` assets compatible with the application's .NET 10 target. Package SHA-256: `2EFF36ACCB9D76466D36E27E7199D375C662818D2C1376E65125D48BA4BD1C96`. The archive contains five `lib/net8.0` files, 91 WinMD files, one analyzer and two data files. NuGet signature verification succeeded on Windows with `dotnet nuget verify --all` (exit code 0). The package is licensed under the Microsoft Windows SDK licence, not MIT; NuGet links to `https://aka.ms/WinSDKLicenseURL`.
 
-Status: public redistribution of this component is blocked until authoritative confirmation that the projection
-assemblies may be redistributed as part of the extension, and a decision on shipping a
-stable (non-preview) Windows SDK targeting pack before the first public release. See
-the open items in `docs/LICENSING-AND-RELEASE.md`. Until that review is complete, a
-public binary release containing these assemblies is not approved by this audit.
+The two SDK-derived files present in both x64 and ARM64 MSIX payloads are byte-identical to their package-source files:
+
+| File | Version | Size | SHA-256 (package source and both MSIX architectures) |
+| --- | --- | ---: | --- |
+| `Microsoft.Windows.SDK.NET.dll` | 10.0.26100.82 | 27,196,448 bytes | `CFF6F50D9E25D5C8148EE47C0860B1E13D5826448C52C6FE677577D051C5A48F` |
+| `WinRT.Runtime.dll` | 2.2.0.48161 | 528,944 bytes | `BCF3A14E8712A90837FC5C0D8C8A24696AF2BD7F74E9767597EC81EDEDFB23DB` |
+
+The project sets `PublishTrimmed=false` and `PublishReadyToRun=false` for both x64 and ARM64 release profiles. This preserves the SDK projection DLLs unmodified, as required by the REDIST permission. The package's other Windows SDK assets (including XAML projection, WinMD, analyzer and data files) are not present in the MSIX. The Command Palette SDK WinMD is supplied by a separate package.
+
+Microsoft's official [Windows SDK REDIST.TXT](https://learn.microsoft.com/en-us/legal/windows-sdk/redist) has a dedicated `Microsoft.Windows.SDK.NET.Ref` entry. It lists the relevant `lib/net8.0` files, including `Microsoft.Windows.SDK.NET.dll` and `WinRT.Runtime.dll`, for unmodified redistribution as a NuGet package or as part of a WinRT-enabled program. The selected package path and the exact files shipped by this project align with those listed assets. Individual written Microsoft confirmation is not treated as an engineering prerequisite for this path. This is not a legal opinion or a guarantee that every distribution channel meets all separate conditions.
+
+The downloaded SDK licence RTF SHA-256 is `DD07EB178E00C6BBA4148457FC00FF77CD4887EB521D504186FE59C9EC8BBE62`. Its extracted text and Microsoft's maintained plain-text copy at [microsoft/win32metadata](https://github.com/microsoft/win32metadata/blob/main/licenses/sdk_license.txt) both identify EULA ID `WIN10SDK.RTM.AUG_2018_en-US`. A normalized token comparison produced 4,307 tokens on each side with an exact token-sequence match after normalizing whitespace, bullets and hyperlink markup.
+
+The Windows SDK licence §2.a includes conditions concerning significant primary functionality, unmodified files, downstream distributor/end-user terms at least as protective as the SDK agreement, copyright notices, and Microsoft indemnification/defence obligations. Those conditions remain relevant to the project's distribution model and must be considered before public release. The following channel terms were reviewed as context, not as a legal opinion: [Windows SDK licence](https://learn.microsoft.com/en-us/legal/windows-sdk/license), [Windows SDK REDIST.TXT](https://learn.microsoft.com/en-us/legal/windows-sdk/redist), [Microsoft Store App Developer Agreement v8.10](https://cdn-dynmedia-1.microsoft.com/is/content/microsoftcorp/microsoft/store/documents/legal/ada/fy26/MS.Store.ADAv8.10.EN.US.pdf), [WinGet manifest schema 1.28.0](https://github.com/microsoft/winget-pkgs/blob/master/doc/manifest/schema/1.28.0/singleton.md), and [GitHub Terms of Service](https://docs.github.com/en/site-policy/github-terms/github-terms-of-service).
+
+- **Microsoft Store:** the publisher remains responsible for third-party licence compliance; the Store agreement's EULA/SALT and indemnity provisions need to be assessed as part of release readiness.
+- **GitHub Releases:** release downloads do not natively enforce a separate SDK end-user agreement. Do not assume the project MIT licence or notices alone satisfy downstream SDK terms.
+- **WinGet:** manifest agreements can request acceptance, subject to the community repository's agreement-body restrictions and the publisher's verification status.
+
+The project retains the Windows SDK licence reference and this notice file in the MSIX. No independent legal opinion has been obtained. No public binary release is approved by this package-selection change alone.
 
 ## .NET runtime and library components
 
@@ -88,12 +103,15 @@ Obligations for each release:
 
 - The `CopyDotNetRuntimeThirdPartyNotices` MSBuild target copies the runtime's
   `THIRD-PARTY-NOTICES.TXT` to `dotnet-runtime-THIRD-PARTY-NOTICES.txt` after a
-  self-contained publish. It resolves the file from the restored
+  self-contained filesystem publish. It resolves the file from the restored
   `Microsoft.NETCore.App.Runtime.<RID>` package under `$(NuGetPackageRoot)`, so it does
   not depend on `RuntimeFrameworkVersion` (which can be empty at publish time) and does
   not pick up the Windows Desktop, ASP.NET Core or Windows SDK packs. The target fails
-  the publish when no notice file or more than one notice file is found. Verify both
-  `win-x64` and `win-arm64` publish outputs on Windows before release.
+  the publish when no notice file or more than one notice file is found. The project now
+  also adds that exact runtime-pack file directly to `AppxPackagePayload` immediately
+  before `_GenerateAppxPackageFile`. The maintainer inspected the rebuilt x64 and ARM64
+  MSIX archives and confirmed the runtime notice is present in both. Re-verify this
+  requirement for every release build and RID.
 - Reproduce the .NET Library License reference and this notice in the release notes, or
   ship the license text alongside the package.
 - Re-check the runtime version and notices for every release; a repository copy would go

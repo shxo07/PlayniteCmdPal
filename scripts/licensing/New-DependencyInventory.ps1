@@ -307,6 +307,7 @@ foreach ($target in $targetProjects) {
     foreach ($framework in ($targetsByFramework.Keys | Sort-Object)) {
         $frameworkTargets = $targetsByFramework[$framework]
         $frameworkPackages = New-Object System.Collections.Generic.List[object]
+        $frameworkProjectReferences = New-Object System.Collections.Generic.List[object]
         $frameworkRids = New-Object System.Collections.Generic.List[string]
 
         foreach ($frameworkTarget in $frameworkTargets) {
@@ -321,6 +322,9 @@ foreach ($target in $targetProjects) {
                 $packageId = $Matches['id']
                 $packageVersion = $Matches['version']
                 $library = $packageProperty.Value
+                $libraryMetadataProperty = $assets.libraries.PSObject.Properties[$packageKey]
+                $libraryMetadata = if ($null -ne $libraryMetadataProperty) { $libraryMetadataProperty.Value } else { $null }
+                $isProjectReference = ($null -ne $libraryMetadata -and $libraryMetadata.type -eq 'project')
 
                 $assetKinds = New-Object System.Collections.Generic.List[string]
                 foreach ($kind in @('compile', 'runtime', 'native', 'runtimeTargets', 'build', 'buildMultiTargeting', 'contentFiles', 'frameworkAssemblies')) {
@@ -333,6 +337,19 @@ foreach ($target in $targetProjects) {
                     Measure-Object |
                     Select-Object -ExpandProperty Count
                 $hasRuntimeAssets = ($hasRuntimeAssets -gt 0)
+
+                # ProjectReference entries also appear in project.assets.json targets, but
+                # they are authored projects, not NuGet packages. Record them separately so
+                # they are not assigned fabricated NuGet metadata or review failures.
+                if ($isProjectReference) {
+                    $frameworkProjectReferences.Add([ordered]@{
+                            project    = $packageId
+                            version    = $packageVersion
+                            rid        = $frameworkTarget.Rid
+                            assetKinds = @($assetKinds | Sort-Object)
+                        })
+                    continue
+                }
 
                 $recordKey = "$packageId/$packageVersion"
                 if (-not $packageRecords.ContainsKey($recordKey)) {
@@ -382,9 +399,10 @@ foreach ($target in $targetProjects) {
         }
 
         $projectFrameworks.Add([ordered]@{
-                framework = $framework
-                rids      = @($frameworkRids | Sort-Object)
-                packages  = @($frameworkPackages | Sort-Object)
+                framework         = $framework
+                rids              = @($frameworkRids.ToArray() | Sort-Object)
+                packages          = @($frameworkPackages.ToArray() | Sort-Object)
+                projectReferences = $frameworkProjectReferences.ToArray()
             })
     }
 
@@ -394,7 +412,7 @@ foreach ($target in $targetProjects) {
             shipped           = $target.Shipped
             artifact          = $target.Artifact
             directPackages    = @($directPackageIds | Sort-Object)
-            targetFrameworks  = @($projectFrameworks)
+            targetFrameworks  = $projectFrameworks.ToArray()
             restoreOutputPath = (ConvertTo-RepoRelativePath -Path $assetsPath)
         })
 }
@@ -433,8 +451,7 @@ foreach ($recordKey in ($packageRecords.Keys | Sort-Object)) {
     }
 
     if ($license.requireLicenseAcceptance) {
-        $notes.Add('Package sets requireLicenseAcceptance; confirm that the acceptance obligation is satisfied for redistribution.')
-        $requiresReview = $true
+        $notes.Add('NuGet metadata sets requireLicenseAcceptance=true. This package-manager indicator is not by itself a redistribution restriction; assess the declared license terms and any applicable acceptance record separately.')
     }
 
     if ($record.classification -eq 'shipped-runtime' -and -not [string]::IsNullOrWhiteSpace($license.licenseFile)) {
@@ -452,11 +469,11 @@ foreach ($recordKey in ($packageRecords.Keys | Sort-Object)) {
             classification    = $record.classification
             direct            = $record.direct
             runtimeAssets     = $record.runtimeAssets
-            assetKinds        = @($record.assetKinds | Sort-Object)
+            assetKinds        = @($record.assetKinds.ToArray() | Sort-Object)
             license           = $license
             reviewStatus      = $record.reviewStatus
-            reviewNotes       = @($notes)
-            usedBy            = @($record.usedBy)
+            reviewNotes       = $notes.ToArray()
+            usedBy            = $record.usedBy.ToArray()
         })
 }
 
@@ -478,8 +495,8 @@ $inventory = [ordered]@{
     dotnetSdkVersion    = if ([string]::IsNullOrWhiteSpace($sdkVersion)) { $null } else { $sdkVersion }
     nugetPackagesFolder = $NuGetPackagesPath
     allowedLicenses     = $allowedLicenseExpressions
-    projects            = @($projectRecords)
-    packages            = @($orderedPackages)
+    projects            = $projectRecords.ToArray()
+    packages            = $orderedPackages.ToArray()
     summary             = $summary
     limitations         = @(
         'Reflects the resolved NuGet graph recorded in obj/project.assets.json; it does not inspect a published MSIX or .pext layout.',

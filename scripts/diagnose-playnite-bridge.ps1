@@ -233,10 +233,23 @@ foreach ($root in $roots) {
 }
 
 $snapshotDir = Join-Path $env:LOCALAPPDATA 'PlayniteCmdPal'
-$snapshotPath = Join-Path $snapshotDir 'catalog-v1.json'
+$v2SnapshotPath = Join-Path $snapshotDir 'catalog-v2.json'
+$v1SnapshotPath = Join-Path $snapshotDir 'catalog-v1.json'
+if (Test-Path -LiteralPath $v2SnapshotPath -PathType Leaf) {
+    $snapshotPath = $v2SnapshotPath
+    $snapshotSchema = 'v2 (preferred)'
+} elseif (Test-Path -LiteralPath $v1SnapshotPath -PathType Leaf) {
+    $snapshotPath = $v1SnapshotPath
+    $snapshotSchema = 'v1 (legacy fallback)'
+} else {
+    $snapshotPath = $v2SnapshotPath
+    $snapshotSchema = 'v2 (preferred; missing)'
+}
 Write-Line ''
 Write-Line "Snapshot path: $snapshotPath"
+Write-Line "Snapshot selection: $snapshotSchema"
 Write-Line ('Snapshot exists: ' + (Test-Path -LiteralPath $snapshotPath))
+Write-Line ('Legacy v1 snapshot retained: ' + (Test-Path -LiteralPath $v1SnapshotPath))
 Write-Line ('Snapshot directory exists: ' + (Test-Path -LiteralPath $snapshotDir -PathType Container))
 
 if (Test-Path -LiteralPath $snapshotPath) {

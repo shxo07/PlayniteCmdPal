@@ -5,6 +5,7 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>..\PlayniteCmdPal-Brand-Assets\icons\ico\PlayniteCmdPal.ico</ApplicationIcon>
     <DefaultLanguage>en-US</DefaultLanguage>
+    <WindowsSdkPackageVersion>10.0.26100.84</WindowsSdkPackageVersion>
     <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
     <TargetPlatformMinVersion>10.0.19041.0</TargetPlatformMinVersion>
     <SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
@@ -12,12 +13,21 @@
 
     <PublishProfile>win-$(Platform).pubxml</PublishProfile>
     <EnableMsixTooling>true</EnableMsixTooling>
+    <!-- The Command Palette SDK WinMD is an interface contract, not a runtime component.
+         Keep the metadata in the package but do not harvest nonexistent WinRT class
+         implementations into the app manifest. The COM server is declared explicitly
+         in Package.appxmanifest. -->
+    <AppxHarvestWinmdRegistration>false</AppxHarvestWinmdRegistration>
+    <AppxPackageIdentityName>werdscopez7347.PlayniteforCommandPalette</AppxPackageIdentityName>
+    <AppxPackagePublisher>CN=B5EE8A57-B227-4726-A4E9-AF40E9D47E70</AppxPackagePublisher>
+    <AppxPackageVersion>0.0.3.0</AppxPackageVersion>
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
   <ItemGroup>
     <!-- Third-party notices and the retained PowerToys template license travel with the
          published package. See docs/LICENSING-AND-RELEASE.md. -->
+    <Content Include="..\LICENSE" Link="LICENSE" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="..\third-party\THIRD-PARTY-NOTICES.md" Link="THIRD-PARTY-NOTICES.md" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="..\third-party\Microsoft-PowerToys-LICENSE.txt" Link="Microsoft-PowerToys-LICENSE.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
@@ -91,11 +101,9 @@
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)'!='Debug'">
-    <!-- In Release builds, trimming is enabled by default. 
-         feel free to disable this if needed -->
-    <PublishTrimmed>true</PublishTrimmed>
-
-    <!-- In release, also ignore the aforementioned ILLink warning -->
+    <!-- Preserve the Windows SDK projection assemblies exactly as supplied by the
+         REDIST-listed net8.0 targeting-pack assets. Do not trim or transform them. -->
+    <PublishTrimmed>false</PublishTrimmed>
     <ILLinkTreatWarningsAsErrors>false</ILLinkTreatWarningsAsErrors>
   </PropertyGroup>
 
@@ -117,6 +125,28 @@
 
     <Copy SourceFiles="@(_DotNetRuntimeNoticeFiles)"
           DestinationFiles="$(PublishDir)dotnet-runtime-THIRD-PARTY-NOTICES.txt" />
+  </Target>
+
+  <!-- The runtime notice is created during Publish, after the MSIX packaging pipeline
+       has already collected its normal payload. Add the exact restored runtime-pack
+       notice directly to AppxPackagePayload immediately before MakeAppx consumes it. -->
+  <Target Name="AddDotNetRuntimeThirdPartyNoticesToMsixPayload"
+          BeforeTargets="_GenerateAppxPackageFile"
+          Condition="'$(AppxPackage)' == 'true' and '$(SelfContained)' == 'true' and '$(RuntimeIdentifier)' != ''">
+    <ItemGroup>
+      <_DotNetRuntimeMsixNoticeFiles Include="$(NuGetPackageRoot)microsoft.netcore.app.runtime.$(RuntimeIdentifier)\*\THIRD-PARTY-NOTICES.TXT" />
+    </ItemGroup>
+
+    <Error Condition="'@(_DotNetRuntimeMsixNoticeFiles)' == ''"
+           Text="The .NET runtime third-party notices were not found for $(RuntimeIdentifier). Do not create a self-contained MSIX without the notices." />
+    <Error Condition="'@(_DotNetRuntimeMsixNoticeFiles->Count())' != '1'"
+           Text="Expected exactly one Microsoft.NETCore.App runtime third-party notices file for $(RuntimeIdentifier), found: @(_DotNetRuntimeMsixNoticeFiles)." />
+
+    <ItemGroup>
+      <AppxPackagePayload Include="@(_DotNetRuntimeMsixNoticeFiles)">
+        <TargetPath>dotnet-runtime-THIRD-PARTY-NOTICES.txt</TargetPath>
+      </AppxPackagePayload>
+    </ItemGroup>
   </Target>
 
   <ItemGroup>

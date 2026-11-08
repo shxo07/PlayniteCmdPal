@@ -1,4 +1,4 @@
-# Command Palette search and launch smoke test (WERD-61)
+# Command Palette search, launch, and game-details smoke test (WERD-61 / WERD-73)
 
 These checks require Windows, the repository's .NET 10 SDK, Microsoft PowerToys Command Palette, the packaged extension, and the Playnite companion bridge. Use a small test library where possible. Do not record or share real game titles, IDs, paths, or catalog contents.
 
@@ -46,6 +46,8 @@ Do not upload or commit this file; it contains private library metadata.
 4. If two games share a title, confirm the metadata and short ID suffix distinguish the results.
 5. Select a result and press Enter. Confirm Playnite opens or is reused and starts that game using Playnite's configured launch behaviour. The palette dismissing is not sufficient evidence; verify the intended game actually starts.
 6. Repeat with Playnite already running and fully closed (including its tray process).
+7. Open the selected result's secondary actions/context menu and choose **Show game details in Playnite**. Confirm the request targets the same stable game ID as the selected result and opens or reuses Playnite's Desktop-mode game details view.
+8. Repeat the details action with Playnite already running and fully closed. Record the observed result separately for each state; a successful URI dispatch toast is not proof that the details view finished navigating.
 
 ## 5. Failure and refresh states
 
@@ -54,7 +56,8 @@ Do not upload or commit this file; it contains private library metadata.
 - With the bridge missing or the snapshot unavailable, confirm an actionable message; install/start the bridge and activate the refresh row.
 - With a previously valid snapshot followed by a malformed or missing snapshot, confirm the adapter retains the last-known-good catalog and surfaces a warning rather than crashing.
 - Confirm a snapshot older than 24 hours remains searchable with a stale-data warning.
-- Confirm invalid/non-canonical game IDs are rejected by the automated tests and a missing/unregistered URI handler produces an actionable toast.
+- Confirm invalid/non-canonical game IDs are rejected by the automated launch and show-game URI tests.
+- For the secondary details action, verify a missing/unregistered URI handler produces a dispatch-failure toast. A successful `Process.Start`/shell dispatch confirms only that Windows accepted the URI request; manually verify that Playnite actually navigated to the selected game's details.
 
 For missing/malformed-file tests, use a disposable test profile or back up and restore the snapshot. Never modify or share a real library export. The adapter's explicit refresh bypasses its normal 30-second read interval.
 

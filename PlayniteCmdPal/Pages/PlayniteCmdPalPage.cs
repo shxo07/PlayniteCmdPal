@@ -17,6 +17,7 @@ namespace PlayniteCmdPal;
 internal sealed partial class PlayniteCmdPalPage : DynamicListPage
 {
     private readonly IReadOnlyPlayniteCatalog _catalog = new PlayniteCatalogAdapter();
+    private readonly FavoritesStore _favorites = FavoritesPreferences.Store;
     private IListItem[] _items = [CreateStatusItem("Loading your Playnite library…")];
     private CancellationTokenSource? _searchCancellation;
     private string _searchText = string.Empty;
@@ -184,6 +185,11 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage
             {
                 Title = game.Title,
                 Subtitle = string.Join(" · ", metadata),
+                MoreCommands =
+                [
+                    new CommandContextItem(new ShowGameDetailsCommand(game.GameId)),
+                    new CommandContextItem(new ToggleFavoriteCommand(_favorites, game.GameId, () => BeginSearch())),
+                ],
             });
         }
 
