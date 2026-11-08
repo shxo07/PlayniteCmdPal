@@ -93,7 +93,7 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage
             var built = BuildItems(catalog, query);
             lock (_requestGate)
             {
-                if (version != _requestVersion)
+                if (version != _requestVersion || cancellationToken.IsCancellationRequested)
                 {
                     return;
                 }
@@ -112,7 +112,7 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage
         {
             lock (_requestGate)
             {
-                if (version != _requestVersion)
+                if (version != _requestVersion || cancellationToken.IsCancellationRequested)
                 {
                     return;
                 }
@@ -216,31 +216,38 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage
     {
         if (artworkItems.Count == 0) return;
 
-        try
+        // Handle each result independently. A single bad ListItem/API update must not
+        // fault Parallel.ForEachAsync and leave every remaining row on its fallback icon.
+        var updates = artworkItems.Select(async entry =>
         {
-            await Parallel.ForEachAsync(
-                artworkItems,
-                new ParallelOptions { MaxDegreeOfParallelism = 4, CancellationToken = cancellationToken },
-                async (entry, token) =>
-                {
-                    var icon = await _artwork.GetIconAsync(entry.Game, token).ConfigureAwait(false);
-                    entry.Item.Icon = icon ?? ArtworkIconLoader.FallbackIcon;
-                }).ConfigureAwait(false);
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            return;
-        }
-        catch (Exception)
-        {
-            // Artwork is optional; keep the already-published fallback items.
-            return;
-        }
+            try
+            {
+                var icon = await _artwork.GetIconAsync(entry.Game, cancellationToken).ConfigureAwait(false);
+                cancellationToken.ThrowIfCancellationRequested();
 
-        lock (_requestGate)
-        {
-            if (version == _requestVersion) RaiseItemsChanged();
-        }
+                lock (_requestGate)
+                {
+                    // Do not mutate objects belonging to an obsolete search request.
+                    if (version != _requestVersion || cancellationToken.IsCancellationRequested)
+                    {
+                        return;
+                    }
+
+                    entry.Item.Icon = icon ?? ArtworkIconLoader.FallbackIcon;
+                    RaiseItemsChanged();
+                }
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                // Expected when a newer query replaces this result set.
+            }
+            catch (Exception)
+            {
+                // A failure for one row must not prevent artwork for other rows.
+            }
+        });
+
+        await Task.WhenAll(updates).ConfigureAwait(false);
     }
 
     private static IListItem CreateStatusItem(string message) =>
