@@ -17,7 +17,6 @@ internal sealed partial class FavoritesPage : DynamicListPage
     private readonly ArtworkIconLoader _artwork = new(artworkId => PlayniteCatalogAdapter.ResolveArtworkPath(artworkId));
     private readonly LatestRequestGate _requestGate = new();
     private readonly object _lifecycleGate = new();
-    private readonly WeakReference<FavoritesPage> _weakSelf;
     private readonly EventHandler _favoritesChangedHandler;
     private CancellationTokenSource? _requestCancellation;
     private IListItem[] _items = [CreateStatusItem("Loading your favorites…")];
@@ -31,17 +30,12 @@ internal sealed partial class FavoritesPage : DynamicListPage
 
         // The shared store must not keep retired page instances alive. Its event delegate
         // captures only a WeakReference, so the page can be collected with the host page.
-        _weakSelf = new WeakReference<FavoritesPage>(this);
-        var weakSelf = _weakSelf;
+        var weakSelf = new WeakReference<FavoritesPage>(this);
         _favoritesChangedHandler = (sender, args) =>
         {
             if (weakSelf.TryGetTarget(out var page))
             {
                 page.OnFavoritesChanged(sender, args);
-            }
-            else if (sender is FavoritesStore store)
-            {
-                store.FavoritesChanged -= _favoritesChangedHandler;
             }
         };
         _favorites.FavoritesChanged += _favoritesChangedHandler;
