@@ -89,6 +89,8 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage
                 ? await _catalog.RefreshAsync(cancellationToken).ConfigureAwait(false)
                 : await _catalog.GetAsync(cancellationToken).ConfigureAwait(false);
 
+            cancellationToken.ThrowIfCancellationRequested();
+
             // A normal search/pin refresh reuses validated artwork. Only an explicit
             // catalog refresh should invalidate artwork references and force disk resolution.
             if (forceRefresh)
