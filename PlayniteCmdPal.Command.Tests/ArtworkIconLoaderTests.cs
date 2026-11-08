@@ -169,6 +169,58 @@ public sealed class ArtworkIconLoaderTests
     }
 
     [Fact]
+    public async Task DecoderFailureIsNotCachedAndCanRecover()
+    {
+        var attempts = 0;
+        var loader = CreateLoader(_ => "C:\\artwork\\recover-decoder.png", (_, _) =>
+            Task.FromResult(Interlocked.Increment(ref attempts) > 1));
+        var game = Game(cover: CoverId);
+
+        Assert.Null(await loader.GetIconAsync(game, CancellationToken.None));
+        Assert.NotNull(await loader.GetIconAsync(game, CancellationToken.None));
+        Assert.Equal(2, attempts);
+    }
+
+    [Fact]
+    public async Task CancellingAQueuedLoadPreventsItsResolverFromStarting()
+    {
+        var allDecodersStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseDecoders = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var resolveCount = 0;
+        var decoderCount = 0;
+        var loader = CreateLoader(_ =>
+        {
+            Interlocked.Increment(ref resolveCount);
+            return "C:\\artwork\\queued.png";
+        }, async (_, _) =>
+        {
+            if (Interlocked.Increment(ref decoderCount) == 4) allDecodersStarted.TrySetResult(true);
+            await releaseDecoders.Task;
+            return true;
+        });
+
+        var active = new[]
+        {
+            loader.GetIconAsync(Game(cover: CoverId), CancellationToken.None),
+            loader.GetIconAsync(Game(cover: IconId), CancellationToken.None),
+            loader.GetIconAsync(Game(cover: OtherId), CancellationToken.None),
+            loader.GetIconAsync(Game(cover: "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"), CancellationToken.None),
+        };
+        await allDecodersStarted.Task;
+
+        using var queuedCancellation = new CancellationTokenSource();
+        var queued = loader.GetIconAsync(
+            Game(cover: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"),
+            queuedCancellation.Token);
+        queuedCancellation.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => queued);
+
+        releaseDecoders.TrySetResult(true);
+        await Task.WhenAll(active);
+        Assert.Equal(4, resolveCount);
+    }
+
+    [Fact]
     public async Task CancellingOneWaiterDoesNotCancelSharedArtworkNeededByAnother()
     {
         var decodeStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
