@@ -153,6 +153,70 @@ public sealed class ArtworkIconLoaderTests
         Assert.Equal(0, resolveCount);
     }
 
+    [Fact]
+    public async Task TransientResolutionFailureIsNotCachedAndCanRecover()
+    {
+        var attempts = 0;
+        var loader = CreateLoader(_ =>
+        {
+            return Interlocked.Increment(ref attempts) == 1 ? null : "C:\\\\artwork\\\\recovered.png";
+        }, (_, _) => Task.FromResult(true));
+        var game = Game(cover: CoverId);
+
+        Assert.Null(await loader.GetIconAsync(game, CancellationToken.None));
+        Assert.NotNull(await loader.GetIconAsync(game, CancellationToken.None));
+        Assert.Equal(2, attempts);
+    }
+
+    [Fact]
+    public async Task CancellingOneWaiterDoesNotCancelSharedArtworkNeededByAnother()
+    {
+        var decodeStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseDecode = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var decodeCount = 0;
+        var loader = CreateLoader(_ => "C:\\\\artwork\\\\shared.png", async (_, token) =>
+        {
+            Interlocked.Increment(ref decodeCount);
+            decodeStarted.TrySetResult(true);
+            await releaseDecode.Task.WaitAsync(token);
+            return true;
+        });
+        var game = Game(cover: CoverId);
+        using var firstCancellation = new CancellationTokenSource();
+
+        var first = loader.GetIconAsync(game, firstCancellation.Token);
+        await decodeStarted.Task;
+        var second = loader.GetIconAsync(game, CancellationToken.None);
+        firstCancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => first);
+        releaseDecode.TrySetResult(true);
+        Assert.NotNull(await second);
+        Assert.Equal(1, decodeCount);
+    }
+
+    [Fact]
+    public async Task UnderlyingArtworkWorkIsCancelledWhenItsLastWaiterLeaves()
+    {
+        var decodeStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var decodeCancelled = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var loader = CreateLoader(_ => "C:\\\\artwork\\\\cancel.png", async (_, token) =>
+        {
+            decodeStarted.TrySetResult(true);
+            using var registration = token.Register(() => decodeCancelled.TrySetResult(true));
+            await Task.Delay(Timeout.InfiniteTimeSpan, token);
+            return true;
+        });
+        using var cancellation = new CancellationTokenSource();
+
+        var request = loader.GetIconAsync(Game(cover: CoverId), cancellation.Token);
+        await decodeStarted.Task;
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => request);
+        await decodeCancelled.Task;
+    }
+
     private static ArtworkIconLoader CreateLoader(
         Func<string, string?> resolvePath,
         Func<string, CancellationToken, Task<bool>> decoder,
