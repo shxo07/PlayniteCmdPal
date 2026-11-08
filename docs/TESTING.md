@@ -38,14 +38,14 @@ Test data is generated in the test process and written to a temporary directory 
 
 | File | Covers |
 |---|---|
-| `ArtworkIconLoaderTests` | Cover-before-icon selection, fallback when cover decoding fails, missing artwork isolation, repeated-resolution caching, bounded LRU eviction, catalog-refresh invalidation, concurrent requests sharing one decode, and rejection of malformed opaque identifiers before path resolution. |
+| `ArtworkIconLoaderTests` | Cover-before-icon selection, fallback when cover decoding fails, missing artwork isolation, successful-result caching, bounded LRU eviction, catalog-refresh invalidation, concurrent requests sharing one decode, rejection of malformed opaque identifiers, retry after transient resolver failure, cancellation of abandoned shared work, and preservation of shared work while another caller still needs it. |
 
 Manual verification requires a real Playnite library and the packaged Command Palette extension:
 
 1. Search for games with distinct cover artwork and confirm each result shows the correct image, not another game's image.
 2. Check games with no cover but a valid icon; confirm the icon is used. Check games with neither image, a missing cache file, and an unreadable/unsupported image; confirm a consistent fallback appears and search/launch still work.
 3. Keep a search query open while the catalog refreshes after changing a game's artwork in Playnite. Confirm the new image appears and the previous image is not reused.
-4. Confirm typing remains responsive while images load; rapidly change the query and confirm artwork from the earlier query never appears in newer results.
+4. Confirm typing remains responsive while images load; rapidly change the query and confirm obsolete artwork work is cancelled, artwork from the earlier query never appears in newer results, and the latest query is not delayed by an obsolete queue.
 5. Confirm Enter still launches the selected game and source, platform, installed state, duplicate-title disambiguation, and More actions remain intact.
 6. Repeat at 100% and 150% (or higher) Windows display scaling. Confirm icons remain correctly sized and do not clip or displace title/subtitle text.
 
@@ -62,6 +62,8 @@ Run with a local Playnite library and the PowerToys Command Palette extension:
 5. Restart the Command Palette extension and Playnite, then confirm the favorite remains.
 6. Remove a favorited game from the current Playnite library (or test with a known missing ID) and confirm it is hidden from Favorites without deleting its saved preference.
 7. With an unsupported future-schema or unreadable preferences file, confirm normal Search results still appear and can still launch; the Favorites action should report that preferences are unavailable rather than breaking the result list. Confirm its error toast also leaves the current page/query open.
+8. Rapidly change the Favorites query and pin/unpin several games while artwork is loading. Confirm obsolete Favorites requests are cancelled, the page never remains stuck on its loading status, and current favorite artwork appears.
+9. Open and close Favorites repeatedly, then pin/unpin a game. Confirm retired Favorites pages do not refresh or retain active work.
 
 Capture screenshots of Search actions, populated Favorites, and empty/no-match states. A short before/after capture of pinning and unpinning without editing the query is useful evidence.
 
