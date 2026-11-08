@@ -31,13 +31,19 @@ internal sealed partial class FavoritesPage : DynamicListPage
         // The shared store must not keep retired page instances alive. Its event delegate
         // captures only a WeakReference, so the page can be collected with the host page.
         var weakSelf = new WeakReference<FavoritesPage>(this);
-        _favoritesChangedHandler = (sender, args) =>
+        EventHandler? weakHandler = null;
+        weakHandler = (sender, args) =>
         {
             if (weakSelf.TryGetTarget(out var page))
             {
                 page.OnFavoritesChanged(sender, args);
             }
+            else if (sender is FavoritesStore store && weakHandler is not null)
+            {
+                store.FavoritesChanged -= weakHandler;
+            }
         };
+        _favoritesChangedHandler = weakHandler;
         _favorites.FavoritesChanged += _favoritesChangedHandler;
         LoadItems();
     }
