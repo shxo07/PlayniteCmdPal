@@ -14,11 +14,16 @@ public sealed class ToggleFavoriteCommandTests : IDisposable
     [Fact]
     public void SuccessfulPinShowsToastAndKeepsPaletteOpen()
     {
-        var command = new ToggleFavoriteCommand(new FavoritesStore(FilePath), "game-id");
+        var toastMessages = new List<string>();
+        var command = new ToggleFavoriteCommand(
+            new FavoritesStore(FilePath),
+            "game-id",
+            showToast: toastMessages.Add);
 
         var result = command.Invoke();
 
-        AssertToastKeepsPaletteOpen(result, "Game pinned to Favorites.");
+        AssertKeepOpen(result);
+        Assert.Equal(new[] { "Game pinned to Favorites." }, toastMessages);
         Assert.True(new FavoritesStore(FilePath).IsFavorite("game-id"));
     }
 
@@ -26,37 +31,41 @@ public sealed class ToggleFavoriteCommandTests : IDisposable
     public void FailedPinShowsToastAndKeepsPaletteOpen()
     {
         Directory.CreateDirectory(FilePath);
-        var command = new ToggleFavoriteCommand(new FavoritesStore(FilePath), "game-id");
+        var toastMessages = new List<string>();
+        var command = new ToggleFavoriteCommand(
+            new FavoritesStore(FilePath),
+            "game-id",
+            showToast: toastMessages.Add);
 
         var result = command.Invoke();
 
-        AssertToastKeepsPaletteOpen(result, "Favorites could not be changed. Check the local preferences file.");
+        AssertKeepOpen(result);
+        Assert.Equal(new[] { "Favorites could not be changed. Check the local preferences file." }, toastMessages);
     }
 
     [Fact]
     public void RefreshFailureReportsSuccessfulChangeAndKeepsPaletteOpen()
     {
         var store = new FavoritesStore(FilePath);
+        var toastMessages = new List<string>();
         var command = new ToggleFavoriteCommand(
             store,
             "game-id",
-            () => throw new InvalidOperationException("Refresh failed."));
+            () => throw new InvalidOperationException("Refresh failed."),
+            toastMessages.Add);
 
         var result = command.Invoke();
 
         Assert.True(store.IsFavorite("game-id"));
-        AssertToastKeepsPaletteOpen(
-            result,
-            "Game pinned to Favorites, but the list could not refresh.");
+        AssertKeepOpen(result);
+        Assert.Equal(
+            new[] { "Game pinned to Favorites, but the list could not refresh." },
+            toastMessages);
     }
 
-    private static void AssertToastKeepsPaletteOpen(CommandResult result, string expectedMessage)
+    private static void AssertKeepOpen(CommandResult result)
     {
-        Assert.Equal(CommandResultKind.ShowToast, result.Kind);
-        var toast = Assert.IsType<ToastArgs>(result.Args);
-        Assert.Equal(expectedMessage, toast.Message);
-        var followUp = Assert.IsType<CommandResult>(toast.Result);
-        Assert.Equal(CommandResultKind.KeepOpen, followUp.Kind);
+        Assert.Equal(CommandResultKind.KeepOpen, result.Kind);
     }
 
     public void Dispose()
