@@ -80,7 +80,7 @@ internal sealed partial class FavoritesPage : DynamicListPage
             });
         }
 
-        RaiseItemsChanged();
+        RaiseItemsChanged(_items.Length);
         _ = LoadItemsAsync(request.Version, request.State, token);
     }
 
@@ -174,7 +174,7 @@ internal sealed partial class FavoritesPage : DynamicListPage
                         {
                             entry.Item.Icon = icon ?? ArtworkIconLoader.FallbackIcon;
                         });
-                        if (published) RaiseItemsChanged();
+                        if (published) RaiseItemsChanged(_items.Length);
                     }
                     catch (OperationCanceledException) when (token.IsCancellationRequested)
                     {
@@ -196,7 +196,7 @@ internal sealed partial class FavoritesPage : DynamicListPage
     {
         if (cancellationToken.IsCancellationRequested) return false;
         var published = _requestGate.TryPublish(version, () => _items = items);
-        if (published) RaiseItemsChanged();
+        if (published) RaiseItemsChanged(_items.Length);
         return published;
     }
 
