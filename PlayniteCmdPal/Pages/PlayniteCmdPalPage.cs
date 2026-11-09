@@ -240,9 +240,14 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage
 
     private void OnFavoritesChanged(object? sender, EventArgs e)
     {
-        // Publish the changed list synchronously as part of the command invocation.
-        // The Command Palette SDK re-queries GetItems after RaiseItemsChanged; delaying
-        // this notification until after the toast can leave the visible page stale.
+        // Wait until the command has returned KeepOpen. The toast is shown independently,
+        // so the page can publish its updated items without being inside result handling.
+        _ = RefreshAfterFavoriteChangeAsync();
+    }
+
+    private async Task RefreshAfterFavoriteChangeAsync()
+    {
+        await Task.Delay(50).ConfigureAwait(false);
         BeginSearch();
     }
 
