@@ -58,8 +58,13 @@ internal sealed partial class FavoritesPage : DynamicListPage
 
     private void OnFavoritesChanged(object? sender, EventArgs e)
     {
-        // Raise ItemsChanged synchronously before the pin/unpin command returns its toast.
-        // The updated favorites are then loaded asynchronously and published when ready.
+        // Wait until the command has returned KeepOpen before publishing the new list.
+        _ = RefreshAfterFavoriteChangeAsync();
+    }
+
+    private async Task RefreshAfterFavoriteChangeAsync()
+    {
+        await Task.Delay(50).ConfigureAwait(false);
         LoadItems();
     }
 
