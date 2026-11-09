@@ -19,6 +19,7 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage
     private readonly IReadOnlyPlayniteCatalog _catalog = new PlayniteCatalogAdapter();
     private readonly FavoritesStore _favorites = FavoritesPreferences.Store;
     private readonly ArtworkIconLoader _artwork = new(artworkId => PlayniteCatalogAdapter.ResolveArtworkPath(artworkId));
+    private readonly EventHandler _favoritesChangedHandler;
     private IListItem[] _items = [CreateStatusItem("Loading your Playnite library…")];
     private CancellationTokenSource? _searchCancellation;
     private string _searchText = string.Empty;
@@ -30,6 +31,25 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage
         Icon = IconHelpers.FromRelativePath("Assets\\StoreLogo.png");
         Title = "Playnite";
         Name = "Search games";
+
+        // Keep Search Games in sync when a game is pinned or unpinned from any page.
+        // Capture this page weakly so the shared store cannot retain retired pages.
+        var weakSelf = new WeakReference<PlayniteCmdPalPage>(this);
+        EventHandler weakHandler = null!;
+        weakHandler = (sender, args) =>
+        {
+            if (weakSelf.TryGetTarget(out var page))
+            {
+                page.OnFavoritesChanged(sender, args);
+            }
+            else if (sender is FavoritesStore store)
+            {
+                store.FavoritesChanged -= weakHandler;
+            }
+        };
+        _favoritesChangedHandler = weakHandler;
+        _favorites.FavoritesChanged += _favoritesChangedHandler;
+
         BeginSearch();
     }
 
@@ -208,8 +228,7 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage
                 MoreCommands =
                 [
                     new CommandContextItem(new ShowGameDetailsCommand(game.GameId)),
-                    new CommandContextItem(new ToggleFavoriteCommand(_favorites, game.GameId, QueueSearchRefresh)),
-                    new CommandContextItem(new RefreshCatalogCommand(this)),
+                    new CommandContextItem(new ToggleFavoriteCommand(_favorites, game.GameId)),
                 ],
             };
             items.Add(item);
@@ -219,14 +238,13 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage
         return (items.ToArray(), artworkItems);
     }
 
-    private void QueueSearchRefresh()
+    private void OnFavoritesChanged(object? sender, EventArgs e)
     {
-        // Task.Run alone can start before Invoke returns. Delay the rebuild so the host
-        // finishes dispatching the command/toast before this page raises ItemsChanged.
-        _ = RefreshAfterCommandAsync();
+        // Defer rebuilding until the command has returned its toast result.
+        _ = RefreshAfterFavoriteChangeAsync();
     }
 
-    private async Task RefreshAfterCommandAsync()
+    private async Task RefreshAfterFavoriteChangeAsync()
     {
         await Task.Delay(50).ConfigureAwait(false);
         BeginSearch();
