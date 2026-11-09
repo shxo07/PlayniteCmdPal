@@ -93,7 +93,7 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage
         }
 
         // Notify outside the request lock: the host may synchronously re-enter GetItems.
-        RaiseItemsChanged();
+        RaiseItemsChanged(_items.Length);
         _ = LoadItemsAsync(version, query, forceRefresh, cancellationToken);
     }
 
@@ -129,7 +129,7 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage
                 _items = built.Items;
             }
 
-            RaiseItemsChanged();
+            RaiseItemsChanged(_items.Length);
             _ = LoadArtworkAsync(version, built.ArtworkItems, cancellationToken);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -148,7 +148,7 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage
                 _items = [CreateStatusItem("Couldn't read the Playnite catalog. Check the companion plugin and snapshot permissions, then refresh.")];
             }
 
-            RaiseItemsChanged();
+            RaiseItemsChanged(_items.Length);
         }
     }
 
@@ -278,7 +278,7 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage
                             updated = true;
                         }
 
-                        if (updated) RaiseItemsChanged();
+                        if (updated) RaiseItemsChanged(_items.Length);
                     }
                     catch (OperationCanceledException) when (token.IsCancellationRequested)
                     {
