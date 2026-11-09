@@ -209,6 +209,7 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage
                 [
                     new CommandContextItem(new ShowGameDetailsCommand(game.GameId)),
                     new CommandContextItem(new ToggleFavoriteCommand(_favorites, game.GameId, QueueSearchRefresh)),
+                    new CommandContextItem(new RefreshCatalogCommand(this)),
                 ],
             };
             items.Add(item);
@@ -220,8 +221,15 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage
 
     private void QueueSearchRefresh()
     {
-        // Do not rebuild/notify this page synchronously inside ToggleFavoriteCommand.Invoke.
-        _ = Task.Run(() => BeginSearch());
+        // Task.Run alone can start before Invoke returns. Delay the rebuild so the host
+        // finishes dispatching the command/toast before this page raises ItemsChanged.
+        _ = RefreshAfterCommandAsync();
+    }
+
+    private async Task RefreshAfterCommandAsync()
+    {
+        await Task.Delay(50).ConfigureAwait(false);
+        BeginSearch();
     }
 
     private async Task LoadArtworkAsync(

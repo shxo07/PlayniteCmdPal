@@ -58,8 +58,14 @@ internal sealed partial class FavoritesPage : DynamicListPage
 
     private void OnFavoritesChanged(object? sender, EventArgs e)
     {
-        // Do not rebuild the Command Palette page inside the command's Invoke call.
-        _ = Task.Run(() => LoadItems());
+        // Let the host finish command dispatch before rebuilding a live page.
+        _ = RefreshAfterFavoriteChangeAsync();
+    }
+
+    private async Task RefreshAfterFavoriteChangeAsync()
+    {
+        await Task.Delay(50).ConfigureAwait(false);
+        LoadItems();
     }
 
     private void LoadItems()

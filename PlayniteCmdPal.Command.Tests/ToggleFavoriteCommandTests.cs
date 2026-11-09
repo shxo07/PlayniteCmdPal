@@ -19,6 +19,7 @@ public sealed class ToggleFavoriteCommandTests : IDisposable
         var result = command.Invoke();
 
         AssertToastKeepsPaletteOpen(result, "Game pinned to Favorites.");
+        Assert.True(new FavoritesStore(FilePath).IsFavorite("game-id"));
     }
 
     [Fact]
