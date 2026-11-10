@@ -49,8 +49,8 @@ internal sealed class ArtworkIconLoader
         ArgumentNullException.ThrowIfNull(game);
         cancellationToken.ThrowIfCancellationRequested();
 
-        var cover = await GetIconForIdAsync(game.CoverArtworkReference, cancellationToken).ConfigureAwait(false);
-        return cover ?? await GetIconForIdAsync(game.IconReference, cancellationToken).ConfigureAwait(false);
+        // Use Playnite's saved per-game icon only. Cover art is never substituted.
+        return await GetIconForIdAsync(game.IconReference, cancellationToken).ConfigureAwait(false);
     }
 
     internal void Invalidate()
