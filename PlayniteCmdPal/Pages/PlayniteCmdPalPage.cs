@@ -41,7 +41,8 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage
         // Keep Search Games in sync when a game is pinned or unpinned from any page.
         // Capture this page weakly so the shared store cannot retain retired pages.
         var weakSelf = new WeakReference<PlayniteCmdPalPage>(this);
-        EventHandler weakHandler = (sender, args) =>
+        EventHandler weakHandler = null!;
+        weakHandler = (sender, args) =>
         {
             if (weakSelf.TryGetTarget(out var page))
             {
