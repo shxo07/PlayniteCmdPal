@@ -20,6 +20,7 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage
     private readonly FavoritesStore _favorites = FavoritesPreferences.Store;
     private readonly ArtworkIconLoader _artwork = new(artworkId => PlayniteCatalogAdapter.ResolveArtworkPath(artworkId));
     private readonly EventHandler _favoritesChangedHandler;
+    private readonly SynchronizationContext? _uiContext;
     private IListItem[] _items = [CreateStatusItem("Loading your Playnite library…")];
     private CancellationTokenSource? _searchCancellation;
     private string _searchText = string.Empty;
@@ -28,6 +29,11 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage
 
     public PlayniteCmdPalPage()
     {
+        // Capture the UI synchronization context so RaiseItemsChanged calls from
+        // background threads (artwork loading, deferred favorites refresh) can be
+        // marshaled back to the UI thread where the Command Palette host processes them.
+        _uiContext = SynchronizationContext.Current;
+
         Icon = IconHelpers.FromRelativePath("Assets\\StoreLogo.png");
         Title = "Playnite";
         Name = "Search games";
@@ -63,6 +69,26 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage
         lock (_requestGate) return _items;
     }
 
+    /// <summary>
+    /// Raises the items-changed notification on the UI synchronization context when one was
+    /// captured, ensuring the Command Palette host processes the update regardless of which
+    /// thread calls it. Falls back to a direct call when no context was captured or when already
+    /// on the UI context.
+    /// </summary>
+    private void RaiseItemsChangedOnUIContext(int count)
+    {
+        void raise() => RaiseItemsChanged(count);
+        if (_uiContext is { } context &&
+            !ReferenceEquals(context, SynchronizationContext.Current))
+        {
+            context.Post(_ => raise(), null);
+        }
+        else
+        {
+            raise();
+        }
+    }
+
     internal void RefreshCatalog()
     {
         BeginSearch(forceRefresh: true);
@@ -93,7 +119,7 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage
         }
 
         // Notify outside the request lock: the host may synchronously re-enter GetItems.
-        RaiseItemsChanged(_items.Length);
+        RaiseItemsChangedOnUIContext(_items.Length);
         _ = LoadItemsAsync(version, query, forceRefresh, cancellationToken);
     }
 
@@ -103,6 +129,7 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage
         bool forceRefresh,
         CancellationToken cancellationToken)
     {
+        int count = 0;
         try
         {
             var catalog = forceRefresh
@@ -127,9 +154,10 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage
                 }
 
                 _items = built.Items;
+                count = _items.Length;
             }
 
-            RaiseItemsChanged(_items.Length);
+            RaiseItemsChangedOnUIContext(count);
             _ = LoadArtworkAsync(version, built.ArtworkItems, cancellationToken);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -148,7 +176,8 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage
                 _items = [CreateStatusItem("Couldn't read the Playnite catalog. Check the companion plugin and snapshot permissions, then refresh.")];
             }
 
-            RaiseItemsChanged(_items.Length);
+            count = _items.Length;
+            RaiseItemsChangedOnUIContext(count);
         }
     }
 
@@ -247,7 +276,9 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage
 
     private async Task RefreshAfterFavoriteChangeAsync()
     {
-        await Task.Delay(50).ConfigureAwait(false);
+        // Do not use ConfigureAwait(false): the continuation should resume on the captured
+        // UI synchronization context so RaiseItemsChanged is processed by the Command Palette host.
+        await Task.Delay(50);
         BeginSearch();
     }
 
@@ -271,6 +302,7 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage
                         token.ThrowIfCancellationRequested();
 
                         var updated = false;
+                        int itemsCount = 0;
                         lock (_requestGate)
                         {
                             // Do not mutate objects belonging to an obsolete search request.
@@ -281,9 +313,10 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage
 
                             entry.Item.Icon = icon ?? ArtworkIconLoader.FallbackIcon;
                             updated = true;
+                            itemsCount = _items.Length;
                         }
 
-                        if (updated) RaiseItemsChanged(_items.Length);
+                        if (updated) RaiseItemsChangedOnUIContext(itemsCount);
                     }
                     catch (OperationCanceledException) when (token.IsCancellationRequested)
                     {
