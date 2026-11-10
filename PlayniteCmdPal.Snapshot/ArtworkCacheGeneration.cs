@@ -29,17 +29,24 @@ public sealed class ArtworkCacheGeneration : IDisposable
 
     private readonly Action<string, string> _moveFile;
     private readonly Action<string> _tryDeleteFile;
+    private readonly Func<byte[], byte[]>? _convertIcoToPng;
 
-    public ArtworkCacheGeneration(string root, long maxCacheBytes = SnapshotLimits.MaxArtworkCacheBytes, int maxArtworkBytes = SnapshotLimits.MaxArtworkBytes, string? snapshotPath = null)
-        : this(root, maxCacheBytes, maxArtworkBytes, snapshotPath, File.Move, TryDeleteFile)
+    public ArtworkCacheGeneration(
+        string root,
+        long maxCacheBytes = SnapshotLimits.MaxArtworkCacheBytes,
+        int maxArtworkBytes = SnapshotLimits.MaxArtworkBytes,
+        string? snapshotPath = null,
+        Func<byte[], byte[]>? convertIcoToPng = null)
+        : this(root, maxCacheBytes, maxArtworkBytes, snapshotPath, File.Move, TryDeleteFile, convertIcoToPng)
     {
     }
 
     internal ArtworkCacheGeneration(string root, long maxCacheBytes, int maxArtworkBytes, string? snapshotPath,
-        Action<string, string> moveFile, Action<string> tryDeleteFile)
+        Action<string, string> moveFile, Action<string> tryDeleteFile, Func<byte[], byte[]>? convertIcoToPng = null)
     {
         _moveFile = moveFile ?? throw new ArgumentNullException(nameof(moveFile));
         _tryDeleteFile = tryDeleteFile ?? throw new ArgumentNullException(nameof(tryDeleteFile));
+        _convertIcoToPng = convertIcoToPng;
         if (maxCacheBytes < 0) throw new ArgumentOutOfRangeException(nameof(maxCacheBytes));
         if (maxArtworkBytes <= 0) throw new ArgumentOutOfRangeException(nameof(maxArtworkBytes));
         _maxCacheBytes = maxCacheBytes;
@@ -93,6 +100,18 @@ public sealed class ArtworkCacheGeneration : IDisposable
             }
 
             if (!TryDetectFormat(bytes, out var extension)) return null;
+            if (string.Equals(extension, ".ico", StringComparison.Ordinal))
+            {
+                if (_convertIcoToPng is null) return null;
+                try { bytes = _convertIcoToPng(bytes); }
+                catch (Exception) { return null; }
+
+                if (bytes.Length <= 0 || bytes.Length > _maxArtworkBytes ||
+                    !TryDetectFormat(bytes, out extension) ||
+                    !string.Equals(extension, ".png", StringComparison.Ordinal))
+                    return null;
+            }
+
             string digest;
             using (var sha = SHA256.Create())
                 digest = string.Concat(sha.ComputeHash(bytes).Select(b => b.ToString("x2")));
