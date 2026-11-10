@@ -17,7 +17,7 @@ internal sealed partial class AdvancedFiltersPage : ContentPage
         _form = new AdvancedFiltersForm(state, filtersApplied);
         Name = "Advanced filters";
         Title = "Advanced filters";
-        Icon = new IconInfo("\uE71C");
+        Icon = new IconInfo("\\uE71C");
     }
 
     public override IContent[] GetContent() => [_form];
@@ -25,6 +25,10 @@ internal sealed partial class AdvancedFiltersPage : ContentPage
 
 internal sealed partial class AdvancedFiltersForm : FormContent
 {
+    private const string StatusInputPrefix = "status:";
+    private const string SourceInputPrefix = "source:";
+    private const string PlatformInputPrefix = "platform:";
+
     private readonly CatalogFilterState _state;
     private readonly Action _filtersApplied;
 
@@ -79,47 +83,44 @@ internal sealed partial class AdvancedFiltersForm : FormContent
             return CommandResult.KeepOpen();
         }
 
+        var statuses = ReadSelectedValues(values, StatusInputPrefix)
+            .Select(value => value switch
+            {
+                "installed" => (bool?)true,
+                "not-installed" => false,
+                _ => null,
+            })
+            .Where(value => value.HasValue)
+            .Select(value => value!.Value)
+            .ToArray();
+        var sources = ReadSelectedValues(values, SourceInputPrefix);
+        var platforms = ReadSelectedValues(values, PlatformInputPrefix);
+
+        if (string.Equals(actionId, "clear-status", StringComparison.Ordinal))
         {
-            var statuses = ReadValues(values, "installedStatuses")
-                .Select(value => value switch
-                {
-                    "installed" => (bool?)true,
-                    "not-installed" => false,
-                    _ => null,
-                })
-                .Where(value => value.HasValue)
-                .Select(value => value!.Value)
-                .ToArray();
-            var sources = ReadValues(values, "sources");
-            var platforms = ReadValues(values, "platforms");
+            _state.ClearInstalledStatuses();
+        }
+        else
+        {
+            _state.SetInstalledStatuses(statuses);
+        }
 
-            if (!string.Equals(actionId, "clear-status", StringComparison.Ordinal))
-            {
-                _state.SetInstalledStatuses(statuses);
-            }
+        if (string.Equals(actionId, "clear-sources", StringComparison.Ordinal))
+        {
+            _state.ClearSources();
+        }
+        else
+        {
+            _state.SetSources(sources);
+        }
 
-            if (!string.Equals(actionId, "clear-sources", StringComparison.Ordinal))
-            {
-                _state.SetSources(sources);
-            }
-
-            if (!string.Equals(actionId, "clear-platforms", StringComparison.Ordinal))
-            {
-                _state.SetPlatforms(platforms);
-            }
-
-            if (string.Equals(actionId, "clear-status", StringComparison.Ordinal))
-            {
-                _state.ClearInstalledStatuses();
-            }
-            else if (string.Equals(actionId, "clear-sources", StringComparison.Ordinal))
-            {
-                _state.ClearSources();
-            }
-            else if (string.Equals(actionId, "clear-platforms", StringComparison.Ordinal))
-            {
-                _state.ClearPlatforms();
-            }
+        if (string.Equals(actionId, "clear-platforms", StringComparison.Ordinal))
+        {
+            _state.ClearPlatforms();
+        }
+        else
+        {
+            _state.SetPlatforms(platforms);
         }
 
         // Defer page refresh until after the form command has returned its navigation result.
@@ -127,18 +128,13 @@ internal sealed partial class AdvancedFiltersForm : FormContent
         return CommandResult.GoBack();
     }
 
-    private static string[] ReadValues(JsonObject inputs, string id)
-    {
-        var raw = inputs[id]?.ToString();
-        if (string.IsNullOrWhiteSpace(raw))
-        {
-            return [];
-        }
-
-        return raw.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Select(Uri.UnescapeDataString)
+    private static string[] ReadSelectedValues(JsonObject inputs, string idPrefix) =>
+        inputs
+            .Where(pair =>
+                pair.Key.StartsWith(idPrefix, StringComparison.Ordinal)
+                && string.Equals(pair.Value?.ToString(), "true", StringComparison.OrdinalIgnoreCase))
+            .Select(pair => Uri.UnescapeDataString(pair.Key[idPrefix.Length..]))
             .ToArray();
-    }
 
     private void RebuildTemplate()
     {
@@ -150,30 +146,34 @@ internal sealed partial class AdvancedFiltersForm : FormContent
                 ["text"] = "Choose any combination. Values within a section are combined with OR; sections are combined with AND.",
                 ["wrap"] = true,
             },
-            CreateChoiceSet(
-                "installedStatuses",
-                "Installed status",
-                new[] { ("Installed", "installed"), ("Not installed", "not-installed") },
-                _state.InstalledStatuses.Select(value => value ? "installed" : "not-installed")),
-            CreateChoiceSet(
-                "sources",
-                "Source",
-                _state.Sources.Select(value => (value, Uri.EscapeDataString(value))),
-                _state.SelectedSources.Select(Uri.EscapeDataString)),
-            CreateChoiceSet(
-                "platforms",
-                "Platform",
-                _state.Platforms.Select(value => (value, Uri.EscapeDataString(value))),
-                _state.SelectedPlatforms.Select(Uri.EscapeDataString)),
         };
+
+        AddToggleSection(
+            body,
+            "Installed status",
+            StatusInputPrefix,
+            new[] { ("Installed", "installed"), ("Not installed", "not-installed") },
+            _state.InstalledStatuses.Select(value => value ? "installed" : "not-installed"));
+        AddToggleSection(
+            body,
+            "Source",
+            SourceInputPrefix,
+            _state.Sources.Select(value => (value, Uri.EscapeDataString(value))),
+            _state.SelectedSources.Select(Uri.EscapeDataString));
+        AddToggleSection(
+            body,
+            "Platform",
+            PlatformInputPrefix,
+            _state.Platforms.Select(value => (value, Uri.EscapeDataString(value))),
+            _state.SelectedPlatforms.Select(Uri.EscapeDataString));
 
         var actions = new JsonArray
         {
-            CreateAction("apply", "Apply"),
+            CreateAction("apply", "Apply", "positive"),
             CreateAction("clear-status", "Clear status"),
             CreateAction("clear-sources", "Clear sources"),
             CreateAction("clear-platforms", "Clear platforms"),
-            CreateAction("clear-all", "Clear all"),
+            CreateAction("clear-all", "Clear all", "destructive"),
         };
 
         TemplateJson = new JsonObject
@@ -186,35 +186,52 @@ internal sealed partial class AdvancedFiltersForm : FormContent
         }.ToJsonString(new JsonSerializerOptions { WriteIndented = false });
     }
 
-    private static JsonObject CreateChoiceSet(
-        string id,
+    private static void AddToggleSection(
+        JsonArray body,
         string label,
+        string idPrefix,
         System.Collections.Generic.IEnumerable<(string Title, string Value)> choices,
         System.Collections.Generic.IEnumerable<string> selected)
     {
-        var choiceArray = new JsonArray();
+        body.Add(new JsonObject
+        {
+            ["type"] = "TextBlock",
+            ["text"] = label,
+            ["weight"] = "Bolder",
+            ["wrap"] = true,
+        });
+
+        var selectedValues = selected.ToHashSet(StringComparer.Ordinal);
         foreach (var (title, value) in choices)
         {
-            choiceArray.Add(new JsonObject { ["title"] = title, ["value"] = value });
+            body.Add(new JsonObject
+            {
+                ["type"] = "Input.Toggle",
+                ["id"] = idPrefix + value,
+                ["title"] = title,
+                ["value"] = selectedValues.Contains(value) ? "true" : "false",
+                ["valueOn"] = "true",
+                ["valueOff"] = "false",
+                ["wrap"] = true,
+            });
         }
-
-        return new JsonObject
-        {
-            ["type"] = "Input.ChoiceSet",
-            ["id"] = id,
-            ["label"] = label,
-            ["style"] = "expanded",
-            ["isMultiSelect"] = true,
-            ["value"] = string.Join(",", selected),
-            ["choices"] = choiceArray,
-        };
     }
 
-    private static JsonObject CreateAction(string id, string title) => new()
+    private static JsonObject CreateAction(string id, string title, string? style = null)
     {
-        ["type"] = "Action.Submit",
-        ["id"] = id,
-        ["title"] = title,
-        ["data"] = new JsonObject { ["action"] = id },
-    };
+        var action = new JsonObject
+        {
+            ["type"] = "Action.Submit",
+            ["id"] = id,
+            ["title"] = title,
+            ["data"] = new JsonObject { ["action"] = id },
+        };
+
+        if (style is not null)
+        {
+            action["style"] = style;
+        }
+
+        return action;
+    }
 }
