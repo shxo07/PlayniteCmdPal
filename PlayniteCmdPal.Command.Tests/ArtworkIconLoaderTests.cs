@@ -13,42 +13,42 @@ public sealed class ArtworkIconLoaderTests
     private const string OtherId = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc";
 
     [Fact]
-    public async Task SavedPlayniteIconIsUsedAndCoverArtworkIsNeverRequested()
+    public async Task CoverArtworkIsPreferredWhenBothCandidatesDecode()
     {
-        var resolved = new ConcurrentQueue<string>();
-        var loader = CreateLoader(id =>
+        var decoded = new ConcurrentQueue<string>();
+        var loader = CreateLoader(_ => "C:\\artwork\\image.png", (path, _) =>
         {
-            resolved.Enqueue(id);
-            return "C:\\artwork\\icon.png";
-        }, (_, _) => Task.FromResult(true));
+            decoded.Enqueue(path);
+            return Task.FromResult(true);
+        });
 
         var icon = await loader.GetIconAsync(Game(cover: CoverId, icon: IconId), CancellationToken.None);
 
         Assert.NotNull(icon);
-        Assert.Equal(new[] { IconId }, resolved.ToArray());
+        Assert.Single(decoded);
     }
 
     [Fact]
-    public async Task MissingOrInvalidSavedIconDoesNotFallBackToCoverArtwork()
+    public async Task InvalidCoverFallsBackToTheGameIcon()
     {
         var resolved = new ConcurrentQueue<string>();
         var loader = CreateLoader(id =>
         {
             resolved.Enqueue(id);
-            return "C:\\artwork\\broken.ico";
-        }, (_, _) => Task.FromResult(false));
+            return id == CoverId ? "C:\\artwork\\broken.png" : "C:\\artwork\\icon.png";
+        }, (path, _) => Task.FromResult(path.EndsWith("icon.png", StringComparison.Ordinal)));
 
         var icon = await loader.GetIconAsync(Game(cover: CoverId, icon: IconId), CancellationToken.None);
 
-        Assert.Null(icon);
-        Assert.Equal(new[] { IconId }, resolved.ToArray());
+        Assert.NotNull(icon);
+        Assert.Equal(new[] { CoverId, IconId }, resolved.ToArray());
     }
 
     [Fact]
     public async Task MissingOrUndecodableArtworkReturnsNullWithoutThrowing()
     {
         var loader = CreateLoader(_ => null, (_, _) => Task.FromResult(false));
-        var icon = await loader.GetIconAsync(Game(cover: CoverId), CancellationToken.None);
+        var icon = await loader.GetIconAsync(Game(cover: CoverId, icon: IconId), CancellationToken.None);
         Assert.Null(icon);
     }
 
@@ -278,6 +278,6 @@ public sealed class ArtworkIconLoaderTests
         new(
             "11111111-1111-4111-8111-111111111111",
             "Example game",
-            IconReference: icon ?? cover,
+            IconReference: icon,
             CoverArtworkReference: cover);
 }

@@ -3,8 +3,6 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
-using System.Drawing;
-using System.Drawing.Imaging;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Threading;
@@ -184,10 +182,7 @@ public sealed class PlayniteCmdPalPlugin : GenericPlugin
 
         // Playnite's database objects are affinity-sensitive. Project on its dispatcher,
         // then serialize/flush/replace the file on a background thread.
-        using (var artwork = new ArtworkCacheGeneration(
-            _artworkCacheRoot,
-            snapshotPath: _snapshotPath,
-            convertIcoToPng: ConvertIcoToPng))
+        using (var artwork = new ArtworkCacheGeneration(_artworkCacheRoot, snapshotPath: _snapshotPath))
         {
             var projection = await _dispatcher.InvokeAsync(
                 () => CreateProjection(cancellationToken),
@@ -263,28 +258,6 @@ public sealed class PlayniteCmdPalPlugin : GenericPlugin
             catch (ArgumentException) { }
         }
         return new CatalogSnapshot(DateTimeOffset.UtcNow, games, SnapshotLimits.SchemaVersion);
-    }
-
-    private static byte[] ConvertIcoToPng(byte[] bytes)
-    {
-        // The ICO directory is validated before conversion. Bound the selected image
-        // before asking GDI+ to allocate the decoded bitmap.
-        using var input = new MemoryStream(bytes, writable: false);
-        using var icon = new Icon(input);
-        if (icon.Width is <= 0 or > 256 || icon.Height is <= 0 or > 256 ||
-            (long)icon.Width * icon.Height > 65_536)
-            throw new InvalidDataException("The ICO dimensions exceed the supported limit.");
-
-        using var bitmap = icon.ToBitmap();
-        if (bitmap.Width is <= 0 or > 256 || bitmap.Height is <= 0 or > 256 ||
-            (long)bitmap.Width * bitmap.Height > 65_536)
-            throw new InvalidDataException("The decoded ICO dimensions exceed the supported limit.");
-
-        using var output = new MemoryStream();
-        bitmap.Save(output, ImageFormat.Png);
-        if (output.Length <= 0 || output.Length > SnapshotLimits.MaxArtworkBytes)
-            throw new InvalidDataException("The converted PNG exceeds the artwork size limit.");
-        return output.ToArray();
     }
 
     private string? ResolveArtworkPath(string gameId, string? reference)

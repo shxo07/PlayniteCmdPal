@@ -12,7 +12,7 @@ This is deliberately narrower than Playnite's Game.CoverImage, Game.Icon, and Ga
 
 ## Playnite SDK evidence and input policy
 
-Playnite documents Game.CoverImage and Game.Icon as strings that may represent a local path, HTTP URL, or database file ID. Its library tutorial documents resolving database-managed image references with IGameDatabase.GetFullFilePath. Playnite's stored database reference is a game-owned relative path in the form `<game-guid>\\<file-guid>.<extension>` (for example, the game GUID directory and a generated GUID filename). The bridge accepts only exactly two canonical GUID path segments, requires the first segment to equal the owning game's ID, and permits only PNG/JPEG/GIF/WebP filename extensions. It validates this complete relative reference before calling `IGameDatabase.GetFullFilePath`; it then verifies that the resolved path is exactly the expected file beneath `<DatabasePath>\\files\\<game-guid>`. Raw paths, URLs, rooted paths, traversal segments, mismatched game directories, and mixed/extra path segments are rejected before the SDK resolver is called. The source file, game directory, and database files directory must not be reparse points.
+Playnite documents Game.CoverImage and Game.Icon as strings that may represent a local path, HTTP URL, or database file ID. Its library tutorial documents resolving database-managed image references with IGameDatabase.GetFullFilePath. Playnite's stored database reference is a game-owned relative path in the form `<game-guid>\\<file-guid>.<extension>` (for example, the game GUID directory and a generated GUID filename). The bridge accepts only exactly two canonical GUID path segments, requires the first segment to equal the owning game's ID, and permits PNG/JPEG/GIF/WebP and ICO filename extensions. ICO references are accepted only as source inputs; the producer validates the ICO directory and embedded byte ranges, decodes a bounded icon image, and converts it to PNG before it enters the cache. It validates this complete relative reference before calling `IGameDatabase.GetFullFilePath`; it then verifies that the resolved path is exactly the expected file beneath `<DatabasePath>\\files\\<game-guid>`. Raw paths, URLs, rooted paths, traversal segments, mismatched game directories, and mixed/extra path segments are rejected before the SDK resolver is called. The source file, game directory, and database files directory must not be reparse points.
 
 A missing, unresolvable, malformed, unsupported, or inaccessible reference produces a null artwork identifier. Artwork is optional; it must never make a valid game record or catalog export fail.
 
@@ -39,7 +39,7 @@ The public API documentation does **not** formally guarantee the exact serialize
 
 ## Validation and resource limits
 
-- Accepted formats: PNG, JPEG, GIF, and WebP, based on file signatures rather than filename extensions.
+- Accepted raster cache formats: PNG, JPEG, GIF, and WebP, based on file signatures rather than filename extensions. ICO is accepted only as a Playnite source format and is converted to bounded PNG by the Windows producer; raw ICO bytes are never published into the cache.
 - Maximum source file size: 5 MiB. Empty, larger, or unrecognized-signature files are skipped. Signature checks are transport validation only; they do not prove that a complete image can be decoded.
 - Maximum active cache generation size: 256 MiB. If importing another image would exceed the limit, that image is omitted; catalog export continues. During atomic replacement, the previous generation is temporarily retained for rollback, so transient disk use can approach two generations; the backup is removed immediately after commit or recovery.
 - Only regular files are accepted; reparse-point source files are rejected.
@@ -105,6 +105,7 @@ The plugin publishes the new schema to catalog-v2.json. The adapter checks the v
 | Non-GUID reference, raw path, or URL | Rejected; no filesystem access |
 | Database reference cannot be resolved | Null identifier |
 | Missing, unreadable, empty, oversized, or signature-invalid/unsupported image | Null identifier; export continues |
+| Valid ICO source | Validate directory entries and embedded byte ranges, decode within the 256×256 icon bound, convert to PNG, then hash/cache the PNG bytes |
 | Cache limit reached | Null identifier; export continues |
 | Malformed snapshot artwork identifier | Only that optional artwork field is nulled; valid game metadata and the other artwork field are retained |
 | Traversal or rooted identifier | Rejected before path resolution |
@@ -114,7 +115,7 @@ The plugin publishes the new schema to catalog-v2.json. The adapter checks the v
 
 ## Required contract tests
 
-- Valid JPEG imports produce deterministic opaque identifiers and files inside the cache root; signature tests cover the supported PNG/JPEG/GIF/WebP container markers.
+- Valid JPEG imports produce deterministic opaque identifiers and files inside the cache root; signature tests cover PNG/JPEG/GIF/WebP raster markers and bounded ICO directory entries. ICO conversion is injected/tested independently of the Windows GDI+ decoder.
 - Same bytes produce the same identifier; changed bytes produce a different identifier.
 - Missing, malformed, URL, raw-path, and non-GUID references are rejected without opening the supplied path.
 - Empty, oversized, and unknown-signature files are rejected. A signature-valid but undecodable image is a consumer-side decode failure, not a transport guarantee.
@@ -123,7 +124,7 @@ The plugin publishes the new schema to catalog-v2.json. The adapter checks the v
 - Cleanup preserves every asset referenced by the currently published snapshot and removes orphaned assets only after successful publication.
 - v1 fixtures remain readable with null artwork; v2 valid and invalid artwork fields are covered, including explicit v1 fallback only when v2 is missing.
 - Real Playnite reference grammar is covered: game GUID plus file GUID/extension; raw paths, URLs, traversal, mismatched game IDs, and unsupported extensions are rejected before SDK resolution.
-- Supported image signatures and signature-invalid/unknown containers are covered; cache path resolution accepts only digest identifiers and fixed extensions. The transport does not guarantee detection of every structurally truncated image when its outer signature markers remain valid; decoder-level validation belongs to WERD-80.
+- Supported raster signatures and signature-invalid/unknown containers are covered; ICO directory/range validation and conversion-to-PNG are covered; cache path resolution accepts only digest identifiers and fixed extensions. The transport does not guarantee detection of every structurally truncated image when its outer signature markers remain valid; decoder-level validation belongs to WERD-80.
 - A malformed or unsupported v2 file does not trigger silent v1 fallback.
 - Missing artwork never makes a valid catalog unavailable.
 

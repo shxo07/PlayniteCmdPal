@@ -38,12 +38,12 @@ Test data is generated in the test process and written to a temporary directory 
 
 | File | Covers |
 |---|---|
-| `ArtworkIconLoaderTests` | Cover-before-icon selection, fallback when cover decoding fails, missing artwork isolation, successful-result caching, bounded LRU eviction, catalog-refresh invalidation, concurrent requests sharing one decode, rejection of malformed opaque identifiers, retry after transient resolver failure, cancellation of abandoned shared work, and preservation of shared work while another caller still needs it. |
+| `ArtworkIconLoaderTests` | Saved Playnite icon is the sole UI artwork source (cover artwork is never substituted), missing/invalid icon fallback, missing artwork isolation, successful-result caching, bounded LRU eviction, catalog-refresh invalidation, concurrent requests sharing one decode, rejection of malformed opaque identifiers, retry after transient resolver failure, cancellation of abandoned shared work, and preservation of shared work while another caller still needs it. |
 
 Manual verification requires a real Playnite library and the packaged Command Palette extension:
 
-1. Search for games with distinct cover artwork and confirm each result shows the correct image, not another game's image.
-2. Check games with no cover but a valid icon; confirm the icon is used. Check games with neither image, a missing cache file, and an unreadable/unsupported image; confirm a consistent fallback appears and search/launch still work.
+1. Search for games with saved Playnite icons and confirm each result shows the matching icon, including games that are not installed. Confirm cover artwork is never substituted for a missing icon.
+2. Check games with no saved icon, a missing cache file, and an unreadable/unsupported image; confirm a consistent fallback appears and search/launch still work. Include an ICO-backed icon and confirm the companion plugin converts it to PNG before publication.
 3. Keep a search query open while the catalog refreshes after changing a game's artwork in Playnite. Confirm the new image appears and the previous image is not reused.
 4. Confirm typing remains responsive while images load; rapidly change the query and confirm obsolete artwork work is cancelled, artwork from the earlier query never appears in newer results, and the latest query is not delayed by an obsolete queue.
 5. Confirm Enter still launches the selected game and source, platform, installed state, duplicate-title disambiguation, and More actions remain intact.
