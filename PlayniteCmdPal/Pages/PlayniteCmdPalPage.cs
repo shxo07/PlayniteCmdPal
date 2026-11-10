@@ -270,14 +270,19 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage
 
     private void OnFavoritesChanged(object? sender, EventArgs e)
     {
-        // Always post to the UI thread message queue so the refresh runs after the command
-        // invocation that raised FavoritesChanged completes (and the toast is shown). Never
-        // call BeginSearch() synchronously from within the event handler, as it runs inside
-        // ToggleFavoriteCommand.Invoke() and would nest host notifications inside command
-        // dispatch, suppressing the toast.
-        void refresh() => BeginSearch();
-        _uiContext?.Post(_ => refresh(), null);
-        if (_uiContext is null) refresh();
+        // Defer the refresh until after ToggleFavoriteCommand.Invoke() returns and the
+        // toast is shown. await Task.Delay(50) without ConfigureAwait(false) resumes the
+        // continuation on the captured UI synchronization context so RaiseItemsChanged is
+        // processed by the Command Palette host. Never call BeginSearch() synchronously
+        // from within the event handler, as it runs inside ToggleFavoriteCommand.Invoke()
+        // and would nest host notifications inside command dispatch, suppressing the toast.
+        _ = RefreshAfterFavoriteChangeAsync();
+    }
+
+    private async Task RefreshAfterFavoriteChangeAsync()
+    {
+        await Task.Delay(50);
+        BeginSearch();
     }
 
     private async Task LoadArtworkAsync(
