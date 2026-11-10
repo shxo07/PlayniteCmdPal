@@ -49,25 +49,48 @@ internal sealed partial class AdvancedFiltersForm : FormContent
 
     public override CommandResult SubmitForm(string inputs, string data)
     {
-        var actionId = ReadActionId(data);
+        // Only explicit, well-formed actions may change draft or applied filter state.
+        // A missing or malformed action must never be interpreted as Apply.
+        if (!TryReadActionId(data, out var actionId))
+        {
+            return CommandResult.KeepOpen();
+        }
 
         if (actionId.StartsWith("toggle-status:", StringComparison.Ordinal))
         {
-            Toggle(_selectedStatuses, actionId["toggle-status:".Length..]);
+            var status = actionId["toggle-status:".Length..];
+            if (status is not ("installed" or "not-installed"))
+            {
+                return CommandResult.KeepOpen();
+            }
+
+            Toggle(_selectedStatuses, status);
             RebuildTemplate();
             return CommandResult.KeepOpen();
         }
 
         if (actionId.StartsWith("toggle-source:", StringComparison.Ordinal))
         {
-            Toggle(_selectedSources, Uri.UnescapeDataString(actionId["toggle-source:".Length..]));
+            var source = Uri.UnescapeDataString(actionId["toggle-source:".Length..]);
+            if (!_state.Sources.Contains(source, StringComparer.OrdinalIgnoreCase))
+            {
+                return CommandResult.KeepOpen();
+            }
+
+            Toggle(_selectedSources, source);
             RebuildTemplate();
             return CommandResult.KeepOpen();
         }
 
         if (actionId.StartsWith("toggle-platform:", StringComparison.Ordinal))
         {
-            Toggle(_selectedPlatforms, Uri.UnescapeDataString(actionId["toggle-platform:".Length..]));
+            var platform = Uri.UnescapeDataString(actionId["toggle-platform:".Length..]);
+            if (!_state.Platforms.Contains(platform, StringComparer.OrdinalIgnoreCase))
+            {
+                return CommandResult.KeepOpen();
+            }
+
+            Toggle(_selectedPlatforms, platform);
             RebuildTemplate();
             return CommandResult.KeepOpen();
         }
@@ -99,31 +122,49 @@ internal sealed partial class AdvancedFiltersForm : FormContent
                 _state.ClearAll();
                 break;
             case "apply":
-            default:
                 _state.SetInstalledStatuses(_selectedStatuses.Select(ToInstalledStatus));
                 _state.SetSources(_selectedSources);
                 _state.SetPlatforms(_selectedPlatforms);
                 break;
+            default:
+                // Do not apply filters or close the page for an unknown action.
+                return CommandResult.KeepOpen();
         }
 
+        // Keep the refresh deferred until after the form command has returned its
+        // navigation result, matching the existing Command Palette lifecycle.
         _ = System.Threading.Tasks.Task.Run(_filtersApplied);
         return CommandResult.GoBack();
     }
 
-    private static string ReadActionId(string data)
+    private static bool TryReadActionId(string data, out string actionId)
     {
+        actionId = string.Empty;
         if (string.IsNullOrWhiteSpace(data))
         {
-            return "apply";
+            return false;
         }
 
         try
         {
-            return JsonNode.Parse(data)?["action"]?.ToString() ?? "apply";
+            if (JsonNode.Parse(data) is not JsonObject values
+                || values["action"] is not JsonValue actionValue
+                || !actionValue.TryGetValue<string>(out var parsedAction)
+                || string.IsNullOrWhiteSpace(parsedAction))
+            {
+                return false;
+            }
+
+            actionId = parsedAction;
+            return true;
         }
         catch (JsonException)
         {
-            return "apply";
+            return false;
+        }
+        catch (InvalidOperationException)
+        {
+            return false;
         }
     }
 
