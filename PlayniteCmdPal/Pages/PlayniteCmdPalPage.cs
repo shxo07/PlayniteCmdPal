@@ -20,6 +20,7 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage
     private readonly FavoritesStore _favorites = FavoritesPreferences.Store;
     private readonly ArtworkIconLoader _artwork = new(artworkId => PlayniteCatalogAdapter.ResolveArtworkPath(artworkId));
     private readonly EventHandler _favoritesChangedHandler;
+    private readonly SynchronizationContext? _uiContext;
     private IListItem[] _items = [CreateStatusItem("Loading your Playnite library…")];
     private CancellationTokenSource? _searchCancellation;
     private string _searchText = string.Empty;
@@ -28,6 +29,11 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage
 
     public PlayniteCmdPalPage()
     {
+        // Capture the UI synchronization context so cross-thread notifications
+        // (artwork loading, deferred favorites refresh) can be marshaled back
+        // to the UI thread where the Command Palette host processes them.
+        _uiContext = SynchronizationContext.Current;
+
         Icon = IconHelpers.FromRelativePath("Assets\\StoreLogo.png");
         Title = "Playnite";
         Name = "Search games";
@@ -35,8 +41,7 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage
         // Keep Search Games in sync when a game is pinned or unpinned from any page.
         // Capture this page weakly so the shared store cannot retain retired pages.
         var weakSelf = new WeakReference<PlayniteCmdPalPage>(this);
-        EventHandler weakHandler = null!;
-        weakHandler = (sender, args) =>
+        EventHandler weakHandler = (sender, args) =>
         {
             if (weakSelf.TryGetTarget(out var page))
             {
@@ -63,6 +68,26 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage
         lock (_requestGate) return _items;
     }
 
+    /// <summary>
+    /// Raises the items-changed notification on the UI synchronization context when one was
+    /// captured and we are not already on it. Falls back to a direct call when already on the
+    /// UI context or when no context was captured. This ensures the Command Palette host
+    /// processes notifications regardless of which thread calls them.
+    /// </summary>
+    private void RaiseItemsChangedOnUIContext(int count)
+    {
+        void raise() => RaiseItemsChanged(count);
+        if (_uiContext is { } context &&
+            !ReferenceEquals(context, SynchronizationContext.Current))
+        {
+            context.Post(_ => raise(), null);
+        }
+        else
+        {
+            raise();
+        }
+    }
+
     internal void RefreshCatalog()
     {
         BeginSearch(forceRefresh: true);
@@ -73,6 +98,7 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage
         int version;
         string query;
         CancellationToken cancellationToken;
+        int count;
 
         lock (_requestGate)
         {
@@ -90,10 +116,11 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage
             cancellationToken = _searchCancellation.Token;
 
             _items = [CreateStatusItem("Searching your Playnite library…")];
+            count = _items.Length;
         }
 
         // Notify outside the request lock: the host may synchronously re-enter GetItems.
-        RaiseItemsChanged(_items.Length);
+        RaiseItemsChangedOnUIContext(count);
         _ = LoadItemsAsync(version, query, forceRefresh, cancellationToken);
     }
 
@@ -131,7 +158,7 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage
                 count = _items.Length;
             }
 
-            RaiseItemsChanged(count);
+            RaiseItemsChangedOnUIContext(count);
             _ = LoadArtworkAsync(version, built.ArtworkItems, cancellationToken);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -151,7 +178,7 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage
             }
 
             count = _items.Length;
-            RaiseItemsChanged(count);
+            RaiseItemsChangedOnUIContext(count);
         }
     }
 
@@ -243,10 +270,14 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage
 
     private void OnFavoritesChanged(object? sender, EventArgs e)
     {
-        // The store raises FavoritesChanged on the caller's thread. When triggered from
-        // ToggleFavoriteCommand.Invoke that is the UI thread, so the synchronous reload
-        // below notifies the host from the UI thread where it can process the update.
-        BeginSearch();
+        // Always post to the UI thread message queue so the refresh runs after the command
+        // invocation that raised FavoritesChanged completes (and the toast is shown). Never
+        // call BeginSearch() synchronously from within the event handler, as it runs inside
+        // ToggleFavoriteCommand.Invoke() and would nest host notifications inside command
+        // dispatch, suppressing the toast.
+        void refresh() => BeginSearch();
+        _uiContext?.Post(_ => refresh(), null);
+        if (_uiContext is null) refresh();
     }
 
     private async Task LoadArtworkAsync(
@@ -283,7 +314,10 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage
                             itemsCount = _items.Length;
                         }
 
-                        if (updated) RaiseItemsChanged(itemsCount);
+                        if (updated)
+                        {
+                            RaiseItemsChangedOnUIContext(itemsCount);
+                        }
                     }
                     catch (OperationCanceledException) when (token.IsCancellationRequested)
                     {
