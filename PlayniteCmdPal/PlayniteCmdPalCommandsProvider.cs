@@ -39,8 +39,9 @@ public partial class PlayniteCmdPalCommandsProvider : CommandProvider
         public RefreshRecentlyPlayedCommand(PlayniteCmdPalRecentlyPlayedPage page)
         {
             _page = page;
-            Name = "Refresh Playnite catalog";
         }
+
+        public override string Name => "Refresh Playnite catalog";
 
         public override CommandResult Invoke()
         {
