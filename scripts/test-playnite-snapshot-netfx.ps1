@@ -110,7 +110,9 @@ try {
     $v2Arguments[2] = 2
     $v2Snapshot = $snapshotConstructor.Invoke($v2Arguments)
     $v2Path = Join-Path $directory 'catalog-v2.json'
-    $publisherType::PublishAsync([string]$v2Path, $v2Snapshot, [Threading.CancellationToken]::None).GetAwaiter().GetResult()
+    # The three-argument compatibility overload intentionally publishes schema v1.
+    # Exercise the explicit v2 contract so artwork IDs and LastActivity are included.
+    $publisherType::PublishAsync([string]$v2Path, $v2Snapshot, [Threading.CancellationToken]::None, 2, $true).GetAwaiter().GetResult()
     $v2Text = [Text.Encoding]::UTF8.GetString([IO.File]::ReadAllBytes($v2Path))
     $v2Json = $v2Text | ConvertFrom-Json
     # Windows PowerShell 5.1 automatically coerces ISO-8601 JSON strings to
@@ -123,7 +125,8 @@ try {
         $v2Json.games[0].iconArtworkId -ne $artworkId -or
         $null -eq $v2Json.games[0].PSObject.Properties['lastActivity'] -or
         $v2Text -notmatch $lastActivityPattern) {
-        $actualLastActivity = if ($v2Json.games.Count -gt 0) { $v2Json.games[0].lastActivity } else { '<missing game>' }
+        $lastActivityProperty = if (@($v2Json.games).Count -gt 0) { $v2Json.games[0].PSObject.Properties['lastActivity'] } else { $null }
+        $actualLastActivity = if ($null -ne $lastActivityProperty) { $lastActivityProperty.Value } else { '<missing property>' }
         throw "The schema v2 artwork snapshot did not round-trip through the .NET Framework publisher. Actual lastActivity: '$actualLastActivity'. Raw JSON: $v2Text"
     }
 
