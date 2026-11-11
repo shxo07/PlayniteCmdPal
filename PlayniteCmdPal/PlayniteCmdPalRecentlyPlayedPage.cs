@@ -130,7 +130,6 @@ internal sealed partial class PlayniteCmdPalRecentlyPlayedPage : DynamicListPage
             {
                 var lastActivity = game.LastActivity!.Value;
                 var relativeTime = PlayniteCmdPal.Core.RecentlyPlayedGames.FormatRelativeLastPlayed(lastActivity, DateTimeOffset.Now);
-                var absoluteTime = PlayniteCmdPal.Core.RecentlyPlayedGames.FormatAbsoluteLastPlayed(lastActivity, TimeZoneInfo.Local);
                 var metadata = new List<string>();
                 if (!string.IsNullOrWhiteSpace(game.Source)) metadata.Add(game.Source);
                 if (!string.IsNullOrWhiteSpace(game.Platform)) metadata.Add(game.Platform);
@@ -148,7 +147,6 @@ internal sealed partial class PlayniteCmdPalRecentlyPlayedPage : DynamicListPage
                     [
                         new Tag(relativeTime)
                         {
-                            ToolTip = $"Last played {absoluteTime} (local time)",
                         },
                     ],
                     MoreCommands = [CreateRefreshContextItem()],

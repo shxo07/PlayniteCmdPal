@@ -78,31 +78,6 @@ public sealed class RecentlyPlayedGamesTests
 
 
     [Fact]
-    public void FormatsUtcAndLocalValuesInTheSameExplicitDisplayZone()
-    {
-        var displayZone = TimeZoneInfo.CreateCustomTimeZone(
-            "Test/UTC+04", TimeSpan.FromHours(4), "Test UTC+04", "Test UTC+04");
-        var utc = new DateTime(2026, 10, 30, 11, 0, 0, DateTimeKind.Utc);
-        var local = utc.ToLocalTime();
-
-        Assert.Equal("2026-10-30 15:00:00", RecentlyPlayedGames.FormatAbsoluteLastPlayed(utc, displayZone));
-        Assert.Equal("2026-10-30 15:00:00", RecentlyPlayedGames.FormatAbsoluteLastPlayed(local, displayZone));
-    }
-
-    [Fact]
-    public void FormatsUnspecifiedValuesUsingTheDocumentedLocalMachinePolicy()
-    {
-        var displayZone = TimeZoneInfo.CreateCustomTimeZone(
-            "Test/UTC+04", TimeSpan.FromHours(4), "Test UTC+04", "Test UTC+04");
-        var localWallClock = new DateTime(2026, 10, 30, 11, 0, 0, DateTimeKind.Local);
-        var unspecified = DateTime.SpecifyKind(localWallClock, DateTimeKind.Unspecified);
-
-        Assert.Equal(
-            RecentlyPlayedGames.FormatAbsoluteLastPlayed(localWallClock, displayZone),
-            RecentlyPlayedGames.FormatAbsoluteLastPlayed(unspecified, displayZone));
-    }
-
-    [Fact]
     public void FormatsRelativeTimesAcrossUnitsAndUsesFutureWording()
     {
         var now = new DateTimeOffset(2026, 11, 11, 12, 0, 0, TimeSpan.Zero);

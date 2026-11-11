@@ -65,20 +65,6 @@ public static class RecentlyPlayedGames
     }
 
     /// <summary>
-    /// Formats the exact local wall-clock timestamp for a hover tooltip. The offset is
-    /// intentionally omitted; the tooltip labels the value as local time.
-    /// </summary>
-    public static string FormatAbsoluteLastPlayed(DateTime lastActivity, TimeZoneInfo displayTimeZone)
-    {
-        if (displayTimeZone is null) throw new ArgumentNullException(nameof(displayTimeZone));
-
-        var utc = lastActivity.ToUniversalTime();
-        var instant = new DateTimeOffset(DateTime.SpecifyKind(utc, DateTimeKind.Utc));
-        return TimeZoneInfo.ConvertTime(instant, displayTimeZone)
-            .ToString("yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture);
-    }
-
-    /// <summary>
     /// Keeps status and recovery items visible while applying search only to game entries.
     /// </summary>
     public static IReadOnlyList<T> ComposeVisibleItems<T>(

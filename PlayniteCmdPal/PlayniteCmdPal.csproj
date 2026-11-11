@@ -20,7 +20,7 @@
     <AppxHarvestWinmdRegistration>false</AppxHarvestWinmdRegistration>
     <AppxPackageIdentityName>werdscopez7347.PlayniteforCommandPalette</AppxPackageIdentityName>
     <AppxPackagePublisher>CN=B5EE8A57-B227-4726-A4E9-AF40E9D47E70</AppxPackagePublisher>
-    <AppxPackageVersion>0.0.7.0</AppxPackageVersion>
+    <AppxPackageVersion>0.0.8.0</AppxPackageVersion>
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
