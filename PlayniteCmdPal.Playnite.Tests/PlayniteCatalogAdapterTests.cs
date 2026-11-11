@@ -432,6 +432,39 @@ public sealed class PlayniteCatalogAdapterTests : IDisposable
     }
 
     [Fact]
+    public async Task RetriesV2RevalidationWhenPublicationFinishesAfterTheFirstRetry()
+    {
+        var enrichedPath = Path.Combine(_directory, "catalog-v2.json");
+        var legacyPath = Path.Combine(_directory, "catalog-v1.json");
+        var oldV2 = await ParseSnapshotAsync(new CatalogSnapshot(
+            _time.GetUtcNow() - TimeSpan.FromMinutes(1),
+            new[] { new SnapshotGame(GameA, "Old enriched", true, lastActivity: new DateTime(2026, 10, 29, 8, 0, 0)) }),
+            schemaVersion: 2, includeLastActivity: true);
+        var newV1 = await ParseSnapshotAsync(new CatalogSnapshot(
+            _time.GetUtcNow(),
+            new[] { new SnapshotGame(GameA, "New export", true) }));
+        var newV2 = await ParseSnapshotAsync(new CatalogSnapshot(
+            _time.GetUtcNow(),
+            new[] { new SnapshotGame(GameA, "New export", true, lastActivity: new DateTime(2026, 10, 30, 10, 0, 0, DateTimeKind.Utc)) }),
+            schemaVersion: 2, includeLastActivity: true);
+        var enrichedReads = 0;
+
+        Task<CatalogSnapshotParseResult> ReadPathAsync(string path)
+        {
+            if (path == enrichedPath)
+                return Task.FromResult(Interlocked.Increment(ref enrichedReads) < 3 ? oldV2 : newV2);
+            return Task.FromResult(newV1);
+        }
+
+        var adapter = new PlayniteCatalogAdapter(enrichedPath, legacyPath, _time, ReadPathAsync);
+        var result = await adapter.GetAsync();
+
+        Assert.Equal(3, enrichedReads);
+        Assert.Equal("New export", Assert.Single(result.Games).Title);
+        Assert.NotNull(result.Games[0].LastActivity);
+    }
+
+    [Fact]
     public async Task RevalidatesInitiallyMissingV2BeforeFallingBackToLegacy()
     {
         var enrichedPath = Path.Combine(_directory, "catalog-v2.json");

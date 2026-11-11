@@ -316,20 +316,39 @@ public sealed class PlayniteCatalogAdapter : IReadOnlyPlayniteCatalog
         if (preferred.Snapshot is null)
         {
             // v2 may have been atomically published while the legacy file was read.
-            var revalidated = await _readPathAsync(_snapshotPath).ConfigureAwait(false);
-            return revalidated.Snapshot is not null ? revalidated : legacy;
+            // Accept it only when it is at least as new as the v1 candidate.
+            var revalidated = await RevalidatePreferredAsync(legacy.Snapshot.GeneratedAtUtc).ConfigureAwait(false);
+            return revalidated ?? legacy;
         }
 
         if (legacy.Snapshot.GeneratedAtUtc <= preferred.Snapshot.GeneratedAtUtc)
             return preferred;
 
-        // A newer v1 indicates a rollback or overlapping publication. Re-read v2
-        // before selecting a generation so a just-published v2 is not missed.
-        var revalidatedPreferred = await _readPathAsync(_snapshotPath).ConfigureAwait(false);
-        return revalidatedPreferred.Snapshot is not null &&
-               revalidatedPreferred.Snapshot.GeneratedAtUtc >= legacy.Snapshot.GeneratedAtUtc
-            ? revalidatedPreferred
-            : legacy;
+        // A newer v1 indicates a rollback or overlapping publication. Give the
+        // v1-then-v2 producer a bounded window to finish publishing its matching v2.
+        var revalidatedPreferred = await RevalidatePreferredAsync(legacy.Snapshot.GeneratedAtUtc).ConfigureAwait(false);
+        return revalidatedPreferred ?? legacy;
+    }
+
+    private async Task<CatalogSnapshotParseResult?> RevalidatePreferredAsync(DateTimeOffset minimumGeneratedAtUtc)
+    {
+        const int maximumAttempts = 3;
+        var retryDelay = TimeSpan.FromMilliseconds(25);
+
+        for (var attempt = 0; attempt < maximumAttempts; attempt++)
+        {
+            if (attempt > 0)
+                await Task.Delay(retryDelay).ConfigureAwait(false);
+
+            var candidate = await _readPathAsync(_snapshotPath).ConfigureAwait(false);
+            if (candidate.Snapshot is { } snapshot &&
+                snapshot.GeneratedAtUtc >= minimumGeneratedAtUtc)
+            {
+                return candidate;
+            }
+        }
+
+        return null;
     }
 
     private static async Task<CatalogSnapshotParseResult> ReadPathAsync(string path)
