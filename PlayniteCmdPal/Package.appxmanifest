@@ -11,7 +11,7 @@
   <Identity
     Name="werdscopez7347.PlayniteforCommandPalette"
     Publisher="CN=B5EE8A57-B227-4726-A4E9-AF40E9D47E70"
-    Version="0.0.3.0" />
+    Version="0.0.4.0" />
 
   <Properties>
     <DisplayName>PlayniteCmdPal</DisplayName>
