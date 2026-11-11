@@ -182,12 +182,6 @@ internal sealed partial class AdvancedFiltersForm : FormContent
     {
         var body = new JsonArray
         {
-            new JsonObject
-            {
-                ["type"] = "TextBlock",
-                ["text"] = "Choose any combination. Values within a section are combined with OR; sections are combined with AND.",
-                ["wrap"] = true,
-            },
             CreateSectionHeading("Installed status"),
             CreateChoiceAction("toggle-status:installed", "Installed", _selectedStatuses.Contains("installed")),
             CreateChoiceAction("toggle-status:not-installed", "Not installed", _selectedStatuses.Contains("not-installed")),
