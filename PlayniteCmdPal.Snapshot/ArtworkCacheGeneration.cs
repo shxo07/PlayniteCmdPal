@@ -61,55 +61,110 @@ public sealed class ArtworkCacheGeneration : IDisposable
         Directory.CreateDirectory(_staging);
     }
 
-    public string? TryImport(string gameId, string? databaseReference, string? resolvedPath, string databaseFilesRoot)
+    public string? TryImport(
+        string gameId,
+        string? databaseReference,
+        string? resolvedPath,
+        string databaseFilesRoot,
+        Action<string>? diagnostic = null)
     {
+        void Report(string stage, string detail)
+        {
+            if (diagnostic is null) return;
+            try { diagnostic($"stage={stage}; {detail}"); }
+            catch { /* Diagnostics must never change artwork-import behavior. */ }
+        }
+
+        string? Reject(string stage, string detail)
+        {
+            Report(stage, detail);
+            return null;
+        }
+
         // Once cleanup has failed, the staging directory may contain unaccounted bytes.
         // Fail closed immediately; no later import may add more data to this generation.
-        if (_cleanupFailure) return null;
-        if (!TryValidateReference(gameId, databaseReference, out var fileName) || string.IsNullOrWhiteSpace(resolvedPath))
-            return null;
+        if (_cleanupFailure)
+            return Reject("staging", "A previous import failed to clean up its temporary files.");
+
+        if (!TryValidateReference(gameId, databaseReference, out var fileName))
+            return Reject("reference-validation", $"The Playnite database reference is invalid. gameId='{gameId}', reference='{databaseReference ?? "<null>"}'.");
+
+        if (string.IsNullOrWhiteSpace(resolvedPath))
+            return Reject("path-resolution", $"Playnite did not resolve the artwork reference. gameId='{gameId}', reference='{databaseReference}'.");
+
         try
         {
             var filesRoot = Path.GetFullPath(databaseFilesRoot);
             var expected = Path.GetFullPath(Path.Combine(filesRoot, gameId, fileName));
             var actual = Path.GetFullPath(resolvedPath);
-            if (!string.Equals(expected, actual, StringComparison.OrdinalIgnoreCase)) return null;
+            if (!string.Equals(expected, actual, StringComparison.OrdinalIgnoreCase))
+                return Reject("path-validation", $"Resolved path does not match the expected database path. expected='{expected}', actual='{actual}'.");
 
-            var gameDirectory = new DirectoryInfo(Path.Combine(filesRoot, gameId));
-            var source = new FileInfo(actual);
             var filesDirectory = new DirectoryInfo(filesRoot);
-            if (!filesDirectory.Exists || (filesDirectory.Attributes & FileAttributes.ReparsePoint) != 0 ||
-                !gameDirectory.Exists || (gameDirectory.Attributes & FileAttributes.ReparsePoint) != 0 ||
-                !source.Exists || (source.Attributes & FileAttributes.ReparsePoint) != 0 ||
-                source.Length <= 0 || source.Length > _maxArtworkBytes) return null;
+            if (!filesDirectory.Exists)
+                return Reject("filesystem-validation", $"Playnite files directory does not exist: '{filesRoot}'.");
+            if ((filesDirectory.Attributes & FileAttributes.ReparsePoint) != 0)
+                return Reject("filesystem-validation", $"Playnite files directory is a reparse point: '{filesRoot}'.");
+
+            var gameDirectoryPath = Path.Combine(filesRoot, gameId);
+            var gameDirectory = new DirectoryInfo(gameDirectoryPath);
+            if (!gameDirectory.Exists)
+                return Reject("filesystem-validation", $"Game artwork directory does not exist: '{gameDirectoryPath}'.");
+            if ((gameDirectory.Attributes & FileAttributes.ReparsePoint) != 0)
+                return Reject("filesystem-validation", $"Game artwork directory is a reparse point: '{gameDirectoryPath}'.");
+
+            var source = new FileInfo(actual);
+            if (!source.Exists)
+                return Reject("filesystem-validation", $"Artwork file does not exist: '{actual}'.");
+            if ((source.Attributes & FileAttributes.ReparsePoint) != 0)
+                return Reject("filesystem-validation", $"Artwork file is a reparse point: '{actual}'.");
+            if (source.Length <= 0 || source.Length > _maxArtworkBytes)
+                return Reject("size-validation", $"Artwork file size {source.Length} is outside the allowed range 1..{_maxArtworkBytes} bytes. path='{actual}'.");
 
             byte[] bytes;
             using (var input = new FileStream(actual, FileMode.Open, FileAccess.Read, FileShare.Read))
             using (var output = new MemoryStream())
             {
-                if ((File.GetAttributes(actual) & FileAttributes.ReparsePoint) != 0) return null;
+                if ((File.GetAttributes(actual) & FileAttributes.ReparsePoint) != 0)
+                    return Reject("filesystem-validation", $"Artwork file became a reparse point before it was read: '{actual}'.");
+
                 var buffer = new byte[16 * 1024];
                 while (true)
                 {
                     var read = input.Read(buffer, 0, buffer.Length);
                     if (read == 0) break;
-                    if (output.Length + read > _maxArtworkBytes) return null;
+                    if (output.Length + read > _maxArtworkBytes)
+                        return Reject("size-validation", $"Artwork file exceeded the {_maxArtworkBytes}-byte limit while being read. path='{actual}'.");
                     output.Write(buffer, 0, read);
                 }
                 bytes = output.ToArray();
             }
 
-            if (!TryDetectFormat(bytes, out var extension)) return null;
+            if (!TryDetectFormat(bytes, out var extension))
+                return Reject("format-validation", $"File signature is not a supported image format. path='{actual}', bytes={bytes.Length}.");
+
             if (string.Equals(extension, ".ico", StringComparison.Ordinal))
             {
-                if (_convertIcoToPng is null) return null;
-                try { bytes = _convertIcoToPng(bytes); }
-                catch (Exception) { return null; }
+                if (_convertIcoToPng is null)
+                    return Reject("ico-conversion", $"ICO conversion delegate is not configured. path='{actual}'.");
 
-                if (bytes.Length <= 0 || bytes.Length > _maxArtworkBytes ||
-                    !TryDetectFormat(bytes, out extension) ||
-                    !string.Equals(extension, ".png", StringComparison.Ordinal))
-                    return null;
+                try
+                {
+                    bytes = _convertIcoToPng(bytes);
+                }
+                catch (Exception ex)
+                {
+                    return Reject("ico-conversion", $"ICO-to-PNG conversion threw {ex.GetType().FullName}: {ex.Message}. path='{actual}'. Full exception: {ex}");
+                }
+
+                if (bytes.Length <= 0 || bytes.Length > _maxArtworkBytes)
+                    return Reject("converted-png-validation", $"Converted PNG size {bytes.Length} is outside the allowed range 1..{_maxArtworkBytes} bytes. path='{actual}'.");
+
+                if (!TryDetectFormat(bytes, out extension))
+                    return Reject("converted-png-validation", $"Converted ICO output has an unrecognized image signature. path='{actual}'.");
+
+                if (!string.Equals(extension, ".png", StringComparison.Ordinal))
+                    return Reject("converted-png-validation", $"ICO converter returned '{extension}' instead of PNG. path='{actual}'.");
             }
 
             string digest;
@@ -118,7 +173,9 @@ public sealed class ArtworkCacheGeneration : IDisposable
             var destination = Path.Combine(_staging, digest + extension);
             if (!Extensions.Any(ext => File.Exists(Path.Combine(_staging, digest + ext))))
             {
-                if (_bytes + bytes.Length > _maxCacheBytes) return null;
+                if (_bytes + bytes.Length > _maxCacheBytes)
+                    return Reject("cache-capacity", $"Import would exceed the {_maxCacheBytes}-byte cache limit. stagedBytes={_bytes}, incomingBytes={bytes.Length}, path='{actual}'.");
+
                 var temporary = destination + "." + Guid.NewGuid().ToString("N") + ".tmp";
                 try
                 {
@@ -141,7 +198,6 @@ public sealed class ArtworkCacheGeneration : IDisposable
                     }
                     catch
                     {
-                        // An inaccessible path is not evidence that cleanup succeeded.
                         cleanupVerified = false;
                     }
 
@@ -155,7 +211,7 @@ public sealed class ArtworkCacheGeneration : IDisposable
                                    ex is ArgumentException || ex is NotSupportedException ||
                                    ex is System.Security.SecurityException)
         {
-            return null;
+            return Reject("filesystem-or-path-exception", $"{ex.GetType().FullName}: {ex.Message}. reference='{databaseReference}', resolvedPath='{resolvedPath}', filesRoot='{databaseFilesRoot}'. Full exception: {ex}");
         }
     }
 
