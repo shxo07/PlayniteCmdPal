@@ -1,6 +1,6 @@
 # Artwork transport and trust boundary
 
-Status: Implementation in review. Automated checks must be rerun against the final PR head; live Playnite verification remains pending.
+Status: WERD-71 transport contract retained; WERD-80 consumer integration is implemented on its PR branch. Automated checks passed on the reviewed head. One real-library ICO-backed Steam entry was verified on 2026-11-11; broader manual coverage remains pending.
 
 ## Decision
 
@@ -101,7 +101,7 @@ The plugin publishes the new schema to catalog-v2.json. The adapter checks the v
 
 | Condition | Result |
 | --- | --- |
-| No cover/icon reference | Null identifier; game remains in catalog |
+| No saved per-game icon reference | Null iconArtworkId; game remains in catalog and the UI uses its neutral symbol |
 | Non-GUID reference, raw path, or URL | Rejected; no filesystem access |
 | Database reference cannot be resolved | Null identifier |
 | Missing, unreadable, empty, oversized, or signature-invalid/unsupported image | Null identifier; export continues |
@@ -131,3 +131,20 @@ The plugin publishes the new schema to catalog-v2.json. The adapter checks the v
 ## Non-goals
 
 No third-party artwork downloads, storefront scraping, cloud hosting, network listener, IPC, Playnite database writes, arbitrary file access, or Command Palette artwork UI changes. WERD-80 owns UI rendering, asynchronous/cancellable loading, bounded decoded-image caching, image fallback, and DPI verification.
+
+## WERD-80 consumer contract: saved icon only
+
+WERD-80 consumes this transport without widening its trust boundary.
+
+- The Command Palette uses only the per-game iconArtworkId for result artwork. coverArtworkId remains part of the shared v2 transport for compatibility with the earlier transport contract, but it is not a fallback candidate for Search or Favorites UI.
+- A missing, invalid, unreadable, unsupported, or undecodable icon produces the existing neutral game symbol. It does not trigger a cover/background/launcher-art lookup and does not invalidate the game record, search result, or launch action.
+- The producer reads Game.Icon from Playnite metadata. It does not inspect install directories or executable resources; installed and uninstalled entries are eligible under the same rule.
+- ICO remains source-only. The producer validates the ICO container, applies the 256×256 icon bound, converts it to PNG, validates the converted PNG signature and size, and only then computes the content digest and publishes the PNG.
+- The consumer performs image resolution and decoding asynchronously, with bounded concurrency and successful-result caching. Catalog refresh invalidates stale resolutions; transient failures are not treated as permanent missing-artwork facts.
+- The existing 5 MiB source-file limit, 256 MiB active cache-generation limit, opaque digest rules, atomic generation publication, read-only consumer, and path/reparse-point checks remain unchanged.
+
+### WERD-80 real-library evidence
+
+On 2026-11-11, one installed Steam library entry with a saved ICO-backed Playnite icon completed the end-to-end path: Playnite resolved the saved icon path; the producer converted the ICO to PNG; the snapshot contained the resulting SHA-256 identifier; the matching PNG existed in the bridge cache; and the maintainer confirmed the icon appeared in Command Palette after loading the updated extension/catalog.
+
+This is one real-library regression case, not a claim that all library entries or all image formats have been manually verified. Uninstalled-game behavior, icon replacement/refresh, additional formats, and normal/high-DPI display checks remain outstanding manual scenarios.
