@@ -12,7 +12,7 @@ namespace PlayniteCmdPal;
 
 internal sealed partial class FavoritesPage : DynamicListPage
 {
-    private readonly IReadOnlyPlayniteCatalog _catalog = new PlayniteCatalogAdapter();
+    private readonly PlayniteCatalogAdapter _catalog = new();
     private readonly FavoritesStore _favorites = FavoritesPreferences.Store;
     private readonly ArtworkIconLoader _artwork = new(artworkId => PlayniteCatalogAdapter.ResolveArtworkPath(artworkId));
     private readonly LatestRequestGate _requestGate = new();
@@ -255,6 +255,6 @@ internal sealed partial class FavoritesPage : DynamicListPage
         return string.Join(" · ", metadata);
     }
 
-    private static IListItem CreateStatusItem(string message) =>
+    private static ListItem CreateStatusItem(string message) =>
         new ListItem(new NoOpCommand()) { Title = message };
 }

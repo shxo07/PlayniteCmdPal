@@ -28,7 +28,7 @@ Microsoft Store handles production signing for Store-distributed MSIX packages a
 ## 3. Release version and package identity
 
 - Keep the public version in Semantic Versioning form and map it to the four-part MSIX version. For example, SemVer `0.0.3` maps to MSIX `0.0.3.0`.
-- The current manifest is `0.0.3.0`; do not increment it merely for this documentation change.
+- The current WERD-74 development package version is `0.0.5.0` in both the manifest and project. Keep those declarations synchronized; public release versions must still follow the maintainer-approved release process.
 - The Partner Center identity supplied by the maintainer is applied in `PlayniteCmdPal/Package.appxmanifest`: Name `werdscopez7347.PlayniteforCommandPalette`, Publisher `CN=B5EE8A57-B227-4726-A4E9-AF40E9D47E70`, and PublisherDisplayName `werdscopez7347`.
 - Keep the manifest version, evaluated package version, Store submission version, and release tag aligned.
 - Microsoft Store performs production signing for Store-distributed packages. Follow [Microsoft Store package identity and MSIX signing](MSIX-SIGNING.md) for the identity record, Store-managed signing model, package validation, and submission evidence.

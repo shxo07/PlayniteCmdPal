@@ -30,7 +30,7 @@ public sealed class PlayniteCatalogAdapterPolicyTests : IDisposable
     }
 
     [Fact]
-    public void DefaultSnapshotPathIsUnderLocalAppDataAndNamedForSchemaOne()
+    public void DefaultSnapshotPathIsUnderLocalAppDataAndNamedForSchemaTwo()
     {
         var path = PlayniteCatalogAdapter.GetDefaultSnapshotPath();
 

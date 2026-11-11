@@ -32,10 +32,11 @@ public sealed class CatalogSnapshot
     public IReadOnlyList<SnapshotGame> Games { get; }
 }
 
+/// <summary>The allowlisted fields exported for one Playnite game. Identity is never its name.</summary>
 public sealed class SnapshotGame
 {
     public SnapshotGame(string id, string name, bool isInstalled, string? source = null, string? platform = null,
-        string? coverArtworkId = null, string? iconArtworkId = null)
+        string? coverArtworkId = null, string? iconArtworkId = null, DateTime? lastActivity = null)
     {
         if (!SnapshotValidation.IsCanonicalGameId(id)) throw new ArgumentException("A canonical Playnite GUID is required.", nameof(id));
         if (string.IsNullOrWhiteSpace(name)) throw new ArgumentException("A game name is required.", nameof(name));
@@ -48,6 +49,7 @@ public sealed class SnapshotGame
         Platform = NormalizeOptional(platform);
         CoverArtworkId = coverArtworkId;
         IconArtworkId = iconArtworkId;
+        LastActivity = lastActivity;
     }
 
     public string Id { get; }
@@ -57,6 +59,8 @@ public sealed class SnapshotGame
     public string? Platform { get; }
     public string? CoverArtworkId { get; }
     public string? IconArtworkId { get; }
+    /// <summary>The Playnite LastActivity value, preserving its DateTime kind and wall-clock value.</summary>
+    public DateTime? LastActivity { get; }
 
     private static string? NormalizeOptional(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 }

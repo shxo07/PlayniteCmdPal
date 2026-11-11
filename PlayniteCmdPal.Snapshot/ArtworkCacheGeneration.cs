@@ -2,6 +2,8 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
+using System.Runtime.Serialization;
+using System.Runtime.Serialization.Json;
 using System.Text;
 namespace PlayniteCmdPal.Snapshot;
 
@@ -450,9 +452,30 @@ public sealed class ArtworkCacheGeneration : IDisposable
 
             using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
             var json = reader.ReadToEnd();
-            return json.StartsWith(
-                "{\"schemaVersion\":2,\"generatedAtUtc\":\"" + token + "\",\"games\":",
-                StringComparison.Ordinal)
+            if (!DateTimeOffset.TryParse(
+                    token,
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    System.Globalization.DateTimeStyles.RoundtripKind,
+                    out var expectedGeneratedAtUtc))
+            {
+                return SnapshotPublicationState.NotPublished;
+            }
+
+            // Keep this recovery check inside the Snapshot assembly: the full catalog
+            // parser belongs to the Core layer and must not become a dependency here.
+            // DataContractJsonSerializer ignores the games payload while reading only the
+            // required v2 publication header.
+            using var payload = new MemoryStream(Encoding.UTF8.GetBytes(json));
+            var serializer = new DataContractJsonSerializer(typeof(SnapshotPublicationHeader));
+            var header = serializer.ReadObject(payload) as SnapshotPublicationHeader;
+            return header is not null &&
+                   header.SchemaVersion == SnapshotLimits.SchemaVersion &&
+                   DateTimeOffset.TryParse(
+                       header.GeneratedAtUtc,
+                       System.Globalization.CultureInfo.InvariantCulture,
+                       System.Globalization.DateTimeStyles.RoundtripKind,
+                       out var actualGeneratedAtUtc) &&
+                   actualGeneratedAtUtc == expectedGeneratedAtUtc
                 ? SnapshotPublicationState.Published
                 : SnapshotPublicationState.NotPublished;
         }
@@ -464,8 +487,24 @@ public sealed class ArtworkCacheGeneration : IDisposable
         {
             return SnapshotPublicationState.NotPublished;
         }
+        catch (Exception exception) when (
+            exception is SerializationException or System.Xml.XmlException or FormatException)
+        {
+            // Invalid or incomplete snapshot content is not publication evidence.
+            return SnapshotPublicationState.NotPublished;
+        }
         // Sharing, access, and other IO failures intentionally propagate. Recovery must
         // retain both generations and the marker when publication evidence is unreadable.
+    }
+
+    [DataContract]
+    private sealed class SnapshotPublicationHeader
+    {
+        [DataMember(Name = "schemaVersion", IsRequired = true)]
+        public int SchemaVersion { get; set; }
+
+        [DataMember(Name = "generatedAtUtc", IsRequired = true)]
+        public string GeneratedAtUtc { get; set; } = string.Empty;
     }
 
     private static bool TryDetectFormat(byte[] data, out string extension) =>

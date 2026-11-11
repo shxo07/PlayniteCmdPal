@@ -21,7 +21,7 @@ public sealed class PlayniteCmdPalPlugin : GenericPlugin
 {
     public static readonly Guid PluginId = Guid.Parse("9E4CF37F-EF29-495F-9E83-4EA1A389ABD8");
     private static readonly TimeSpan Debounce = TimeSpan.FromMilliseconds(750);
-    private static readonly TimeSpan ArtworkRevalidationInterval = TimeSpan.FromMinutes(30);
+    private static readonly TimeSpan PeriodicExportInterval = TimeSpan.FromSeconds(30);
     private static readonly ILogger Logger = LogManager.GetLogger();
     private readonly CatalogExportCoordinator _coordinator;
     private readonly Dispatcher _dispatcher;
@@ -53,17 +53,26 @@ public sealed class PlayniteCmdPalPlugin : GenericPlugin
         if (Interlocked.CompareExchange(ref _coordinatorStarted, 1, 0) == 0)
         {
             _ = RunCoordinatorAsync();
-            // Playnite may update bytes behind an unchanged database reference. Re-exporting
-            // periodically re-reads the source and lets its content hash detect that change.
+            // Playnite does not reliably raise a game-update event for every LastActivity
+            // change (for example, when a game exits). Poll the database so the snapshot used
+            // by Recently Played catches up even when no relevant event was delivered. This
+            // also retains periodic artwork revalidation for files updated in place.
             _artworkRevalidationTimer = new Timer(
                 _ => _coordinator.RequestExport(),
                 null,
-                ArtworkRevalidationInterval,
-                ArtworkRevalidationInterval);
+                PeriodicExportInterval,
+                PeriodicExportInterval);
         }
     }
 
     public override void OnLibraryUpdated(OnLibraryUpdatedEventArgs args) => _coordinator.RequestExport();
+
+    // Playnite records the latest activity as part of game-session lifecycle handling.
+    // Request exports at both boundaries rather than depending only on database collection
+    // notifications, which can be delayed or omitted for LastActivity-only changes.
+    public override void OnGameStarted(OnGameStartedEventArgs args) => _coordinator.RequestExport();
+
+    public override void OnGameStopped(OnGameStoppedEventArgs args) => _coordinator.RequestExport();
 
     public override void OnGameInstalled(OnGameInstalledEventArgs args) => _coordinator.RequestExport();
 
@@ -166,6 +175,7 @@ public sealed class PlayniteCmdPalPlugin : GenericPlugin
                oldGame.IsInstalled != newGame.IsInstalled ||
                oldGame.SourceId != newGame.SourceId ||
                !SameIds(oldGame.PlatformIds, newGame.PlatformIds) ||
+               oldGame.LastActivity != newGame.LastActivity ||
                !string.Equals(oldGame.CoverImage, newGame.CoverImage, StringComparison.Ordinal) ||
                !string.Equals(oldGame.Icon, newGame.Icon, StringComparison.Ordinal);
     }
@@ -240,7 +250,7 @@ public sealed class PlayniteCmdPalPlugin : GenericPlugin
             {
                 var id = game.Id.ToString("D", CultureInfo.InvariantCulture);
                 games.Add(new GameProjection(id, game.Name, game.IsInstalled, GetSourceName(game.SourceId),
-                    GetPlatformNames(game.PlatformIds), game.CoverImage, ResolveArtworkPath(id, game.CoverImage),
+                    GetPlatformNames(game.PlatformIds), game.LastActivity, game.CoverImage, ResolveArtworkPath(id, game.CoverImage),
                     game.Icon, ResolveArtworkPath(id, game.Icon, "icon")));
             }
             catch (ArgumentException) { }
@@ -265,7 +275,7 @@ public sealed class PlayniteCmdPalPlugin : GenericPlugin
                     $"reference='{game.IconReference}', resolvedPath='{game.IconPath}', filesRoot='{projection.FilesRoot}': {diagnostic}"));
             try
             {
-                games.Add(new SnapshotGame(game.Id, game.Name, game.IsInstalled, game.Source, game.Platform, cover, icon));
+                games.Add(new SnapshotGame(game.Id, game.Name, game.IsInstalled, game.Source, game.Platform, cover, icon, game.LastActivity));
             }
             catch (ArgumentException) { }
         }
@@ -329,10 +339,10 @@ public sealed class PlayniteCmdPalPlugin : GenericPlugin
 
     private sealed class GameProjection
     {
-        public GameProjection(string id, string name, bool installed, string? source, string? platform,
+        public GameProjection(string id, string name, bool installed, string? source, string? platform, DateTime? lastActivity,
             string? coverReference, string? coverPath, string? iconReference, string? iconPath)
         {
-            Id = id; Name = name; IsInstalled = installed; Source = source; Platform = platform;
+            Id = id; Name = name; IsInstalled = installed; Source = source; Platform = platform; LastActivity = lastActivity;
             CoverReference = coverReference; CoverPath = coverPath; IconReference = iconReference; IconPath = iconPath;
         }
         public string Id { get; }
@@ -340,6 +350,7 @@ public sealed class PlayniteCmdPalPlugin : GenericPlugin
         public bool IsInstalled { get; }
         public string? Source { get; }
         public string? Platform { get; }
+        public DateTime? LastActivity { get; }
         public string? CoverReference { get; }
         public string? CoverPath { get; }
         public string? IconReference { get; }

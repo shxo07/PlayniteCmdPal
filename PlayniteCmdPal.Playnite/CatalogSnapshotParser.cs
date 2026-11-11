@@ -43,7 +43,7 @@ public sealed class CatalogSnapshotParseResult
         new(null, new CatalogIssue(code, message), 0);
 }
 
-/// <summary>Strict bounded parser for immutable v1 and artwork-enabled v2 catalog contracts.</summary>
+/// <summary>Strict bounded parser for immutable v1 and enriched v2 catalog contracts.</summary>
 public static class CatalogSnapshotParser
 {
     private static readonly JsonDocumentOptions DocumentOptions = new()
@@ -176,7 +176,7 @@ public static class CatalogSnapshotParser
         reason = "invalid record";
         var allowedProperties = schemaVersion == SnapshotLimits.LegacySchemaVersion
             ? new[] { "id", "name", "isInstalled", "source", "platform" }
-            : new[] { "id", "name", "isInstalled", "source", "platform", "coverArtworkId", "iconArtworkId" };
+            : new[] { "id", "name", "isInstalled", "source", "platform", "coverArtworkId", "iconArtworkId", "lastActivity" };
 
         if (element.ValueKind != JsonValueKind.Object ||
             HasDuplicateProperties(element) ||
@@ -202,6 +202,7 @@ public static class CatalogSnapshotParser
         string? platform = null;
         string? coverArtworkId = null;
         string? iconArtworkId = null;
+        DateTime? lastActivity = null;
 
         if (TryGetProperty(element, "source", out var sourceElement) &&
             !TryReadOptionalString(sourceElement, ref source))
@@ -230,6 +231,17 @@ public static class CatalogSnapshotParser
             {
                 iconArtworkId = null;
             }
+
+            if (TryGetProperty(element, "lastActivity", out var activityElement) && activityElement.ValueKind != JsonValueKind.Null)
+            {
+                if (activityElement.ValueKind != JsonValueKind.String ||
+                    !DateTime.TryParseExact(activityElement.GetString(), "O", CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var parsedActivity))
+                {
+                    reason = "invalid last activity field";
+                    return false;
+                }
+                lastActivity = parsedActivity;
+            }
         }
 
         try
@@ -241,7 +253,8 @@ public static class CatalogSnapshotParser
                 source,
                 platform,
                 coverArtworkId,
-                iconArtworkId);
+                iconArtworkId,
+                lastActivity);
             reason = string.Empty;
             return true;
         }
