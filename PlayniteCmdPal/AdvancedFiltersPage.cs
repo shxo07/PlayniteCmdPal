@@ -236,7 +236,7 @@ internal sealed partial class AdvancedFiltersForm : FormContent
 
     private static JsonObject CreateChoiceAction(string id, string title, bool selected)
     {
-        var action = CreateAction(id, (selected ? "☑  " : "☐  ") + title);
+        var action = CreateAction(id, (selected ? "[x] " : "[ ] ") + title);
         action["style"] = selected ? "positive" : "default";
         return new JsonObject
         {
