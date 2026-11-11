@@ -2,7 +2,7 @@
 
 This page explains what is tested, where each check runs, and how to run it. For installing the toolchain and deploying the extension, see [Developer Setup](DEVELOPER-SETUP.md).
 
-**Status (2026-11-07):** Automated coverage is synthetic and is designed to run without Playnite, PowerToys, a personal game library, or secrets. The test commands below are the ones executed by `scripts/ci.ps1`, which Windows CI and CodeQL run on `windows-latest`. The latest verified Windows CI run passed restore, Release build, 101 Core tests, 183 adapter tests, 3 Command Palette command tests, and the .NET Framework smoke test ([run 42331229094](https://github.com/shxo07/PlayniteCmdPal/actions/runs/42331229094)); CodeQL also passed ([run 42331229144](https://github.com/shxo07/PlayniteCmdPal/actions/runs/42331229144)). The six new schema-version cases require a fresh run. See the verification evidence section of [Developer Setup](DEVELOPER-SETUP.md) for the evidence trail and its limits.
+**Status (2026-11-11):** Automated coverage is synthetic and runs without Playnite, PowerToys, a personal game library, or secrets. The latest reviewed WERD-80 head passed Windows CI (109 Core tests, 235 Playnite/adapter tests, 16 Command Palette tests, Release build, and the .NET Framework snapshot smoke test; [run 42948025706](https://github.com/shxo07/PlayniteCmdPal/actions/runs/42948025706)) and CodeQL ([run 42948025712](https://github.com/shxo07/PlayniteCmdPal/actions/runs/42948025712)). These are automated runner results, not substitutes for manual desktop checks. See the verification evidence section of [Developer Setup](DEVELOPER-SETUP.md) for the evidence trail and its limits.
 
 ## Test projects
 
@@ -32,13 +32,13 @@ Test data is generated in the test process and written to a temporary directory 
 
 | File | Covers |
 |---|---|
-| `ToggleFavoriteCommandTests` | Both successful and failed pin/unpin invocations return a `ShowToast` result whose `ToastArgs.Result` is explicitly `KeepOpen`, preserving the current page stack and query. |
+| `ToggleFavoriteCommandTests` | Successful and failed pin/unpin invocations return `CommandResult.KeepOpen()`; the notification is displayed separately, preserving the current page stack and query. |
 
 ### Command Palette artwork (WERD-80)
 
 | File | Covers |
 |---|---|
-| `ArtworkIconLoaderTests` | Saved Playnite icon is the sole UI artwork source (cover artwork is never substituted), missing/invalid icon fallback, missing artwork isolation, successful-result caching, bounded LRU eviction, catalog-refresh invalidation, concurrent requests sharing one decode, rejection of malformed opaque identifiers, retry after transient resolver failure, cancellation of abandoned shared work, and preservation of shared work while another caller still needs it. |
+| `ArtworkIconLoaderTests` | Saved Playnite icon is the sole UI artwork source (cover artwork is never substituted), missing/invalid icon fallback, missing artwork isolation, successful-result caching, bounded LRU eviction, catalog-refresh invalidation, concurrent requests sharing one decode, rejection of malformed opaque identifiers, retry after transient resolver failure, cancellation of abandoned shared work, and preservation of shared work while another caller still needs it. |\n| `ArtworkCacheGenerationTests` | Producer-side Playnite reference/path validation, reparse-point and size checks, supported-signature detection, ICO directory/entry-range validation, injected ICO-to-PNG conversion contract, converted-PNG validation, content-addressed cache publication, cache-capacity handling, cleanup, and exact-stage diagnostics for conversion/import failures. |
 
 Manual verification requires a real Playnite library and the packaged Command Palette extension:
 
@@ -50,6 +50,12 @@ Manual verification requires a real Playnite library and the packaged Command Pa
 6. Repeat at 100% and 150% (or higher) Windows display scaling. Confirm icons remain correctly sized and do not clip or displace title/subtitle text.
 
 Record the PowerToys version, Windows build, display scaling, and outcome. Do not include real game names, IDs, or library paths in committed evidence.
+#### WERD-80 manual verification log (2026-11-11)
+
+- **Verified:** One installed Steam library entry with a saved ICO-backed Playnite icon. The updated plugin logged the resolved Playnite icon path; the v2 snapshot contained the icon digest; the matching converted PNG existed in artwork-v2; and the maintainer confirmed the icon displayed in Command Palette after loading the updated extension/catalog.
+- **Diagnostic cross-check:** The digest in the snapshot/cache matched the SHA-256 digest of the PNG produced by an independent local conversion of the same Playnite ICO.
+- **Still pending:** Uninstalled-game display; missing/invalid/unreadable/unsupported icon fallback against a real library; changing an icon in Playnite and observing refresh without stale reuse; other supported raster formats; rapid query changes while images load; Favorites lifecycle checks; and 100% / 150% (or higher) display scaling.
+- **Evidence hygiene:** Real game IDs, original file paths, and personal library contents are intentionally not committed. The test above proves one real ICO-backed Steam case only; do not generalize it to every library entry or format.
 
 ### Favorites UI smoke test (manual)
 
