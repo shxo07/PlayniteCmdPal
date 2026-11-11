@@ -14,7 +14,7 @@ using PlayniteCmdPal.Playnite;
 
 namespace PlayniteCmdPal;
 
-internal sealed partial class PlayniteCmdPalRecentlyPlayedPage : DynamicListPage
+internal sealed partial class PlayniteCmdPalRecentlyPlayedPage : DynamicListPage, IDisposable
 {
     private readonly PlayniteCatalogAdapter _catalog = new();
     private IListItem[] _statusItems = Array.Empty<IListItem>();
@@ -48,6 +48,8 @@ internal sealed partial class PlayniteCmdPalRecentlyPlayedPage : DynamicListPage
 
     internal IContextItem CreateRefreshContextItem() =>
         new CommandContextItem(new RefreshCatalogCommand(this));
+
+    public void Dispose() => _refreshTimer.Dispose();
 
     public override void UpdateSearchText(string oldSearch, string newSearch)
     {
@@ -169,7 +171,7 @@ internal sealed partial class PlayniteCmdPalRecentlyPlayedPage : DynamicListPage
         new ListItem(new NoOpCommand())
         {
             Title = message,
-            MoreCommands = [new CommandContextItem(new RefreshCatalogCommand(this))],
+            MoreCommands = [CreateRefreshContextItem()],
         };
 
     private sealed class RefreshCatalogCommand : InvokableCommand
