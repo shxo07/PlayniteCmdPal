@@ -138,6 +138,17 @@ public sealed class RecentlyPlayedGamesTests
     }
 
     [Fact]
+    public void TrimsSearchQueryBeforeFilteringGameItems()
+    {
+        var status = new[] { "Catalog is stale" };
+        var games = new[] { "Halo Infinite", "Portal 2" };
+
+        Assert.Equal(
+            new[] { "Catalog is stale", "Halo Infinite" },
+            RecentlyPlayedGames.ComposeVisibleItems(status, games, "  halo  ", item => item));
+    }
+
+    [Fact]
     public void BlankSearchIncludesAllStatusAndGameItems()
     {
         var status = new[] { "Refresh" };

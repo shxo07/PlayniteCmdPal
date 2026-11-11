@@ -79,9 +79,10 @@ public static class RecentlyPlayedGames
 
         var visible = new List<T>();
         visible.AddRange(statusItems);
-        visible.AddRange(string.IsNullOrWhiteSpace(searchText)
+        var query = searchText?.Trim();
+        visible.AddRange(string.IsNullOrEmpty(query)
             ? gameItems
-            : gameItems.Where(item => getTitle(item).Contains(searchText, StringComparison.OrdinalIgnoreCase)));
+            : gameItems.Where(item => getTitle(item).Contains(query, StringComparison.OrdinalIgnoreCase)));
         return visible.AsReadOnly();
     }
 }
