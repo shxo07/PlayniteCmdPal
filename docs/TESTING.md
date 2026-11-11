@@ -38,7 +38,8 @@ Test data is generated in the test process and written to a temporary directory 
 
 | File | Covers |
 |---|---|
-| `ArtworkIconLoaderTests` | Saved Playnite icon is the sole UI artwork source (cover artwork is never substituted), missing/invalid icon fallback, missing artwork isolation, successful-result caching, bounded LRU eviction, catalog-refresh invalidation, concurrent requests sharing one decode, rejection of malformed opaque identifiers, retry after transient resolver failure, cancellation of abandoned shared work, and preservation of shared work while another caller still needs it. |\n| `ArtworkCacheGenerationTests` | Producer-side Playnite reference/path validation, reparse-point and size checks, supported-signature detection, ICO directory/entry-range validation, injected ICO-to-PNG conversion contract, converted-PNG validation, content-addressed cache publication, cache-capacity handling, cleanup, and exact-stage diagnostics for conversion/import failures. |
+| `ArtworkIconLoaderTests` | Saved Playnite icon is the sole UI artwork source (cover artwork is never substituted), missing/invalid icon fallback, missing artwork isolation, successful-result caching, bounded LRU eviction, catalog-refresh invalidation, concurrent requests sharing one decode, rejection of malformed opaque identifiers, retry after transient resolver failure, cancellation of abandoned shared work, and preservation of shared work while another caller still needs it. |
+| `ArtworkCacheGenerationTests` | Producer-side Playnite reference/path validation, reparse-point and size checks, supported-signature detection, ICO directory/entry-range validation, injected ICO-to-PNG conversion contract, converted-PNG validation, content-addressed cache publication, cache-capacity handling, cleanup, and exact-stage diagnostics for conversion/import failures. |
 
 Manual verification requires a real Playnite library and the packaged Command Palette extension:
 
