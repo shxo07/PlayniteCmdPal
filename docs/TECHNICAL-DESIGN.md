@@ -1,7 +1,7 @@
 # Technical Design
 
 **Status:** Generated CmdPal template build and local deployment validated on Windows. The running- and closed-instance launch URI smoke tests passed. The catalog adapter/bridge implementation is present. Windows CI and CodeQL passed, and the maintainer reports successful packaging and real Playnite library checks; see [Catalog Bridge](CATALOG-BRIDGE.md) for the evidence and remaining gaps.
-**Last reviewed:** 2026-10-30.
+**Last reviewed:** 2026-11-11.
 
 ## Current generated-template baseline
 
@@ -98,7 +98,7 @@ Rejected for production:
 
 ## Current logical structure
 
-The generated CmdPal project remains intact. The Command Palette presentation layer will consume the catalog adapter; the bridge does not implement search/launch UI.
+The generated CmdPal project remains intact. The Command Palette presentation layer consumes the catalog adapter; the bridge does not implement search/launch UI.
 - `PlayniteCmdPal/`: generated CmdPal presentation/hosting template.
 - `PlayniteCmdPal.Core/`: SDK-independent game model and deterministic search.
 - `PlayniteCmdPal.Snapshot/`: shared v1 snapshot contract, allowlisted serializer, atomic publisher, and debounced export coordinator.
@@ -147,3 +147,34 @@ See [DEVELOPER-SETUP.md](DEVELOPER-SETUP.md). Key loop:
 - Optional alias/fuzzy matching beyond title matching.
 - Packaging and gallery submission route.
 - Repository license.
+
+## WERD-80: Playnite-managed game icons
+
+**Status (2026-11-11):** Implemented on the WERD-80 PR branch and verified by automated Windows CI/CodeQL plus one maintainer-reported real-library ICO case. Broader manual coverage (including uninstalled entries and high-DPI scaling) remains outstanding.
+
+### Data flow
+
+1. The companion plugin reads the saved Game.Icon reference from Playnite game metadata and resolves it with Playnite's database API. It does not inspect install directories or executables.
+2. The producer validates the game-owned database reference and resolved path against the WERD-71 trust boundary. Raw paths, URLs, traversal, mismatched game directories, reparse points, unsupported extensions, and invalid file sizes are rejected.
+3. Supported raster files are validated by signature and copied into the bridge-owned content-addressed cache. ICO is source-only: the producer validates the ICO directory and entry ranges, converts a bounded icon to PNG, validates the PNG output, and hashes/caches the converted bytes.
+4. The v2 snapshot carries an optional iconArtworkId digest. It does not carry the original Playnite reference, source path, or resolved path.
+5. The read-only catalog adapter maps the digest into the game model. The Command Palette artwork loader resolves only the icon digest; it does not read coverArtworkId as a fallback candidate.
+6. The UI displays the neutral game symbol immediately, then asynchronously resolves and decodes the saved icon. Missing or failed artwork leaves the neutral symbol in place and does not affect search or launch.
+
+### Consumer behavior
+
+- Saved Playnite per-game icon is the sole artwork source for Search and Favorites results.
+- Cover, background, promotional, storefront, and launcher/application artwork are not substitutes.
+- Loading uses bounded concurrency and a bounded successful-result cache. Concurrent requests for the same icon share in-flight work; cancellation of one waiter must not cancel work still required by another waiter.
+- Explicit catalog refresh invalidates prior artwork resolution so new content hashes can be loaded. Transient resolver/decoder failures are retryable rather than permanently cached as missing.
+- Image work remains outside the synchronous search/ranking path.
+
+### Resource and trust boundaries
+
+The producer's documented source-file, ICO dimension, and active-generation cache limits remain authoritative in [Artwork Transport](ARTWORK-TRANSPORT.md). The consumer accepts only canonical lowercase SHA-256 identifiers and resolves files beneath the fixed cache root (or the matching producer rollback directory during publication). It validates local cache candidates before decoding. The adapter remains read-only; Playnite's database is never modified.
+
+### Verification evidence and limits
+
+On 2026-11-11, one installed Steam game with an ICO-backed saved Playnite icon was used for real-library verification. The plugin log showed the resolved icon path; the snapshot contained the converted PNG's digest; the corresponding PNG existed in the cache; and the maintainer confirmed the icon displayed in Command Palette after the updated extension/catalog was loaded. This demonstrates the end-to-end path for that one ICO-backed entry, not universal library coverage.
+
+Automated tests cover icon-only selection, no-cover-fallback behavior, fallback on missing/invalid artwork, opaque identifier validation, async loading, bounded caching, cancellation/coalescing, refresh invalidation, producer validation, and diagnostic reporting. CI results are recorded in [Testing](TESTING.md). Real-library tests for uninstalled entries, icon replacement, additional formats, and normal/high-DPI layouts remain manual follow-ups.
