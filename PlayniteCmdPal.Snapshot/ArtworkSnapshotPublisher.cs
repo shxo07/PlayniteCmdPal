@@ -12,7 +12,17 @@ public static class ArtworkSnapshotPublisher
         CatalogSnapshot snapshot,
         ArtworkCacheGeneration artwork,
         CancellationToken cancellationToken = default) =>
-        PublishAsync(snapshotPath, snapshot, artwork, SnapshotFilePublisher.PublishAsync, cancellationToken);
+        PublishAsync(
+            snapshotPath,
+            snapshot,
+            artwork,
+            (path, candidate, token) => SnapshotFilePublisher.PublishAsync(
+                path,
+                candidate,
+                token,
+                schemaVersion: SnapshotLimits.SchemaVersion,
+                includeLastActivity: true),
+            cancellationToken);
 
     internal static async Task PublishAsync(
         string snapshotPath,
@@ -38,7 +48,8 @@ public static class ArtworkSnapshotPublisher
                 var withoutArtwork = new CatalogSnapshot(
                     snapshot.GeneratedAtUtc,
                     snapshot.Games.Select(game => new SnapshotGame(
-                        game.Id, game.Name, game.IsInstalled, game.Source, game.Platform)).ToArray(),
+                        game.Id, game.Name, game.IsInstalled, game.Source, game.Platform,
+                        lastActivity: game.LastActivity)).ToArray(),
                     SnapshotLimits.SchemaVersion);
                 await publishAsync(snapshotPath, withoutArtwork, cancellationToken).ConfigureAwait(false);
                 snapshotPublished = true;

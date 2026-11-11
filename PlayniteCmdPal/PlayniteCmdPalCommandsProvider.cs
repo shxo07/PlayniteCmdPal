@@ -19,11 +19,7 @@ public partial class PlayniteCmdPalCommandsProvider : CommandProvider
         _commands = [
             new CommandItem(new PlayniteCmdPalPage()) { Title = "Search games" },
             new CommandItem(new FavoritesPage()) { Title = "Favorites" },
-            new CommandItem(recentlyPlayedPage)
-            {
-                Title = "Recently played games",
-                MoreCommands = [new CommandContextItem(new RefreshRecentlyPlayedCommand(recentlyPlayedPage))],
-            },
+            new CommandItem(recentlyPlayedPage) { Title = "Recently played games" },
         ];
     }
 
@@ -32,21 +28,4 @@ public partial class PlayniteCmdPalCommandsProvider : CommandProvider
         return _commands;
     }
 
-    private sealed class RefreshRecentlyPlayedCommand : InvokableCommand
-    {
-        private readonly PlayniteCmdPalRecentlyPlayedPage _page;
-
-        public RefreshRecentlyPlayedCommand(PlayniteCmdPalRecentlyPlayedPage page)
-        {
-            _page = page;
-        }
-
-        public override string Name => "Refresh Playnite catalog";
-
-        public override CommandResult Invoke()
-        {
-            _page.RefreshCatalog();
-            return CommandResult.KeepOpen();
-        }
-    }
 }

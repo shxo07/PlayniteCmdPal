@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using PlayniteCmdPal.Playnite;
 using PlayniteCmdPal.Snapshot;
 using Xunit;
 
@@ -360,6 +361,29 @@ public sealed class ArtworkCacheGenerationTests : IDisposable
     }
 
     [Fact]
+    public async Task ProductionPublisherWritesSchemaV2AndPreservesLastActivity()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+
+        var snapshotPath = Path.Combine(_directory, "catalog-v2.json");
+        var activity = new DateTime(2026, 11, 4, 11, 45, 0, DateTimeKind.Utc);
+        var snapshot = new CatalogSnapshot(
+            DateTimeOffset.Parse("2026-11-04T12:00:00Z", System.Globalization.CultureInfo.InvariantCulture),
+            new[] { new SnapshotGame(GameId, "Recently played game", true, lastActivity: activity) },
+            SnapshotLimits.SchemaVersion);
+
+        using var cache = new ArtworkCacheGeneration(_cacheRoot, snapshotPath: snapshotPath);
+        cache.Activate(snapshot.GeneratedAtUtc.UtcDateTime.ToString("O", System.Globalization.CultureInfo.InvariantCulture));
+
+        await ArtworkSnapshotPublisher.PublishAsync(snapshotPath, snapshot, cache);
+
+        var parsed = CatalogSnapshotParser.Parse(await File.ReadAllBytesAsync(snapshotPath));
+        Assert.Null(parsed.Issue);
+        Assert.Equal(SnapshotLimits.SchemaVersion, parsed.Snapshot!.SchemaVersion);
+        Assert.Equal(activity, Assert.Single(parsed.Snapshot.Games).LastActivity);
+    }
+
+    [Fact]
     public async Task MetadataOnlyFallbackPublicationCleanupFailurePreservesGenerationForRecovery()
     {
         if (!OperatingSystem.IsWindows()) return;
@@ -385,12 +409,23 @@ public sealed class ArtworkCacheGenerationTests : IDisposable
                     throw new InvalidDataException("Injected artwork-bearing snapshot size failure.");
 
                 // The production fallback snapshot is passed to the real atomic publisher.
-                await SnapshotFilePublisher.PublishAsync(path, candidate, cancellationToken);
+                await SnapshotFilePublisher.PublishAsync(
+                    path,
+                    candidate,
+                    cancellationToken,
+                    schemaVersion: SnapshotLimits.SchemaVersion,
+                    includeLastActivity: true);
             }
 
             var oversizedArtworkSnapshot = new CatalogSnapshot(
                 DateTimeOffset.Parse(token, null, System.Globalization.DateTimeStyles.RoundtripKind),
-                new[] { new SnapshotGame(GameId, "Game", true, coverArtworkId: artworkId, iconArtworkId: artworkId) },
+                new[] { new SnapshotGame(
+                    GameId,
+                    "Game",
+                    true,
+                    coverArtworkId: artworkId,
+                    iconArtworkId: artworkId,
+                    lastActivity: new DateTime(2026, 11, 4, 11, 45, 0, DateTimeKind.Utc)) },
                 SnapshotLimits.SchemaVersion);
 
             await Assert.ThrowsAsync<IOException>(() => ArtworkSnapshotPublisher.PublishAsync(
@@ -399,7 +434,9 @@ public sealed class ArtworkCacheGenerationTests : IDisposable
             Assert.Equal(2, publishAttempts);
             var parsed = CatalogSnapshotParser.Parse(await File.ReadAllBytesAsync(snapshotPath));
             Assert.True(parsed.Snapshot is not null);
-            var publishedGame = Assert.Single(parsed.Snapshot!.Games);
+            Assert.Equal(SnapshotLimits.SchemaVersion, parsed.Snapshot!.SchemaVersion);
+            var publishedGame = Assert.Single(parsed.Snapshot.Games);
+            Assert.Equal(new DateTime(2026, 11, 4, 11, 45, 0, DateTimeKind.Utc), publishedGame.LastActivity);
             Assert.Null(publishedGame.CoverArtworkId);
             Assert.Null(publishedGame.IconArtworkId);
             Assert.True(File.Exists(_cacheRoot + ".transaction"));

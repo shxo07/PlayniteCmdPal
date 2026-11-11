@@ -16,9 +16,9 @@ namespace PlayniteCmdPal;
 internal sealed partial class PlayniteCmdPalRecentlyPlayedPage : DynamicListPage
 {
     private readonly PlayniteCatalogAdapter _catalog = new();
-    private IListItem[] _statusItems = [CreateStatusItem("Loading recently played games…")];
+    private IListItem[] _statusItems = Array.Empty<IListItem>();
     private IListItem[] _gameItems = Array.Empty<IListItem>();
-    private IListItem[] _items = [CreateStatusItem("Loading recently played games…")];
+    private IListItem[] _items = Array.Empty<IListItem>();
     private string _searchText = string.Empty;
 
     public PlayniteCmdPalRecentlyPlayedPage()
@@ -26,6 +26,8 @@ internal sealed partial class PlayniteCmdPalRecentlyPlayedPage : DynamicListPage
         Icon = IconHelpers.FromRelativePath("Assets\\StoreLogo.png");
         Title = "Playnite";
         Name = "Recently played games";
+        _statusItems = [CreateStatusItem("Loading recently played games…")];
+        _items = _statusItems;
         _ = LoadItemsAsync();
     }
 
@@ -129,6 +131,7 @@ internal sealed partial class PlayniteCmdPalRecentlyPlayedPage : DynamicListPage
                 {
                     Title = game.Title,
                     Subtitle = string.Join(" · ", metadata),
+                    MoreCommands = [new CommandContextItem(new RefreshCatalogCommand(this))],
                 });
             }
 
@@ -151,8 +154,25 @@ internal sealed partial class PlayniteCmdPalRecentlyPlayedPage : DynamicListPage
         }
     }
 
-    private static ListItem CreateStatusItem(string message) =>
-        new ListItem(new NoOpCommand()) { Title = message };
+    private ListItem CreateStatusItem(string message) =>
+        new ListItem(new NoOpCommand())
+        {
+            Title = message,
+            MoreCommands = [new CommandContextItem(new RefreshCatalogCommand(this))],
+        };
 
+    private sealed class RefreshCatalogCommand : InvokableCommand
+    {
+        private readonly PlayniteCmdPalRecentlyPlayedPage _page;
 
+        public RefreshCatalogCommand(PlayniteCmdPalRecentlyPlayedPage page) => _page = page;
+
+        public override string Name => "Reload catalog snapshot";
+
+        public override CommandResult Invoke()
+        {
+            _page.RefreshCatalog();
+            return CommandResult.KeepOpen();
+        }
+    }
 }
