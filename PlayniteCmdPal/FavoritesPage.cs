@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.CommandPalette.Extensions;
 using Microsoft.CommandPalette.Extensions.Toolkit;
@@ -13,16 +14,44 @@ internal sealed partial class FavoritesPage : DynamicListPage
 {
     private readonly PlayniteCatalogAdapter _catalog = new();
     private readonly FavoritesStore _favorites = FavoritesPreferences.Store;
+    private readonly ArtworkIconLoader _artwork = new(artworkId => PlayniteCatalogAdapter.ResolveArtworkPath(artworkId));
     private readonly LatestRequestGate _requestGate = new();
+    private readonly object _lifecycleGate = new();
+    private readonly EventHandler _favoritesChangedHandler;
+    private readonly SynchronizationContext? _uiContext;
+    private CancellationTokenSource? _requestCancellation;
     private IListItem[] _items = [CreateStatusItem("Loading your favorites…")];
     private string _searchText = string.Empty;
 
     public FavoritesPage()
     {
+        // Capture the UI synchronization context so cross-thread notifications
+        // (artwork loading, deferred favorites refresh) can be marshaled back
+        // to the UI thread where the Command Palette host processes them.
+        _uiContext = SynchronizationContext.Current;
+
         Icon = IconHelpers.FromRelativePath("Assets\\StoreLogo.png");
         Title = "Favorites";
         Name = "Pinned games";
-        _favorites.FavoritesChanged += OnFavoritesChanged;
+
+        // The shared store must not keep retired page instances alive. Its event
+        // delegate captures only a WeakReference, so the page can be collected
+        // with the host page.
+        var weakSelf = new WeakReference<FavoritesPage>(this);
+        EventHandler weakHandler = null!;
+        weakHandler = (sender, args) =>
+        {
+            if (weakSelf.TryGetTarget(out var page))
+            {
+                page.OnFavoritesChanged(sender, args);
+            }
+            else if (sender is FavoritesStore store)
+            {
+                store.FavoritesChanged -= weakHandler;
+            }
+        };
+        _favoritesChangedHandler = weakHandler;
+        _favorites.FavoritesChanged += _favoritesChangedHandler;
         LoadItems();
     }
 
@@ -34,85 +63,187 @@ internal sealed partial class FavoritesPage : DynamicListPage
 
     public override IListItem[] GetItems() => _requestGate.Synchronize(() => _items);
 
-    // Never refresh a Command Palette page inline inside the command's Invoke call.
-    // A page notification here can re-enter the extension while it is dispatching the
-    // command result, suppressing the toast and leaving the page in a stale loading state.
+    /// <summary>
+    /// Raises the items-changed notification on the UI synchronization context when one was
+    /// captured and we are not already on it. Falls back to a direct call when already on the
+    /// UI context or when no context was captured. This ensures the Command Palette host
+    /// processes notifications regardless of which thread calls them.
+    /// </summary>
+    private void RaiseItemsChangedOnUIContext(int count)
+    {
+        void raise() => RaiseItemsChanged(count);
+        if (_uiContext is { } context &&
+            !ReferenceEquals(context, SynchronizationContext.Current))
+        {
+            context.Post(_ => raise(), null);
+        }
+        else
+        {
+            raise();
+        }
+    }
+
     private void OnFavoritesChanged(object? sender, EventArgs e)
     {
-        _ = Task.Run(() =>
-        {
-            try { LoadItems(); }
-            catch { /* A refresh must not turn a successful pin/unpin into a failed command. */ }
-        });
+        // Defer the refresh until after ToggleFavoriteCommand.Invoke() returns and the
+        // toast is shown. await Task.Delay(50) without ConfigureAwait(false) resumes the
+        // continuation on the captured UI synchronization context so RaiseItemsChanged is
+        // processed by the Command Palette host. Never call LoadItems() synchronously from
+        // within the event handler, as it runs inside ToggleFavoriteCommand.Invoke() and
+        // would nest host notifications inside command dispatch, suppressing the toast.
+        _ = RefreshAfterFavoriteChangeAsync();
+    }
+
+    private async Task RefreshAfterFavoriteChangeAsync()
+    {
+        await Task.Delay(50);
+        LoadItems();
     }
 
     private void LoadItems()
     {
-        var request = _requestGate.BeginRequest(() =>
+        CancellationToken token;
+        (int Version, string State) request;
+        int count;
+        lock (_lifecycleGate)
         {
-            _items = [CreateStatusItem("Loading your favorites…")];
-            return _searchText;
-        });
-        RaiseItemsChanged();
-        _ = LoadItemsAsync(request.Version, request.State);
+            _requestCancellation?.Cancel();
+            _requestCancellation?.Dispose();
+            _requestCancellation = new CancellationTokenSource();
+            token = _requestCancellation.Token;
+            request = _requestGate.BeginRequest(() =>
+            {
+                _items = [CreateStatusItem("Loading your favorites…")];
+                return _searchText;
+            });
+            count = _items.Length;
+        }
+
+        RaiseItemsChangedOnUIContext(count);
+        _ = LoadItemsAsync(request.Version, request.State, token);
     }
 
-    private async Task LoadItemsAsync(int version, string query)
+    private async Task LoadItemsAsync(int version, string query, CancellationToken cancellationToken)
     {
         try
         {
-            var catalog = await _catalog.GetAsync().ConfigureAwait(false);
+            var catalog = await _catalog.GetAsync(cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
             if (!catalog.IsAvailable)
             {
                 PublishIfCurrent(version,
                 [
                     CreateStatusItem(catalog.Issue?.Message
                         ?? "The Playnite catalog is unavailable. Start Playnite and refresh.")
-                ]);
+                ], cancellationToken);
                 return;
             }
 
             var favoriteIds = _favorites.GetFavoriteIds().ToHashSet(StringComparer.Ordinal);
             var games = catalog.Games.Where(game => favoriteIds.Contains(game.GameId)).ToArray();
             var matches = GameSearch.Search(games, query);
+            cancellationToken.ThrowIfCancellationRequested();
 
             if (matches.Count == 0)
             {
                 var message = favoriteIds.Count == 0
                     ? "No favorites yet. Pin a game from its search result actions."
                     : "No saved favorites match this search in the current Playnite library.";
-                PublishIfCurrent(version, [CreateStatusItem(message)]);
+                PublishIfCurrent(version, [CreateStatusItem(message)], cancellationToken);
                 return;
             }
 
-            var items = matches.Select(game => new ListItem(new LaunchGameCommand(game.GameId))
+            var items = new List<IListItem>();
+            var artworkItems = new List<(ListItem Item, GameEntry Game)>();
+            foreach (var game in matches)
             {
-                Title = game.Title,
-                Subtitle = BuildMetadata(game),
-                MoreCommands =
-                [
-                    new CommandContextItem(new ShowGameDetailsCommand(game.GameId)),
-                    new CommandContextItem(new ToggleFavoriteCommand(_favorites, game.GameId)),
-                ],
-            }).ToArray();
+                cancellationToken.ThrowIfCancellationRequested();
+                var item = new ListItem(new LaunchGameCommand(game.GameId))
+                {
+                    Title = game.Title,
+                    Subtitle = BuildMetadata(game),
+                    Icon = ArtworkIconLoader.FallbackIcon,
+                    MoreCommands =
+                    [
+                        new CommandContextItem(new ShowGameDetailsCommand(game.GameId)),
+                        new CommandContextItem(new ToggleFavoriteCommand(_favorites, game.GameId)),
+                    ],
+                };
+                items.Add(item);
+                artworkItems.Add((item, game));
+            }
 
-            PublishIfCurrent(version, items);
+            if (!PublishIfCurrent(version, items.ToArray(), cancellationToken))
+            {
+                return;
+            }
+
+            _ = LoadArtworkAsync(version, artworkItems, cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // A newer query or pin/unpin event superseded this request.
         }
         catch (Exception)
         {
             PublishIfCurrent(version,
             [
                 CreateStatusItem("Couldn't load Favorites. Check the local preferences file and Playnite catalog, then try again.")
-            ]);
+            ], cancellationToken);
         }
     }
 
-    // Keep the gate around ownership/state mutation only. Never call the Command Palette
-    // notification API while holding its lock.
-    private void PublishIfCurrent(int version, IListItem[] items)
+    private async Task LoadArtworkAsync(
+        int version,
+        IReadOnlyList<(ListItem Item, GameEntry Game)> artworkItems,
+        CancellationToken cancellationToken)
     {
-        var published = _requestGate.TryPublish(version, () => _items = items);
-        if (published) RaiseItemsChanged();
+        try
+        {
+            await Parallel.ForEachAsync(
+                artworkItems,
+                new ParallelOptions { MaxDegreeOfParallelism = 4, CancellationToken = cancellationToken },
+                async (entry, token) =>
+                {
+                    try
+                    {
+                        var icon = await _artwork.GetIconAsync(entry.Game, token).ConfigureAwait(false);
+                        token.ThrowIfCancellationRequested();
+                        int itemsLength = 0;
+                        var published = _requestGate.TryPublish(version, () =>
+                        {
+                            entry.Item.Icon = icon ?? ArtworkIconLoader.FallbackIcon;
+                            itemsLength = _items.Length;
+                        });
+                        if (published) RaiseItemsChangedOnUIContext(itemsLength);
+                    }
+                    catch (OperationCanceledException) when (token.IsCancellationRequested)
+                    {
+                        throw;
+                    }
+                    catch (Exception)
+                    {
+                        // Artwork is optional; one bad image must not affect other favorites.
+                    }
+                }).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // A newer Favorites request cancelled obsolete artwork work.
+        }
+    }
+
+    private bool PublishIfCurrent(int version, IListItem[] items, CancellationToken cancellationToken)
+    {
+        if (cancellationToken.IsCancellationRequested) return false;
+        int count = 0;
+        var published = _requestGate.TryPublish(version, () =>
+        {
+            _items = items;
+            count = items.Length;
+        });
+        if (published) RaiseItemsChangedOnUIContext(count);
+        return published;
     }
 
     private static string BuildMetadata(GameEntry game)

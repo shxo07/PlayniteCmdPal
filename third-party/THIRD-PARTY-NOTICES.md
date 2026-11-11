@@ -65,18 +65,28 @@ headers and the PowerToys copyright notice. Do not remove those headers.
 
 ## Microsoft Windows SDK projections
 
-`Microsoft.Windows.SDK.NET.Ref` 10.0.26100.68-preview supplies the Windows SDK
-projection assembly `Microsoft.Windows.SDK.NET.dll`, which a self-contained build of
-the extension may copy into the package. The package declares a **Microsoft Windows SDK
-(preview) license** (`https://aka.ms/WinSDKPreviewLicenseURL`) and sets
-`requireLicenseAcceptance`; it is not MIT-licensed.
+`Microsoft.Windows.SDK.NET.Ref` 10.0.26100.84 is the selected Windows SDK targeting-pack package for the `net10.0-windows10.0.26100.0` extension. NuGet identifies it as a stable package with `lib/net8.0` assets compatible with the application's .NET 10 target. Package SHA-256: `2EFF36ACCB9D76466D36E27E7199D375C662818D2C1376E65125D48BA4BD1C96`. The archive contains five `lib/net8.0` files, 91 WinMD files, one analyzer and two data files. NuGet signature verification succeeded on Windows with `dotnet nuget verify --all` (exit code 0). The package is licensed under the Microsoft Windows SDK licence, not MIT; NuGet links to `https://aka.ms/WinSDKLicenseURL`.
 
-`WinRT.Runtime.dll` is a separate runtime asset of `Microsoft.Windows.CsWinRT` 2.2.0,
-not an asset of `Microsoft.Windows.SDK.NET.Ref`. The CsWinRT package declares the MIT
-license reproduced above. The publish outputs contain this runtime assembly, so its
-MIT notice must remain in the package.
+The two SDK-derived files present in both x64 and ARM64 MSIX payloads are byte-identical to their package-source files:
 
-Status: Microsoft's official [Windows SDK REDIST.TXT](https://learn.microsoft.com/en-us/legal/windows-sdk/redist) includes a conditional redistribution grant for listed `Microsoft.Windows.SDK.NET.Ref` files, allowing unmodified distribution as a NuGet package or as part of a program enabling WinRT API calls. Its explicit file list includes `net8.0` and `net6.0` paths, but not the `net9.0` asset path relevant to newer package assets. The exact preview-license RTF linked by `10.0.26100.68-preview` has not been retrieved and compared with Microsoft's maintained SDK license text. Additional conditions include significant primary functionality, unmodified files, downstream terms at least as protective, copyright notice, and distributor indemnity/defence/hold-harmless obligations. WERD-76 tracks resolving the preview-specific terms, asset-scope question and downstream conditions. WERD-77 separately tracks migration to stable `10.0.26100.87`; that migration alone does not establish redistribution permission for the projection assembly. See the open items in `docs/LICENSING-AND-RELEASE.md`. Until WERD-76 is resolved, a public binary release containing this assembly is not approved by this audit.
+| File | Version | Size | SHA-256 (package source and both MSIX architectures) |
+| --- | --- | ---: | --- |
+| `Microsoft.Windows.SDK.NET.dll` | 10.0.26100.82 | 27,196,448 bytes | `CFF6F50D9E25D5C8148EE47C0860B1E13D5826448C52C6FE677577D051C5A48F` |
+| `WinRT.Runtime.dll` | 2.2.0.48161 | 528,944 bytes | `BCF3A14E8712A90837FC5C0D8C8A24696AF2BD7F74E9767597EC81EDEDFB23DB` |
+
+The project sets `PublishTrimmed=false` and `PublishReadyToRun=false` for both x64 and ARM64 release profiles. This preserves the SDK projection DLLs unmodified, as required by the REDIST permission. The package's other Windows SDK assets (including XAML projection, WinMD, analyzer and data files) are not present in the MSIX. The Command Palette SDK WinMD is supplied by a separate package.
+
+Microsoft's official [Windows SDK REDIST.TXT](https://learn.microsoft.com/en-us/legal/windows-sdk/redist) has a dedicated `Microsoft.Windows.SDK.NET.Ref` entry. It lists the relevant `lib/net8.0` files, including `Microsoft.Windows.SDK.NET.dll` and `WinRT.Runtime.dll`, for unmodified redistribution as a NuGet package or as part of a WinRT-enabled program. The selected package path and the exact files shipped by this project align with those listed assets. Individual written Microsoft confirmation is not treated as an engineering prerequisite for this path. This is not a legal opinion or a guarantee that every distribution channel meets all separate conditions.
+
+The downloaded SDK licence RTF SHA-256 is `DD07EB178E00C6BBA4148457FC00FF77CD4887EB521D504186FE59C9EC8BBE62`. Its extracted text and Microsoft's maintained plain-text copy at [microsoft/win32metadata](https://github.com/microsoft/win32metadata/blob/main/licenses/sdk_license.txt) both identify EULA ID `WIN10SDK.RTM.AUG_2018_en-US`. A normalized token comparison produced 4,307 tokens on each side with an exact token-sequence match after normalizing whitespace, bullets and hyperlink markup.
+
+The Windows SDK licence §2.a includes conditions concerning significant primary functionality, unmodified files, downstream distributor/end-user terms at least as protective as the SDK agreement, copyright notices, and Microsoft indemnification/defence obligations. Those conditions remain relevant to the project's distribution model and must be considered before public release. The following channel terms were reviewed as context, not as a legal opinion: [Windows SDK licence](https://learn.microsoft.com/en-us/legal/windows-sdk/license), [Windows SDK REDIST.TXT](https://learn.microsoft.com/en-us/legal/windows-sdk/redist), [Microsoft Store App Developer Agreement v8.10](https://cdn-dynmedia-1.microsoft.com/is/content/microsoftcorp/microsoft/store/documents/legal/ada/fy26/MS.Store.ADAv8.10.EN.US.pdf), [WinGet manifest schema 1.28.0](https://github.com/microsoft/winget-pkgs/blob/master/doc/manifest/schema/1.28.0/singleton.md), and [GitHub Terms of Service](https://docs.github.com/en/site-policy/github-terms/github-terms-of-service).
+
+- **Microsoft Store:** the publisher remains responsible for third-party licence compliance; the Store agreement's EULA/SALT and indemnity provisions need to be assessed as part of release readiness.
+- **GitHub Releases:** release downloads do not natively enforce a separate SDK end-user agreement. Do not assume the project MIT licence or notices alone satisfy downstream SDK terms.
+- **WinGet:** manifest agreements can request acceptance, subject to the community repository's agreement-body restrictions and the publisher's verification status.
+
+The project retains the Windows SDK licence reference and this notice file in the MSIX. No independent legal opinion has been obtained. No public binary release is approved by this package-selection change alone.
 
 ## .NET runtime and library components
 

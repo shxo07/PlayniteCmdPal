@@ -2,7 +2,7 @@
 
 This page explains what is tested, where each check runs, and how to run it. For installing the toolchain and deploying the extension, see [Developer Setup](DEVELOPER-SETUP.md).
 
-**Status (2026-11-11):** Automated coverage is synthetic and is designed to run without Playnite, PowerToys, a personal game library, or secrets. The test commands below are the ones executed by `scripts/ci.ps1`. The latest previously verified Windows CI run passed restore, Release build, 101 Core tests, 183 adapter tests, 3 Command Palette command tests, and the .NET Framework smoke test ([run 42331229094](https://github.com/shxo07/PlayniteCmdPal/actions/runs/42331229094)); CodeQL also passed ([run 42331229144](https://github.com/shxo07/PlayniteCmdPal/actions/runs/42331229144)). Those runs predate the current WERD-74 head and do not validate it. No CI workflow runs are recorded for the current final-review head; run the full Windows CI and CodeQL workflows after these final-review updates. The user previously confirmed the populated Recently Played list and relative badges in the installed 0.0.7.0 package; the 0.0.8.0 tooltip-removal build still needs installation verification. See the verification evidence section of [Developer Setup](DEVELOPER-SETUP.md) for the evidence trail and its limits.
+**Status (2026-11-11):** Automated coverage is synthetic and runs without Playnite, PowerToys, a personal game library, or secrets. The latest previously verified Windows CI and CodeQL runs are the WERD-80 runs ([CI run 42948025706](https://github.com/shxo07/PlayniteCmdPal/actions/runs/42948025706), [CodeQL run 42948025712](https://github.com/shxo07/PlayniteCmdPal/actions/runs/42948025712)); they predate the current WERD-74 merge and do not validate it. The current WERD-74 head must pass a fresh full Windows CI run (restore, Release build, Core, Playnite/adapter, Command Palette tests, and the .NET Framework snapshot smoke test) and CodeQL before merge. The test commands below are executed by `scripts/ci.ps1`. The user previously confirmed the populated Recently Played list and relative badges in 0.0.7.0; the 0.0.8.0 tooltip-removal build still needs installation verification. See the verification evidence section of [Developer Setup](DEVELOPER-SETUP.md) for the evidence trail and its limits.
 
 ## Test projects
 
@@ -33,7 +33,31 @@ Test data is generated in the test process and written to a temporary directory 
 
 | File | Covers |
 |---|---|
-| `ToggleFavoriteCommandTests` | Both successful and failed pin/unpin invocations return a `ShowToast` result whose `ToastArgs.Result` is explicitly `KeepOpen`, preserving the current page stack and query. |
+| `ToggleFavoriteCommandTests` | Successful and failed pin/unpin invocations return `CommandResult.KeepOpen()`; the notification is displayed separately, preserving the current page stack and query. |
+
+### Command Palette artwork (WERD-80)
+
+| File | Covers |
+|---|---|
+| `ArtworkIconLoaderTests` | Saved Playnite icon is the sole UI artwork source (cover artwork is never substituted), missing/invalid icon fallback, missing artwork isolation, successful-result caching, bounded LRU eviction, catalog-refresh invalidation, concurrent requests sharing one decode, rejection of malformed opaque identifiers, retry after transient resolver failure, cancellation of abandoned shared work, and preservation of shared work while another caller still needs it. |
+| `ArtworkCacheGenerationTests` | Producer-side Playnite reference/path validation, reparse-point and size checks, supported-signature detection, ICO directory/entry-range validation, injected ICO-to-PNG conversion contract, converted-PNG validation, content-addressed cache publication, cache-capacity handling, cleanup, and exact-stage diagnostics for conversion/import failures. |
+
+Manual verification requires a real Playnite library and the packaged Command Palette extension:
+
+1. Search for games with saved Playnite icons and confirm each result shows the matching icon, including games that are not installed. Confirm cover artwork is never substituted for a missing icon.
+2. Check games with no saved icon, a missing cache file, and an unreadable/unsupported image; confirm a consistent fallback appears and search/launch still work. Include an ICO-backed icon and confirm the companion plugin converts it to PNG before publication.
+3. Keep a search query open while the catalog refreshes after changing a game's artwork in Playnite. Confirm the new image appears and the previous image is not reused.
+4. Confirm typing remains responsive while images load; rapidly change the query and confirm obsolete artwork work is cancelled, artwork from the earlier query never appears in newer results, and the latest query is not delayed by an obsolete queue.
+5. Confirm Enter still launches the selected game and source, platform, installed state, duplicate-title disambiguation, and More actions remain intact.
+6. Repeat at 100% and 150% (or higher) Windows display scaling. Confirm icons remain correctly sized and do not clip or displace title/subtitle text.
+
+Record the PowerToys version, Windows build, display scaling, and outcome. Do not include real game names, IDs, or library paths in committed evidence.
+#### WERD-80 manual verification log (2026-11-11)
+
+- **Verified:** One installed Steam library entry with a saved ICO-backed Playnite icon. The updated plugin logged the resolved Playnite icon path; the v2 snapshot contained the icon digest; the matching converted PNG existed in artwork-v2; and the maintainer confirmed the icon displayed in Command Palette after loading the updated extension/catalog.
+- **Diagnostic cross-check:** The digest in the snapshot/cache matched the SHA-256 digest of the PNG produced by an independent local conversion of the same Playnite ICO.
+- **Still pending:** Uninstalled-game display; missing/invalid/unreadable/unsupported icon fallback against a real library; changing an icon in Playnite and observing refresh without stale reuse; other supported raster formats; rapid query changes while images load; Favorites lifecycle checks; and 100% / 150% (or higher) display scaling.
+- **Evidence hygiene:** Real game IDs, original file paths, and personal library contents are intentionally not committed. The test above proves one real ICO-backed Steam case only; do not generalize it to every library entry or format.
 
 ### Favorites UI smoke test (manual)
 
@@ -46,6 +70,8 @@ Run with a local Playnite library and the PowerToys Command Palette extension:
 5. Restart the Command Palette extension and Playnite, then confirm the favorite remains.
 6. Remove a favorited game from the current Playnite library (or test with a known missing ID) and confirm it is hidden from Favorites without deleting its saved preference.
 7. With an unsupported future-schema or unreadable preferences file, confirm normal Search results still appear and can still launch; the Favorites action should report that preferences are unavailable rather than breaking the result list. Confirm its error toast also leaves the current page/query open.
+8. Rapidly change the Favorites query and pin/unpin several games while artwork is loading. Confirm obsolete Favorites requests are cancelled, the page never remains stuck on its loading status, and current favorite artwork appears.
+9. Open and close Favorites repeatedly, then pin/unpin a game. Confirm retired Favorites pages do not refresh or retain active work.
 
 Capture screenshots of Search actions, populated Favorites, and empty/no-match states. A short before/after capture of pinning and unpinning without editing the query is useful evidence.
 

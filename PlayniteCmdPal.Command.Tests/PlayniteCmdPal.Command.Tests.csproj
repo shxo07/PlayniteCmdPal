@@ -20,5 +20,6 @@
   <ItemGroup>
     <ProjectReference Include="..\PlayniteCmdPal.Core\PlayniteCmdPal.Core.csproj" />
     <Compile Include="..\PlayniteCmdPal\ToggleFavoriteCommand.cs" Link="ToggleFavoriteCommand.cs" />
+    <Compile Include="..\PlayniteCmdPal\ArtworkIconLoader.cs" Link="ArtworkIconLoader.cs" />
   </ItemGroup>
 </Project>
