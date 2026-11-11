@@ -302,13 +302,34 @@ public sealed class PlayniteCatalogAdapter : IReadOnlyPlayniteCatalog
     private async Task<CatalogSnapshotParseResult> ReadAndParseAsync()
     {
         var preferred = await _readPathAsync(_snapshotPath).ConfigureAwait(false);
-        if (_legacySnapshotPath is null || preferred.Issue?.Code != CatalogErrorCode.Missing)
+        if (_legacySnapshotPath is null)
             return preferred;
 
-        // The legacy contract is a compatibility fallback only when v2 is absent.
-        // A malformed, unsupported, oversized, or unreadable v2 snapshot must remain
-        // unavailable rather than silently presenting potentially stale v1 data.
-        return await _readPathAsync(_legacySnapshotPath).ConfigureAwait(false);
+        // A present but invalid v2 file is an error, not permission to hide it with v1.
+        if (preferred.Snapshot is null && preferred.Issue?.Code != CatalogErrorCode.Missing)
+            return preferred;
+
+        var legacy = await _readPathAsync(_legacySnapshotPath).ConfigureAwait(false);
+        if (legacy.Snapshot is null)
+            return preferred.Snapshot is not null ? preferred : legacy;
+
+        if (preferred.Snapshot is null)
+        {
+            // v2 may have been atomically published while the legacy file was read.
+            var revalidated = await _readPathAsync(_snapshotPath).ConfigureAwait(false);
+            return revalidated.Snapshot is not null ? revalidated : legacy;
+        }
+
+        if (legacy.Snapshot.GeneratedAtUtc <= preferred.Snapshot.GeneratedAtUtc)
+            return preferred;
+
+        // A newer v1 indicates a rollback or overlapping publication. Re-read v2
+        // before selecting a generation so a just-published v2 is not missed.
+        var revalidatedPreferred = await _readPathAsync(_snapshotPath).ConfigureAwait(false);
+        return revalidatedPreferred.Snapshot is not null &&
+               revalidatedPreferred.Snapshot.GeneratedAtUtc >= legacy.Snapshot.GeneratedAtUtc
+            ? revalidatedPreferred
+            : legacy;
     }
 
     private static async Task<CatalogSnapshotParseResult> ReadPathAsync(string path)

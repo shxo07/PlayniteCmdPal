@@ -26,6 +26,7 @@ public static class ArtworkSnapshotPublisher
         if (publishAsync is null) throw new ArgumentNullException(nameof(publishAsync));
 
         var snapshotPublished = false;
+        var publicationMarked = false;
         try
         {
             try
@@ -41,11 +42,17 @@ public static class ArtworkSnapshotPublisher
                     SnapshotLimits.SchemaVersion);
                 await publishAsync(snapshotPath, withoutArtwork, cancellationToken).ConfigureAwait(false);
                 snapshotPublished = true;
+
+                // Record the successful snapshot publication before attempting cleanup.
+                artwork.MarkPublished();
+                publicationMarked = true;
                 artwork.ClearActiveCache();
             }
 
             snapshotPublished = true;
-            artwork.MarkPublished();
+            if (!publicationMarked)
+                artwork.MarkPublished();
+
             artwork.Complete();
         }
         catch

@@ -14,15 +14,16 @@ using PlayniteCmdPal.Playnite;
 
 namespace PlayniteCmdPal;
 
-internal sealed partial class PlayniteCmdPalPage : DynamicListPage
+internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
 {
-    private readonly IReadOnlyPlayniteCatalog _catalog = new PlayniteCatalogAdapter();
+    private readonly PlayniteCatalogAdapter _catalog = new();
     private readonly FavoritesStore _favorites = FavoritesPreferences.Store;
     private IListItem[] _items = [CreateStatusItem("Loading your Playnite library…")];
     private CancellationTokenSource? _searchCancellation;
     private string _searchText = string.Empty;
     private int _requestVersion;
     private readonly object _requestGate = new();
+    private bool _disposed;
 
     public PlayniteCmdPalPage()
     {
@@ -52,6 +53,9 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage
 
         lock (_requestGate)
         {
+            if (_disposed)
+                return;
+
             if (searchText is not null)
             {
                 _searchText = searchText;
@@ -196,13 +200,28 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage
         return items.ToArray();
     }
 
-    private static IListItem CreateStatusItem(string message) =>
+    private static ListItem CreateStatusItem(string message) =>
         new ListItem(new NoOpCommand()) { Title = message };
 
-    private IListItem CreateRefreshItem(string message) =>
+    private ListItem CreateRefreshItem(string message) =>
         new ListItem(new RefreshCatalogCommand(this)) { Title = message, Subtitle = "Press Enter to retry" };
 
-    private sealed class RefreshCatalogCommand : InvokableCommand
+    public void Dispose()
+    {
+        lock (_requestGate)
+        {
+            if (_disposed)
+                return;
+
+            _disposed = true;
+            _requestVersion++;
+            _searchCancellation?.Cancel();
+            _searchCancellation?.Dispose();
+            _searchCancellation = null;
+        }
+    }
+
+    private sealed partial class RefreshCatalogCommand : InvokableCommand
     {
         private readonly PlayniteCmdPalPage _page;
 
