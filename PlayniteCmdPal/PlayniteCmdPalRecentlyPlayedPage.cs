@@ -17,6 +17,8 @@ namespace PlayniteCmdPal;
 internal sealed partial class PlayniteCmdPalRecentlyPlayedPage : DynamicListPage, IDisposable
 {
     private readonly PlayniteCatalogAdapter _catalog = new();
+    private readonly ArtworkIconLoader _artwork = new(artworkId => PlayniteCatalogAdapter.ResolveArtworkPath(artworkId));
+    private readonly SynchronizationContext? _uiContext;
     private IListItem[] _statusItems = Array.Empty<IListItem>();
     private IListItem[] _gameItems = Array.Empty<IListItem>();
     private IListItem[] _items = Array.Empty<IListItem>();
@@ -24,10 +26,12 @@ internal sealed partial class PlayniteCmdPalRecentlyPlayedPage : DynamicListPage
     private readonly Timer _refreshTimer;
     private readonly CancellationTokenSource _lifetime = new();
     private readonly CancellationToken _lifetimeToken;
+    private int _loadVersion;
     private int _disposed;
 
     public PlayniteCmdPalRecentlyPlayedPage()
     {
+        _uiContext = SynchronizationContext.Current;
         Icon = IconHelpers.FromRelativePath("Assets\\StoreLogo.png");
         Title = "Playnite";
         Name = "Recently played games";
@@ -86,25 +90,53 @@ internal sealed partial class PlayniteCmdPalRecentlyPlayedPage : DynamicListPage
             _gameItems,
             _searchText,
             item => item.Title).ToArray();
-        RaiseItemsChanged();
+        RaiseItemsChangedOnUIContext();
     }
+
+    private void RaiseItemsChangedOnUIContext()
+    {
+        void Raise()
+        {
+            if (Volatile.Read(ref _disposed) == 0)
+                RaiseItemsChanged();
+        }
+
+        if (_uiContext is { } context &&
+            !ReferenceEquals(context, SynchronizationContext.Current))
+        {
+            context.Post(_ => Raise(), null);
+        }
+        else
+        {
+            Raise();
+        }
+    }
+
+    private bool IsCurrentLoad(int version) =>
+        Volatile.Read(ref _disposed) == 0 &&
+        !_lifetimeToken.IsCancellationRequested &&
+        version == Volatile.Read(ref _loadVersion);
 
     private async Task LoadItemsAsync(bool forceRefresh = false)
     {
         if (_lifetimeToken.IsCancellationRequested) return;
+        var version = Interlocked.Increment(ref _loadVersion);
 
         try
         {
             var catalog = forceRefresh
                 ? await _catalog.RefreshAsync(_lifetimeToken).ConfigureAwait(false)
                 : await _catalog.GetAsync(_lifetimeToken).ConfigureAwait(false);
-            if (_lifetimeToken.IsCancellationRequested) return;
+            if (!IsCurrentLoad(version)) return;
+            if (forceRefresh)
+                _artwork.Invalidate();
             var statusItems = new List<IListItem>();
 
             if (!catalog.IsAvailable)
             {
                 statusItems.Add(CreateStatusItem(catalog.Issue?.Message
                     ?? "The Playnite catalog is unavailable. Install and start the companion plugin."));
+                if (!IsCurrentLoad(version)) return;
                 _statusItems = statusItems.ToArray();
                 _gameItems = Array.Empty<IListItem>();
                 ApplySearch();
@@ -138,6 +170,7 @@ internal sealed partial class PlayniteCmdPalRecentlyPlayedPage : DynamicListPage
                         break;
                 }
 
+                if (!IsCurrentLoad(version)) return;
                 _statusItems = statusItems.ToArray();
                 _gameItems = Array.Empty<IListItem>();
                 ApplySearch();
@@ -150,6 +183,7 @@ internal sealed partial class PlayniteCmdPalRecentlyPlayedPage : DynamicListPage
                 .Select(group => group.Key)
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
             var gameItems = new List<IListItem>();
+            var artworkItems = new List<(ListItem Item, GameEntry Game)>();
 
             foreach (var game in games)
             {
@@ -164,17 +198,22 @@ internal sealed partial class PlayniteCmdPalRecentlyPlayedPage : DynamicListPage
                     metadata.Add($"ID {discriminator}");
                 }
 
-                gameItems.Add(new ListItem(new LaunchGameCommand(game.GameId))
+                var item = new ListItem(new LaunchGameCommand(game.GameId))
                 {
                     Title = game.Title,
                     Subtitle = string.Join(" · ", metadata),
+                    Icon = ArtworkIconLoader.FallbackIcon,
                     Tags = [new Tag(relativeTime)],
-                });
+                };
+                gameItems.Add(item);
+                artworkItems.Add((item, game));
             }
 
+            if (!IsCurrentLoad(version)) return;
             _statusItems = statusItems.ToArray();
             _gameItems = gameItems.ToArray();
             ApplySearch();
+            _ = LoadArtworkAsync(version, artworkItems);
         }
         catch (OperationCanceledException)
         {
@@ -182,12 +221,55 @@ internal sealed partial class PlayniteCmdPalRecentlyPlayedPage : DynamicListPage
         }
         catch (Exception)
         {
+            if (!IsCurrentLoad(version)) return;
             _statusItems =
             [
                 CreateStatusItem("Couldn't read the Playnite catalog. Check the companion plugin and snapshot permissions."),
             ];
             _gameItems = Array.Empty<IListItem>();
             ApplySearch();
+        }
+    }
+
+    private async Task LoadArtworkAsync(
+        int version,
+        IReadOnlyList<(ListItem Item, GameEntry Game)> artworkItems)
+    {
+        if (artworkItems.Count == 0) return;
+
+        try
+        {
+            await Parallel.ForEachAsync(
+                artworkItems,
+                new ParallelOptions
+                {
+                    MaxDegreeOfParallelism = 4,
+                    CancellationToken = _lifetimeToken,
+                },
+                async (entry, token) =>
+                {
+                    try
+                    {
+                        var icon = await _artwork.GetIconAsync(entry.Game, token).ConfigureAwait(false);
+                        token.ThrowIfCancellationRequested();
+                        if (!IsCurrentLoad(version)) return;
+
+                        entry.Item.Icon = icon ?? ArtworkIconLoader.FallbackIcon;
+                        RaiseItemsChangedOnUIContext();
+                    }
+                    catch (OperationCanceledException) when (token.IsCancellationRequested)
+                    {
+                        throw;
+                    }
+                    catch (Exception)
+                    {
+                        // Artwork is optional; a failure for one game must not affect other rows.
+                    }
+                }).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (_lifetimeToken.IsCancellationRequested)
+        {
+            // The page was disposed while artwork was loading.
         }
     }
 
