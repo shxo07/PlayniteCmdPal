@@ -19,7 +19,7 @@ public sealed class PlayniteCmdPalPlugin : GenericPlugin
 {
     public static readonly Guid PluginId = Guid.Parse("9E4CF37F-EF29-495F-9E83-4EA1A389ABD8");
     private static readonly TimeSpan Debounce = TimeSpan.FromMilliseconds(750);
-    private static readonly TimeSpan ArtworkRevalidationInterval = TimeSpan.FromMinutes(30);
+    private static readonly TimeSpan PeriodicExportInterval = TimeSpan.FromSeconds(30);
     private static readonly ILogger Logger = LogManager.GetLogger();
     private readonly CatalogExportCoordinator _coordinator;
     private readonly Dispatcher _dispatcher;
@@ -51,13 +51,15 @@ public sealed class PlayniteCmdPalPlugin : GenericPlugin
         if (Interlocked.CompareExchange(ref _coordinatorStarted, 1, 0) == 0)
         {
             _ = RunCoordinatorAsync();
-            // Playnite may update bytes behind an unchanged database reference. Re-exporting
-            // periodically re-reads the source and lets its content hash detect that change.
+            // Playnite does not reliably raise a game-update event for every LastActivity
+            // change (for example, when a game exits). Poll the database so the snapshot used
+            // by Recently Played catches up even when no relevant event was delivered. This
+            // also retains periodic artwork revalidation for files updated in place.
             _artworkRevalidationTimer = new Timer(
                 _ => _coordinator.RequestExport(),
                 null,
-                ArtworkRevalidationInterval,
-                ArtworkRevalidationInterval);
+                PeriodicExportInterval,
+                PeriodicExportInterval);
         }
     }
 

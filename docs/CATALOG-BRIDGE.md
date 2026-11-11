@@ -105,3 +105,8 @@ Remaining real-library verification:
 7. Record the Playnite/Windows versions and observed outcomes without committing game IDs, titles, or library exports.
 
 The existing launch-by-ID URI smoke test is separate from catalog bridge verification and does not verify this bridge.
+
+
+### Recently Played freshness
+
+The companion plugin periodically re-exports the catalog every 30 seconds. This is intentional: Playnite can update a game's `LastActivity` when a game exits without delivering a corresponding game-update event to every plugin subscriber. The periodic export ensures the schema-v2 snapshot eventually reflects that activity. The Recently Played page exposes one **Refresh Playnite catalog** action in its top-level More commands menu; it re-reads the latest published snapshot without adding a duplicate refresh row to the results.

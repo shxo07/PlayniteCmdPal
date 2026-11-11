@@ -235,3 +235,10 @@ These are deliberately not automated yet; each needs a Windows host and, in most
 - [42331229094](https://github.com/shxo07/PlayniteCmdPal/actions/runs/42331229094) — Windows CI on the pre-schema-fix WERD-75 head: Release build, `101/101` Core tests, `183/183` adapter tests, `3/3` Command Palette command tests, and the .NET Framework snapshot smoke step all passed.
 - [42331229144](https://github.com/shxo07/PlayniteCmdPal/actions/runs/42331229144) — CodeQL on the same pre-schema-fix head passed.
 - **WERD-74 merged-head regression coverage:** recently-played presentation, schema v2 `lastActivity` parsing/serialization, adapter race/revalidation, and the combined .NET Framework smoke path. Execution is pending a fresh Windows CI run on the merged head.
+
+### Recently Played activity refresh
+
+1. Open PlayniteCmdPal's **Recently played games** page and note the current newest entry.
+2. Launch a game from Playnite, close it, and confirm Playnite records a new **Last activity** value.
+3. Allow up to 30 seconds for the companion plugin's periodic catalog export, then reopen or refresh Recently Played and confirm the game appears near the top.
+4. Open the Recently played games command's **More commands** menu and use **Refresh Playnite catalog**. Confirm the page reloads without a separate refresh row appearing in the list.

@@ -31,6 +31,11 @@ internal sealed partial class PlayniteCmdPalRecentlyPlayedPage : DynamicListPage
 
     public override IListItem[] GetItems() => _items;
 
+    internal void RefreshCatalog()
+    {
+        _ = LoadItemsAsync(forceRefresh: true);
+    }
+
     public override void UpdateSearchText(string oldSearch, string newSearch)
     {
         _searchText = newSearch;
@@ -58,16 +63,15 @@ internal sealed partial class PlayniteCmdPalRecentlyPlayedPage : DynamicListPage
 
             if (!catalog.IsAvailable)
             {
-                statusItems.Add(CreateRefreshItem(catalog.Issue?.Message
-                    ?? "The Playnite catalog is unavailable. Install and start the companion plugin, then refresh."));
+                statusItems.Add(CreateStatusItem(catalog.Issue?.Message
+                    ?? "The Playnite catalog is unavailable. Install and start the companion plugin."));
                 _statusItems = statusItems.ToArray();
                 _gameItems = Array.Empty<IListItem>();
                 ApplySearch();
                 return;
             }
 
-            // Status and recovery actions are independent of the active game-name query.
-            statusItems.Add(CreateRefreshItem("Refresh recently played games"));
+            // Status messages are independent of the active game-name query.
             if (catalog.IsStale)
                 statusItems.Add(CreateStatusItem("The Playnite catalog is over 24 hours old."));
             if (catalog.Issue is not null)
@@ -86,11 +90,11 @@ internal sealed partial class PlayniteCmdPalRecentlyPlayedPage : DynamicListPage
                             "No usable game records were found. Check the companion plugin and refresh the catalog."));
                         break;
                     case RecentlyPlayedEmptyState.EmptyLibrary:
-                        statusItems.Add(CreateRefreshItem(
-                            "Your Playnite library is empty. Add games in Playnite, then refresh."));
+                        statusItems.Add(CreateStatusItem(
+                            "Your Playnite library is empty. Add games in Playnite."));
                         break;
                     default:
-                        statusItems.Add(CreateRefreshItem("No games have a recorded last-played date yet."));
+                        statusItems.Add(CreateStatusItem("No games have a recorded last-played date yet."));
                         break;
                 }
 
@@ -141,7 +145,6 @@ internal sealed partial class PlayniteCmdPalRecentlyPlayedPage : DynamicListPage
             _statusItems =
             [
                 CreateStatusItem("Couldn't read the Playnite catalog. Check the companion plugin and snapshot permissions."),
-                CreateRefreshItem("Refresh recently played games"),
             ];
             _gameItems = Array.Empty<IListItem>();
             ApplySearch();
@@ -151,18 +154,5 @@ internal sealed partial class PlayniteCmdPalRecentlyPlayedPage : DynamicListPage
     private static ListItem CreateStatusItem(string message) =>
         new ListItem(new NoOpCommand()) { Title = message };
 
-    private ListItem CreateRefreshItem(string message) =>
-        new ListItem(new RefreshCatalogCommand(this)) { Title = message, Subtitle = "Press Enter to retry" };
 
-    private sealed partial class RefreshCatalogCommand : InvokableCommand
-    {
-        private readonly PlayniteCmdPalRecentlyPlayedPage _page;
-        public RefreshCatalogCommand(PlayniteCmdPalRecentlyPlayedPage page) => _page = page;
-        public override string Name => "Refresh Playnite catalog";
-        public override CommandResult Invoke()
-        {
-            _ = _page.LoadItemsAsync(forceRefresh: true);
-            return CommandResult.KeepOpen();
-        }
-    }
 }

@@ -15,10 +15,15 @@ public partial class PlayniteCmdPalCommandsProvider : CommandProvider
     {
         DisplayName = "Playnite";
         Icon = IconHelpers.FromRelativePath("Assets\\StoreLogo.png");
+        var recentlyPlayedPage = new PlayniteCmdPalRecentlyPlayedPage();
         _commands = [
             new CommandItem(new PlayniteCmdPalPage()) { Title = "Search games" },
             new CommandItem(new FavoritesPage()) { Title = "Favorites" },
-            new CommandItem(new PlayniteCmdPalRecentlyPlayedPage()) { Title = "Recently played games" },
+            new CommandItem(recentlyPlayedPage)
+            {
+                Title = "Recently played games",
+                MoreCommands = [new CommandContextItem(new RefreshRecentlyPlayedCommand(recentlyPlayedPage))],
+            },
         ];
     }
 
@@ -27,4 +32,20 @@ public partial class PlayniteCmdPalCommandsProvider : CommandProvider
         return _commands;
     }
 
+    private sealed class RefreshRecentlyPlayedCommand : InvokableCommand
+    {
+        private readonly PlayniteCmdPalRecentlyPlayedPage _page;
+
+        public RefreshRecentlyPlayedCommand(PlayniteCmdPalRecentlyPlayedPage page)
+        {
+            _page = page;
+            Name = "Refresh Playnite catalog";
+        }
+
+        public override CommandResult Invoke()
+        {
+            _page.RefreshCatalog();
+            return CommandResult.KeepOpen();
+        }
+    }
 }
