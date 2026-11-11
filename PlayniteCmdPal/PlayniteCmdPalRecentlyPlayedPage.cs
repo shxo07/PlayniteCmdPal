@@ -5,6 +5,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.CommandPalette.Extensions;
 using Microsoft.CommandPalette.Extensions.Toolkit;
@@ -20,6 +21,7 @@ internal sealed partial class PlayniteCmdPalRecentlyPlayedPage : DynamicListPage
     private IListItem[] _gameItems = Array.Empty<IListItem>();
     private IListItem[] _items = Array.Empty<IListItem>();
     private string _searchText = string.Empty;
+    private readonly Timer _refreshTimer;
 
     public PlayniteCmdPalRecentlyPlayedPage()
     {
@@ -29,6 +31,12 @@ internal sealed partial class PlayniteCmdPalRecentlyPlayedPage : DynamicListPage
         _statusItems = [CreateStatusItem("Loading recently played games…")];
         _items = _statusItems;
         _ = LoadItemsAsync();
+        // Keep an open Recently Played page current without requiring a full palette reload.
+        _refreshTimer = new Timer(
+            _ => RefreshCatalog(),
+            null,
+            dueTime: TimeSpan.FromSeconds(10),
+            period: TimeSpan.FromSeconds(10));
     }
 
     public override IListItem[] GetItems() => _items;
@@ -37,6 +45,9 @@ internal sealed partial class PlayniteCmdPalRecentlyPlayedPage : DynamicListPage
     {
         _ = LoadItemsAsync(forceRefresh: true);
     }
+
+    internal IContextItem CreateRefreshContextItem() =>
+        new CommandContextItem(new RefreshCatalogCommand(this));
 
     public override void UpdateSearchText(string oldSearch, string newSearch)
     {
@@ -117,7 +128,7 @@ internal sealed partial class PlayniteCmdPalRecentlyPlayedPage : DynamicListPage
             {
                 var metadata = new List<string>
                 {
-                    $"Last played {RecentlyPlayedGames.FormatLastPlayed(game.LastActivity!.Value, TimeZoneInfo.Local)} (local time)",
+                    $"Last played {RecentlyPlayedGames.FormatLastPlayed(game.LastActivity!.Value, TimeZoneInfo.Local)}",
                 };
                 if (!string.IsNullOrWhiteSpace(game.Source)) metadata.Add(game.Source);
                 if (!string.IsNullOrWhiteSpace(game.Platform)) metadata.Add(game.Platform);
@@ -131,7 +142,7 @@ internal sealed partial class PlayniteCmdPalRecentlyPlayedPage : DynamicListPage
                 {
                     Title = game.Title,
                     Subtitle = string.Join(" · ", metadata),
-                    MoreCommands = [new CommandContextItem(new RefreshCatalogCommand(this))],
+                    MoreCommands = [CreateRefreshContextItem()],
                 });
             }
 
@@ -167,7 +178,7 @@ internal sealed partial class PlayniteCmdPalRecentlyPlayedPage : DynamicListPage
 
         public RefreshCatalogCommand(PlayniteCmdPalRecentlyPlayedPage page) => _page = page;
 
-        public override string Name => "Reload catalog snapshot";
+        public override string Name => "Refresh Playnite catalog";
 
         public override CommandResult Invoke()
         {

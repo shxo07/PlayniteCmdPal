@@ -85,8 +85,8 @@ public sealed class RecentlyPlayedGamesTests
         var utc = new DateTime(2026, 10, 30, 11, 0, 0, DateTimeKind.Utc);
         var local = utc.ToLocalTime();
 
-        Assert.Equal("2026-10-30 15:00 +04:00", RecentlyPlayedGames.FormatLastPlayed(utc, displayZone));
-        Assert.Equal("2026-10-30 15:00 +04:00", RecentlyPlayedGames.FormatLastPlayed(local, displayZone));
+        Assert.Equal("2026-10-30 15:00", RecentlyPlayedGames.FormatLastPlayed(utc, displayZone));
+        Assert.Equal("2026-10-30 15:00", RecentlyPlayedGames.FormatLastPlayed(local, displayZone));
     }
 
     [Fact]

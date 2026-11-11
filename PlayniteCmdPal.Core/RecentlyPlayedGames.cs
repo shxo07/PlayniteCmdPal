@@ -41,9 +41,8 @@ public static class RecentlyPlayedGames
     }
 
     /// <summary>
-    /// Formats a last-played value in one display time zone. Unspecified values retain the
-    /// documented local-machine interpretation; the numeric offset makes the displayed zone
-    /// unambiguous even across daylight-saving transitions.
+    /// Formats a last-played value in the selected display time zone using an unambiguous
+    /// 24-hour clock. The UI intentionally omits the zone label and numeric offset.
     /// </summary>
     public static string FormatLastPlayed(DateTime lastActivity, TimeZoneInfo displayTimeZone)
     {
@@ -52,7 +51,7 @@ public static class RecentlyPlayedGames
         var utc = lastActivity.ToUniversalTime();
         var instant = new DateTimeOffset(DateTime.SpecifyKind(utc, DateTimeKind.Utc));
         return TimeZoneInfo.ConvertTime(instant, displayTimeZone)
-            .ToString("yyyy-MM-dd HH:mm zzz", System.Globalization.CultureInfo.InvariantCulture);
+            .ToString("yyyy-MM-dd HH:mm", System.Globalization.CultureInfo.InvariantCulture);
     }
 
     /// <summary>
