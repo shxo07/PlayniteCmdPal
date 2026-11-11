@@ -8,7 +8,7 @@ using Microsoft.CommandPalette.Extensions.Toolkit;
 
 namespace PlayniteCmdPal;
 
-public partial class PlayniteCmdPalCommandsProvider : CommandProvider, IDisposable
+public partial class PlayniteCmdPalCommandsProvider : CommandProvider
 {
     private readonly ICommandItem[] _commands;
     private readonly PlayniteCmdPalRecentlyPlayedPage _recentlyPlayedPage;
@@ -34,6 +34,11 @@ public partial class PlayniteCmdPalCommandsProvider : CommandProvider, IDisposab
         return _commands;
     }
 
-    public void Dispose() => _recentlyPlayedPage.Dispose();
+    public override void Dispose()
+    {
+        _recentlyPlayedPage.Dispose();
+        base.Dispose();
+        GC.SuppressFinalize(this);
+    }
 
 }

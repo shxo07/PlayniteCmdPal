@@ -11,7 +11,7 @@ namespace PlayniteCmdPal;
 
 internal sealed partial class FavoritesPage : DynamicListPage
 {
-    private readonly IReadOnlyPlayniteCatalog _catalog = new PlayniteCatalogAdapter();
+    private readonly PlayniteCatalogAdapter _catalog = new();
     private readonly FavoritesStore _favorites = FavoritesPreferences.Store;
     private readonly LatestRequestGate _requestGate = new();
     private IListItem[] _items = [CreateStatusItem("Loading your favorites…")];
@@ -124,6 +124,6 @@ internal sealed partial class FavoritesPage : DynamicListPage
         return string.Join(" · ", metadata);
     }
 
-    private static IListItem CreateStatusItem(string message) =>
+    private static ListItem CreateStatusItem(string message) =>
         new ListItem(new NoOpCommand()) { Title = message };
 }

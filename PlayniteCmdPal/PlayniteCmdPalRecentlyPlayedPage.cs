@@ -129,8 +129,8 @@ internal sealed partial class PlayniteCmdPalRecentlyPlayedPage : DynamicListPage
             foreach (var game in games)
             {
                 var lastActivity = game.LastActivity!.Value;
-                var relativeTime = RecentlyPlayedGames.FormatRelativeLastPlayed(lastActivity, DateTimeOffset.Now);
-                var absoluteTime = RecentlyPlayedGames.FormatAbsoluteLastPlayed(lastActivity, TimeZoneInfo.Local);
+                var relativeTime = PlayniteCmdPal.Core.RecentlyPlayedGames.FormatRelativeLastPlayed(lastActivity, DateTimeOffset.Now);
+                var absoluteTime = PlayniteCmdPal.Core.RecentlyPlayedGames.FormatAbsoluteLastPlayed(lastActivity, TimeZoneInfo.Local);
                 var metadata = new List<string>();
                 if (!string.IsNullOrWhiteSpace(game.Source)) metadata.Add(game.Source);
                 if (!string.IsNullOrWhiteSpace(game.Platform)) metadata.Add(game.Platform);
@@ -181,7 +181,7 @@ internal sealed partial class PlayniteCmdPalRecentlyPlayedPage : DynamicListPage
             MoreCommands = [CreateRefreshContextItem()],
         };
 
-    private sealed class RefreshCatalogCommand : InvokableCommand
+    private sealed partial class RefreshCatalogCommand : InvokableCommand
     {
         private readonly PlayniteCmdPalRecentlyPlayedPage _page;
 
