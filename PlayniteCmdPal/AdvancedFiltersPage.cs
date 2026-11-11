@@ -18,7 +18,6 @@ internal sealed partial class AdvancedFiltersPage : ContentPage
         _form = new AdvancedFiltersForm(state, filtersApplied);
         Name = "Advanced filters";
         Title = "Advanced filters";
-        Icon = new IconInfo("\\uE71C");
     }
 
     public override IContent[] GetContent() => [_form];
