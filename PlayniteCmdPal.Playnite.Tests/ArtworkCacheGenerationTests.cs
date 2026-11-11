@@ -40,6 +40,103 @@ public sealed class ArtworkCacheGenerationTests : IDisposable
 
 
     [Fact]
+    public void IcoArtworkIsConvertedToPngBeforeItEntersTheContentAddressedCache()
+    {
+        var ico = new byte[26];
+        ico[2] = 1;
+        ico[4] = 1;
+        ico[6] = 16;
+        ico[7] = 16;
+        ico[10] = 1;
+        ico[12] = 32;
+        ico[14] = 4;
+        ico[18] = 22;
+        ico[22] = 1; ico[23] = 2; ico[24] = 3; ico[25] = 4;
+
+        var png = new byte[24];
+        byte[] signature = { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A };
+        Array.Copy(signature, png, signature.Length);
+        png[16] = 0x49; png[17] = 0x45; png[18] = 0x4E; png[19] = 0x44;
+        var source = Path.Combine(_filesRoot, GameId, FileIdA + ".ico");
+        File.WriteAllBytes(source, ico);
+
+        using var cache = new ArtworkCacheGeneration(
+            _cacheRoot, SnapshotLimits.MaxArtworkCacheBytes, SnapshotLimits.MaxArtworkBytes,
+            null, File.Move, _ => { }, _ => png);
+        var id = cache.TryImport(GameId, GameId + "\\" + FileIdA + ".ico", source, _filesRoot);
+
+        Assert.Equal(Digest(png), id);
+        cache.Activate(); cache.MarkPublished(); cache.Complete();
+        Assert.True(File.Exists(Path.Combine(_cacheRoot, id + ".png")));
+    }
+
+    [Fact]
+    public void IcoConversionFailureReportsTheExactStageAndException()
+    {
+        var ico = new byte[26];
+        ico[2] = 1;
+        ico[4] = 1;
+        ico[6] = 16;
+        ico[7] = 16;
+        ico[10] = 1;
+        ico[12] = 32;
+        ico[14] = 4;
+        ico[18] = 22;
+        ico[22] = 1; ico[23] = 2; ico[24] = 3; ico[25] = 4;
+        var source = Path.Combine(_filesRoot, GameId, FileIdA + ".ico");
+        File.WriteAllBytes(source, ico);
+
+        using var cache = new ArtworkCacheGeneration(
+            _cacheRoot,
+            convertIcoToPng: _ => throw new InvalidDataException("Injected ICO decoder failure."));
+        string? diagnostic = null;
+
+        var id = cache.TryImport(
+            GameId,
+            GameId + "\\" + FileIdA + ".ico",
+            source,
+            _filesRoot,
+            message => diagnostic = message);
+
+        Assert.Null(id);
+        Assert.NotNull(diagnostic);
+        Assert.Contains("stage=ico-conversion", diagnostic);
+        Assert.Contains("Injected ICO decoder failure", diagnostic);
+        Assert.Contains(source, diagnostic);
+        Assert.Empty(Directory.GetFiles(GetStagingDirectory()));
+    }
+
+    [Fact]
+    public void MissingIcoConverterReportsThatConversionIsNotConfigured()
+    {
+        var ico = new byte[26];
+        ico[2] = 1;
+        ico[4] = 1;
+        ico[6] = 16;
+        ico[7] = 16;
+        ico[10] = 1;
+        ico[12] = 32;
+        ico[14] = 4;
+        ico[18] = 22;
+        ico[22] = 1; ico[23] = 2; ico[24] = 3; ico[25] = 4;
+        var source = Path.Combine(_filesRoot, GameId, FileIdA + ".ico");
+        File.WriteAllBytes(source, ico);
+
+        using var cache = new ArtworkCacheGeneration(_cacheRoot);
+        string? diagnostic = null;
+        var id = cache.TryImport(
+            GameId,
+            GameId + "\\" + FileIdA + ".ico",
+            source,
+            _filesRoot,
+            message => diagnostic = message);
+
+        Assert.Null(id);
+        Assert.Contains("stage=ico-conversion", diagnostic);
+        Assert.Contains("not configured", diagnostic);
+    }
+
+    [Fact]
     public void MissingArtworkFileProducesNoIdentifierAndDoesNotFailTheCatalogExport()
     {
         using var cache = new ArtworkCacheGeneration(_cacheRoot);

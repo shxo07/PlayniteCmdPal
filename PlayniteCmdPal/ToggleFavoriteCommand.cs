@@ -10,12 +10,18 @@ internal sealed partial class ToggleFavoriteCommand : InvokableCommand
     private readonly FavoritesStore _store;
     private readonly string _gameId;
     private readonly Action? _onChanged;
+    private readonly Action<string> _showToast;
 
-    public ToggleFavoriteCommand(FavoritesStore store, string gameId, Action? onChanged = null)
+    public ToggleFavoriteCommand(
+        FavoritesStore store,
+        string gameId,
+        Action? onChanged = null,
+        Action<string>? showToast = null)
     {
         _store = store;
         _gameId = gameId;
         _onChanged = onChanged;
+        _showToast = showToast ?? (message => new ToastStatusMessage(message).Show());
     }
 
     // Command item construction reads Name. Keep an unreadable or future-version preferences
@@ -65,12 +71,11 @@ internal sealed partial class ToggleFavoriteCommand : InvokableCommand
             : "Game removed from Favorites.");
     }
 
-    private static CommandResult ShowToast(string message)
+    private CommandResult ShowToast(string message)
     {
-        return CommandResult.ShowToast(new ToastArgs
-        {
-            Message = message,
-            Result = CommandResult.KeepOpen(),
-        });
+        // Keep the page command result independent from the transient notification.
+        // This lets the delayed FavoritesChanged refresh run after command dispatch.
+        _showToast(message);
+        return CommandResult.KeepOpen();
     }
 }

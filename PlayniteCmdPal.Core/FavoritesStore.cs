@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Threading;
 
 namespace PlayniteCmdPal.Core;
 
@@ -12,7 +13,7 @@ public sealed partial class FavoritesStore
     public const int CurrentSchemaVersion = 1;
     private readonly string _filePath;
     private readonly object _gate = new();
-    private HashSet<string>? _favoriteIds;
+    private HashSet<string> _favoriteIds = new(StringComparer.Ordinal);
 
     public FavoritesStore(string filePath)
     {
@@ -27,8 +28,9 @@ public sealed partial class FavoritesStore
     {
         lock (_gate)
         {
-            EnsureLoaded();
-            return _favoriteIds!.OrderBy(id => id, StringComparer.Ordinal).ToArray();
+            using var fileLock = AcquireFileLock();
+            _favoriteIds = ReadFavoriteIds();
+            return _favoriteIds.OrderBy(id => id, StringComparer.Ordinal).ToArray();
         }
     }
 
@@ -37,8 +39,9 @@ public sealed partial class FavoritesStore
         ArgumentException.ThrowIfNullOrWhiteSpace(gameId);
         lock (_gate)
         {
-            EnsureLoaded();
-            return _favoriteIds!.Contains(gameId);
+            using var fileLock = AcquireFileLock();
+            _favoriteIds = ReadFavoriteIds();
+            return _favoriteIds.Contains(gameId);
         }
     }
 
@@ -49,8 +52,11 @@ public sealed partial class FavoritesStore
         bool isFavorite;
         lock (_gate)
         {
-            EnsureLoaded();
-            var wasFavorite = _favoriteIds!.Contains(gameId);
+            // Reload while holding a cross-process lock. Separate Command Palette host
+            // instances must never make decisions from an old in-memory favorites snapshot.
+            using var fileLock = AcquireFileLock();
+            _favoriteIds = ReadFavoriteIds();
+            var wasFavorite = _favoriteIds.Contains(gameId);
             if (wasFavorite)
             {
                 _favoriteIds.Remove(gameId);
@@ -97,17 +103,11 @@ public sealed partial class FavoritesStore
         return isFavorite;
     }
 
-    private void EnsureLoaded()
+    private HashSet<string> ReadFavoriteIds()
     {
-        if (_favoriteIds is not null)
-        {
-            return;
-        }
-
         if (!File.Exists(_filePath))
         {
-            _favoriteIds = new HashSet<string>(StringComparer.Ordinal);
-            return;
+            return new HashSet<string>(StringComparer.Ordinal);
         }
 
         try
@@ -118,13 +118,9 @@ public sealed partial class FavoritesStore
             // Inspect the version before deserializing the v1 payload. A newer schema may
             // intentionally change favoriteGameIds' shape, and must never be mistaken for
             // corrupt v1 data (which could otherwise be overwritten on the next mutation).
-            // JSON permits scalar and array roots as well as objects. Only object
-            // documents can carry our schema envelope; recover every other root kind as
-            // malformed preferences before calling TryGetProperty (which throws otherwise).
             if (envelope.RootElement.ValueKind != JsonValueKind.Object)
             {
-                _favoriteIds = new HashSet<string>(StringComparer.Ordinal);
-                return;
+                return new HashSet<string>(StringComparer.Ordinal);
             }
 
             if (!envelope.RootElement.TryGetProperty("schemaVersion", out var schemaVersion)
@@ -132,8 +128,7 @@ public sealed partial class FavoritesStore
                 || !schemaVersion.TryGetInt32(out var version)
                 || version < CurrentSchemaVersion)
             {
-                _favoriteIds = new HashSet<string>(StringComparer.Ordinal);
-                return;
+                return new HashSet<string>(StringComparer.Ordinal);
             }
 
             if (version > CurrentSchemaVersion)
@@ -143,19 +138,12 @@ public sealed partial class FavoritesStore
 
             stream.Position = 0;
             var document = JsonSerializer.Deserialize(stream, PreferencesJsonContext.Default.PreferencesDocument);
-            if (document is null)
+            if (document?.FavoriteGameIds is null)
             {
-                _favoriteIds = new HashSet<string>(StringComparer.Ordinal);
-                return;
+                return new HashSet<string>(StringComparer.Ordinal);
             }
 
-            if (document.FavoriteGameIds is null)
-            {
-                _favoriteIds = new HashSet<string>(StringComparer.Ordinal);
-                return;
-            }
-
-            _favoriteIds = document.FavoriteGameIds
+            return document.FavoriteGameIds
                 .Where(id => !string.IsNullOrWhiteSpace(id))
                 .ToHashSet(StringComparer.Ordinal);
         }
@@ -163,7 +151,31 @@ public sealed partial class FavoritesStore
         {
             // Treat malformed data as an empty preference set. The next user mutation writes
             // a fresh valid document atomically; the corrupt source is never partially parsed.
-            _favoriteIds = new HashSet<string>(StringComparer.Ordinal);
+            return new HashSet<string>(StringComparer.Ordinal);
+        }
+    }
+
+    private FileStream AcquireFileLock()
+    {
+        var directory = Path.GetDirectoryName(_filePath)
+            ?? throw new InvalidOperationException("The favorites file must have a parent directory.");
+        Directory.CreateDirectory(directory);
+
+        // FileShare.None provides an OS-managed lock that is released automatically if
+        // the Command Palette host exits unexpectedly. This also coordinates separate
+        // extension processes, unlike the instance-local _gate.
+        var lockPath = _filePath + ".lock";
+        var deadline = Environment.TickCount64 + 5000;
+        while (true)
+        {
+            try
+            {
+                return new FileStream(lockPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+            }
+            catch (IOException) when (Environment.TickCount64 < deadline)
+            {
+                Thread.Sleep(10);
+            }
         }
     }
 
