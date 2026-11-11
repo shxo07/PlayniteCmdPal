@@ -79,6 +79,8 @@ internal sealed partial class PlayniteCmdPalRecentlyPlayedPage : DynamicListPage
 
     private void ApplySearch()
     {
+        if (Volatile.Read(ref _disposed) != 0) return;
+
         _items = RecentlyPlayedGames.ComposeVisibleItems(
             _statusItems,
             _gameItems,
