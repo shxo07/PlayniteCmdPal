@@ -65,6 +65,13 @@ public sealed class PlayniteCmdPalPlugin : GenericPlugin
 
     public override void OnLibraryUpdated(OnLibraryUpdatedEventArgs args) => _coordinator.RequestExport();
 
+    // Playnite records the latest activity as part of game-session lifecycle handling.
+    // Request exports at both boundaries rather than depending only on database collection
+    // notifications, which can be delayed or omitted for LastActivity-only changes.
+    public override void OnGameStarted(OnGameStartedEventArgs args) => _coordinator.RequestExport();
+
+    public override void OnGameStopped(OnGameStoppedEventArgs args) => _coordinator.RequestExport();
+
     public override void OnGameInstalled(OnGameInstalledEventArgs args) => _coordinator.RequestExport();
 
     public override void OnGameUninstalled(OnGameUninstalledEventArgs args) => _coordinator.RequestExport();
