@@ -48,49 +48,10 @@ internal sealed partial class AdvancedFiltersForm : FormContent
 
     public override CommandResult SubmitForm(string inputs, string data)
     {
-        // Only explicit, well-formed actions may change draft or applied filter state.
-        // A missing or malformed action must never be interpreted as Apply.
-        if (!TryReadActionId(data, out var actionId))
+        // Only explicit, well-formed actions may change applied filter state.
+        if (!TryReadActionId(data, out var actionId)
+            || !TryReadSelections(inputs))
         {
-            return CommandResult.KeepOpen();
-        }
-
-        if (actionId.StartsWith("toggle-status:", StringComparison.Ordinal))
-        {
-            var status = actionId["toggle-status:".Length..];
-            if (status is not ("installed" or "not-installed"))
-            {
-                return CommandResult.KeepOpen();
-            }
-
-            Toggle(_selectedStatuses, status);
-            RebuildTemplate();
-            return CommandResult.KeepOpen();
-        }
-
-        if (actionId.StartsWith("toggle-source:", StringComparison.Ordinal))
-        {
-            var source = Uri.UnescapeDataString(actionId["toggle-source:".Length..]);
-            if (!_state.Sources.Contains(source, StringComparer.OrdinalIgnoreCase))
-            {
-                return CommandResult.KeepOpen();
-            }
-
-            Toggle(_selectedSources, source);
-            RebuildTemplate();
-            return CommandResult.KeepOpen();
-        }
-
-        if (actionId.StartsWith("toggle-platform:", StringComparison.Ordinal))
-        {
-            var platform = Uri.UnescapeDataString(actionId["toggle-platform:".Length..]);
-            if (!_state.Platforms.Contains(platform, StringComparer.OrdinalIgnoreCase))
-            {
-                return CommandResult.KeepOpen();
-            }
-
-            Toggle(_selectedPlatforms, platform);
-            RebuildTemplate();
             return CommandResult.KeepOpen();
         }
 
@@ -136,6 +97,111 @@ internal sealed partial class AdvancedFiltersForm : FormContent
         return CommandResult.GoBack();
     }
 
+    private bool TryReadSelections(string inputs)
+    {
+        if (string.IsNullOrWhiteSpace(inputs))
+        {
+            return false;
+        }
+
+        try
+        {
+            if (JsonNode.Parse(inputs) is not JsonObject values)
+            {
+                return false;
+            }
+
+            var statuses = new HashSet<string>(StringComparer.Ordinal);
+            var sources = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var platforms = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            if (!TryReadToggle(values, "status-installed", out var installed)
+                || !TryReadToggle(values, "status-not-installed", out var notInstalled))
+            {
+                return false;
+            }
+
+            if (installed)
+            {
+                statuses.Add("installed");
+            }
+
+            if (notInstalled)
+            {
+                statuses.Add("not-installed");
+            }
+
+            foreach (var source in _state.Sources)
+            {
+                if (!TryReadToggle(values, GetSourceInputId(source), out var selected))
+                {
+                    return false;
+                }
+
+                if (selected)
+                {
+                    sources.Add(source);
+                }
+            }
+
+            foreach (var platform in _state.Platforms)
+            {
+                if (!TryReadToggle(values, GetPlatformInputId(platform), out var selected))
+                {
+                    return false;
+                }
+
+                if (selected)
+                {
+                    platforms.Add(platform);
+                }
+            }
+
+            _selectedStatuses.Clear();
+            _selectedStatuses.UnionWith(statuses);
+            _selectedSources.Clear();
+            _selectedSources.UnionWith(sources);
+            _selectedPlatforms.Clear();
+            _selectedPlatforms.UnionWith(platforms);
+            return true;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+        catch (InvalidOperationException)
+        {
+            return false;
+        }
+    }
+
+    private static bool TryReadToggle(JsonObject values, string id, out bool selected)
+    {
+        selected = false;
+        if (values[id] is not JsonValue value)
+        {
+            return false;
+        }
+
+        if (value.TryGetValue<string>(out var stringValue))
+        {
+            if (string.Equals(stringValue, "true", StringComparison.OrdinalIgnoreCase))
+            {
+                selected = true;
+                return true;
+            }
+
+            if (string.Equals(stringValue, "false", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            return false;
+        }
+
+        return value.TryGetValue(out selected);
+    }
+
     private static bool TryReadActionId(string data, out string actionId)
     {
         actionId = string.Empty;
@@ -169,35 +235,29 @@ internal sealed partial class AdvancedFiltersForm : FormContent
 
     private static bool ToInstalledStatus(string value) => value == "installed";
 
-    private static void Toggle<T>(HashSet<T> selected, T value)
-    {
-        if (!selected.Add(value))
-        {
-            selected.Remove(value);
-        }
-    }
+    private static string GetSourceInputId(string source) => "source-" + Uri.EscapeDataString(source);
+
+    private static string GetPlatformInputId(string platform) => "platform-" + Uri.EscapeDataString(platform);
 
     private void RebuildTemplate()
     {
         var body = new JsonArray
         {
             CreateSectionHeading("Installed status"),
-            CreateChoiceAction("toggle-status:installed", "Installed", _selectedStatuses.Contains("installed")),
-            CreateChoiceAction("toggle-status:not-installed", "Not installed", _selectedStatuses.Contains("not-installed")),
+            CreateToggleInput("status-installed", "Installed", _selectedStatuses.Contains("installed")),
+            CreateToggleInput("status-not-installed", "Not installed", _selectedStatuses.Contains("not-installed")),
             CreateSectionHeading("Source"),
         };
 
         foreach (var source in _state.Sources)
         {
-            var encoded = Uri.EscapeDataString(source);
-            body.Add(CreateChoiceAction("toggle-source:" + encoded, source, _selectedSources.Contains(source)));
+            body.Add(CreateToggleInput(GetSourceInputId(source), source, _selectedSources.Contains(source)));
         }
 
         body.Add(CreateSectionHeading("Platform"));
         foreach (var platform in _state.Platforms)
         {
-            var encoded = Uri.EscapeDataString(platform);
-            body.Add(CreateChoiceAction("toggle-platform:" + encoded, platform, _selectedPlatforms.Contains(platform)));
+            body.Add(CreateToggleInput(GetPlatformInputId(platform), platform, _selectedPlatforms.Contains(platform)));
         }
 
         var actions = new JsonArray
@@ -227,16 +287,16 @@ internal sealed partial class AdvancedFiltersForm : FormContent
         ["wrap"] = true,
     };
 
-    private static JsonObject CreateChoiceAction(string id, string title, bool selected)
+    private static JsonObject CreateToggleInput(string id, string title, bool selected) => new()
     {
-        var action = CreateAction(id, (selected ? "[x] " : "[ ] ") + title);
-        action["style"] = selected ? "positive" : "default";
-        return new JsonObject
-        {
-            ["type"] = "ActionSet",
-            ["actions"] = new JsonArray(action),
-        };
-    }
+        ["type"] = "Input.Toggle",
+        ["id"] = id,
+        ["title"] = title,
+        ["value"] = selected ? "true" : "false",
+        ["valueOn"] = "true",
+        ["valueOff"] = "false",
+        ["wrap"] = true,
+    };
 
     private static JsonObject CreateAction(string id, string title, string? style = null)
     {
