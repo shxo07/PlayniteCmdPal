@@ -111,13 +111,20 @@ try {
     $v2Snapshot = $snapshotConstructor.Invoke($v2Arguments)
     $v2Path = Join-Path $directory 'catalog-v2.json'
     $publisherType::PublishAsync([string]$v2Path, $v2Snapshot, [Threading.CancellationToken]::None).GetAwaiter().GetResult()
-    $v2Json = [Text.Encoding]::UTF8.GetString([IO.File]::ReadAllBytes($v2Path)) | ConvertFrom-Json
+    $v2Text = [Text.Encoding]::UTF8.GetString([IO.File]::ReadAllBytes($v2Path))
+    $v2Json = $v2Text | ConvertFrom-Json
+    # Windows PowerShell 5.1 automatically coerces ISO-8601 JSON strings to
+    # DateTime objects. Compare the wire representation in the raw JSON so
+    # the assertion checks the serializer's exact DateTime "O" output rather
+    # than PowerShell's culture/time-zone conversion behavior.
+    $lastActivityPattern = '"lastActivity"\s*:\s*"2026-10-29T18:45:00\.0000000"'
     if ($v2Json.schemaVersion -ne 2 -or @($v2Json.games).Count -ne 1 -or
         $v2Json.games[0].coverArtworkId -ne $artworkId -or
         $v2Json.games[0].iconArtworkId -ne $artworkId -or
         $null -eq $v2Json.games[0].PSObject.Properties['lastActivity'] -or
-        $v2Json.games[0].lastActivity -ne '2026-10-29T18:45:00.0000000') {
-        throw 'The schema v2 artwork snapshot did not round-trip through the .NET Framework publisher.'
+        $v2Text -notmatch $lastActivityPattern) {
+        $actualLastActivity = if ($v2Json.games.Count -gt 0) { $v2Json.games[0].lastActivity } else { '<missing game>' }
+        throw "The schema v2 artwork snapshot did not round-trip through the .NET Framework publisher. Actual lastActivity: '$actualLastActivity'. Raw JSON: $v2Text"
     }
 
     Write-Host 'Playnite bridge .NET Framework v1/v2 artwork + LastActivity smoke passed (synthetic data, no System.Text.Json reference).'
