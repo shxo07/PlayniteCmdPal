@@ -128,10 +128,10 @@ internal sealed partial class PlayniteCmdPalRecentlyPlayedPage : DynamicListPage
 
             foreach (var game in games)
             {
-                var metadata = new List<string>
-                {
-                    $"Last played {RecentlyPlayedGames.FormatLastPlayed(game.LastActivity!.Value, TimeZoneInfo.Local)}",
-                };
+                var lastActivity = game.LastActivity!.Value;
+                var relativeTime = RecentlyPlayedGames.FormatRelativeLastPlayed(lastActivity, DateTimeOffset.Now);
+                var absoluteTime = RecentlyPlayedGames.FormatAbsoluteLastPlayed(lastActivity, TimeZoneInfo.Local);
+                var metadata = new List<string>();
                 if (!string.IsNullOrWhiteSpace(game.Source)) metadata.Add(game.Source);
                 if (!string.IsNullOrWhiteSpace(game.Platform)) metadata.Add(game.Platform);
                 if (duplicateTitles.Contains(game.Title))
@@ -144,6 +144,13 @@ internal sealed partial class PlayniteCmdPalRecentlyPlayedPage : DynamicListPage
                 {
                     Title = game.Title,
                     Subtitle = string.Join(" · ", metadata),
+                    Tags =
+                    [
+                        new Tag(relativeTime)
+                        {
+                            ToolTip = $"Last played {absoluteTime} (local time)",
+                        },
+                    ],
                     MoreCommands = [CreateRefreshContextItem()],
                 });
             }

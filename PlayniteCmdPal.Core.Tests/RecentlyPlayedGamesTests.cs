@@ -85,8 +85,8 @@ public sealed class RecentlyPlayedGamesTests
         var utc = new DateTime(2026, 10, 30, 11, 0, 0, DateTimeKind.Utc);
         var local = utc.ToLocalTime();
 
-        Assert.Equal("2026-10-30 15:00", RecentlyPlayedGames.FormatLastPlayed(utc, displayZone));
-        Assert.Equal("2026-10-30 15:00", RecentlyPlayedGames.FormatLastPlayed(local, displayZone));
+        Assert.Equal("2026-10-30 15:00:00", RecentlyPlayedGames.FormatAbsoluteLastPlayed(utc, displayZone));
+        Assert.Equal("2026-10-30 15:00:00", RecentlyPlayedGames.FormatAbsoluteLastPlayed(local, displayZone));
     }
 
     [Fact]
@@ -98,8 +98,37 @@ public sealed class RecentlyPlayedGamesTests
         var unspecified = DateTime.SpecifyKind(localWallClock, DateTimeKind.Unspecified);
 
         Assert.Equal(
-            RecentlyPlayedGames.FormatLastPlayed(localWallClock, displayZone),
-            RecentlyPlayedGames.FormatLastPlayed(unspecified, displayZone));
+            RecentlyPlayedGames.FormatAbsoluteLastPlayed(localWallClock, displayZone),
+            RecentlyPlayedGames.FormatAbsoluteLastPlayed(unspecified, displayZone));
+    }
+
+    [Fact]
+    public void FormatsRelativeTimesAcrossUnitsAndUsesFutureWording()
+    {
+        var now = new DateTimeOffset(2026, 11, 11, 12, 0, 0, TimeSpan.Zero);
+
+        Assert.Equal("just now", RecentlyPlayedGames.FormatRelativeLastPlayed(now.AddSeconds(-35).UtcDateTime, now));
+        Assert.Equal("1 minute ago", RecentlyPlayedGames.FormatRelativeLastPlayed(now.AddMinutes(-1).UtcDateTime, now));
+        Assert.Equal("2 hours ago", RecentlyPlayedGames.FormatRelativeLastPlayed(now.AddHours(-2).UtcDateTime, now));
+        Assert.Equal("3 days ago", RecentlyPlayedGames.FormatRelativeLastPlayed(now.AddDays(-3).UtcDateTime, now));
+        Assert.Equal("in 5 minutes", RecentlyPlayedGames.FormatRelativeLastPlayed(now.AddMinutes(5).UtcDateTime, now));
+        Assert.Equal("in a moment", RecentlyPlayedGames.FormatRelativeLastPlayed(now.AddSeconds(20).UtcDateTime, now));
+    }
+
+    [Fact]
+    public void RelativeFormattingUsesInstantsForLocalAndUnspecifiedValues()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var utc = now.AddHours(-3).UtcDateTime;
+        var local = utc.ToLocalTime();
+        var unspecified = DateTime.SpecifyKind(local, DateTimeKind.Unspecified);
+
+        Assert.Equal(
+            RecentlyPlayedGames.FormatRelativeLastPlayed(utc, now),
+            RecentlyPlayedGames.FormatRelativeLastPlayed(local, now));
+        Assert.Equal(
+            RecentlyPlayedGames.FormatRelativeLastPlayed(local, now),
+            RecentlyPlayedGames.FormatRelativeLastPlayed(unspecified, now));
     }
 
     [Fact]

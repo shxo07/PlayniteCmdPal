@@ -40,18 +40,42 @@ public static class RecentlyPlayedGames
             : RecentlyPlayedEmptyState.NoPlayHistory;
     }
 
+    /// <summary>Formats a last-played value as a concise relative age using the supplied clock.</summary>
+    public static string FormatRelativeLastPlayed(DateTime lastActivity, DateTimeOffset now)
+    {
+        var elapsed = now.UtcDateTime - lastActivity.ToUniversalTime();
+        var isFuture = elapsed < TimeSpan.Zero;
+        var age = elapsed.Duration();
+
+        if (age < TimeSpan.FromMinutes(1))
+            return isFuture ? "in a moment" : "just now";
+
+        var (count, unit) = age switch
+        {
+            _ when age < TimeSpan.FromHours(1) => ((int)age.TotalMinutes, "minute"),
+            _ when age < TimeSpan.FromDays(1) => ((int)age.TotalHours, "hour"),
+            _ when age < TimeSpan.FromDays(7) => ((int)age.TotalDays, "day"),
+            _ when age < TimeSpan.FromDays(30) => ((int)(age.TotalDays / 7), "week"),
+            _ when age < TimeSpan.FromDays(365) => ((int)(age.TotalDays / 30), "month"),
+            _ => ((int)(age.TotalDays / 365), "year"),
+        };
+
+        var phrase = $"{count} {unit}{(count == 1 ? string.Empty : "s")}";
+        return isFuture ? $"in {phrase}" : $"{phrase} ago";
+    }
+
     /// <summary>
-    /// Formats a last-played value in the selected display time zone using an unambiguous
-    /// 24-hour clock. The UI intentionally omits the zone label and numeric offset.
+    /// Formats the exact local wall-clock timestamp for a hover tooltip. The offset is
+    /// intentionally omitted; the tooltip labels the value as local time.
     /// </summary>
-    public static string FormatLastPlayed(DateTime lastActivity, TimeZoneInfo displayTimeZone)
+    public static string FormatAbsoluteLastPlayed(DateTime lastActivity, TimeZoneInfo displayTimeZone)
     {
         if (displayTimeZone is null) throw new ArgumentNullException(nameof(displayTimeZone));
 
         var utc = lastActivity.ToUniversalTime();
         var instant = new DateTimeOffset(DateTime.SpecifyKind(utc, DateTimeKind.Utc));
         return TimeZoneInfo.ConvertTime(instant, displayTimeZone)
-            .ToString("yyyy-MM-dd HH:mm", System.Globalization.CultureInfo.InvariantCulture);
+            .ToString("yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture);
     }
 
     /// <summary>
