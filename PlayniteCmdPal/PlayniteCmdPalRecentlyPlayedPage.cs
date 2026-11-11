@@ -22,6 +22,9 @@ internal sealed partial class PlayniteCmdPalRecentlyPlayedPage : DynamicListPage
     private IListItem[] _items = Array.Empty<IListItem>();
     private string _searchText = string.Empty;
     private readonly Timer _refreshTimer;
+    private readonly CancellationTokenSource _lifetime = new();
+    private readonly CancellationToken _lifetimeToken;
+    private int _disposed;
 
     public PlayniteCmdPalRecentlyPlayedPage()
     {
@@ -30,29 +33,46 @@ internal sealed partial class PlayniteCmdPalRecentlyPlayedPage : DynamicListPage
         Name = "Recently played games";
         _statusItems = [CreateStatusItem("Loading recently played games…")];
         _items = _statusItems;
-        _ = LoadItemsAsync();
-        // Keep an open Recently Played page current without requiring a full palette reload.
+        _lifetimeToken = _lifetime.Token;
+
+        // Poll the adapter cache while the page is open. GetAsync observes the adapter's
+        // 30-second disk revalidation interval, while still refreshing relative labels.
         _refreshTimer = new Timer(
-            _ => RefreshCatalog(),
+            _ => RefreshView(),
             null,
             dueTime: TimeSpan.FromSeconds(10),
             period: TimeSpan.FromSeconds(10));
+        _ = LoadItemsAsync();
     }
 
     public override IListItem[] GetItems() => _items;
 
     internal void RefreshCatalog()
     {
+        if (Volatile.Read(ref _disposed) != 0) return;
         _ = LoadItemsAsync(forceRefresh: true);
+    }
+
+    private void RefreshView()
+    {
+        if (Volatile.Read(ref _disposed) != 0) return;
+        _ = LoadItemsAsync();
     }
 
     internal IContextItem CreateRefreshContextItem() =>
         new CommandContextItem(new RefreshCatalogCommand(this));
 
-    public void Dispose() => _refreshTimer.Dispose();
+    public void Dispose()
+    {
+        if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+        _refreshTimer.Dispose();
+        _lifetime.Cancel();
+        _lifetime.Dispose();
+    }
 
     public override void UpdateSearchText(string oldSearch, string newSearch)
     {
+        if (Volatile.Read(ref _disposed) != 0) return;
         _searchText = newSearch;
         ApplySearch();
     }
@@ -69,11 +89,14 @@ internal sealed partial class PlayniteCmdPalRecentlyPlayedPage : DynamicListPage
 
     private async Task LoadItemsAsync(bool forceRefresh = false)
     {
+        if (_lifetimeToken.IsCancellationRequested) return;
+
         try
         {
             var catalog = forceRefresh
-                ? await _catalog.RefreshAsync().ConfigureAwait(false)
-                : await _catalog.GetAsync().ConfigureAwait(false);
+                ? await _catalog.RefreshAsync(_lifetimeToken).ConfigureAwait(false)
+                : await _catalog.GetAsync(_lifetimeToken).ConfigureAwait(false);
+            if (_lifetimeToken.IsCancellationRequested) return;
             var statusItems = new List<IListItem>();
 
             if (!catalog.IsAvailable)
@@ -129,7 +152,7 @@ internal sealed partial class PlayniteCmdPalRecentlyPlayedPage : DynamicListPage
             foreach (var game in games)
             {
                 var lastActivity = game.LastActivity!.Value;
-                var relativeTime = PlayniteCmdPal.Core.RecentlyPlayedGames.FormatRelativeLastPlayed(lastActivity, DateTimeOffset.Now);
+                var relativeTime = PlayniteCmdPal.Core.RecentlyPlayedGames.FormatRelativeLastPlayed(lastActivity, DateTimeOffset.UtcNow);
                 var metadata = new List<string>();
                 if (!string.IsNullOrWhiteSpace(game.Source)) metadata.Add(game.Source);
                 if (!string.IsNullOrWhiteSpace(game.Platform)) metadata.Add(game.Platform);
@@ -143,13 +166,7 @@ internal sealed partial class PlayniteCmdPalRecentlyPlayedPage : DynamicListPage
                 {
                     Title = game.Title,
                     Subtitle = string.Join(" · ", metadata),
-                    Tags =
-                    [
-                        new Tag(relativeTime)
-                        {
-                        },
-                    ],
-                    MoreCommands = [CreateRefreshContextItem()],
+                    Tags = [new Tag(relativeTime)],
                 });
             }
 
@@ -172,11 +189,10 @@ internal sealed partial class PlayniteCmdPalRecentlyPlayedPage : DynamicListPage
         }
     }
 
-    private ListItem CreateStatusItem(string message) =>
+    private static ListItem CreateStatusItem(string message) =>
         new ListItem(new NoOpCommand())
         {
             Title = message,
-            MoreCommands = [CreateRefreshContextItem()],
         };
 
     private sealed partial class RefreshCatalogCommand : InvokableCommand

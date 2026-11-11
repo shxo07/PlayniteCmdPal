@@ -90,6 +90,24 @@ public sealed class RecentlyPlayedGamesTests
         Assert.Equal("in a moment", RecentlyPlayedGames.FormatRelativeLastPlayed(now.AddSeconds(20).UtcDateTime, now));
     }
 
+    [Theory]
+    [InlineData(59, "59 minutes ago")]
+    [InlineData(60, "1 hour ago")]
+    [InlineData(1439, "23 hours ago")]
+    [InlineData(1440, "1 day ago")]
+    [InlineData(10079, "6 days ago")]
+    [InlineData(10080, "1 week ago")]
+    [InlineData(43200, "1 month ago")]
+    [InlineData(525600, "1 year ago")]
+    public void RelativeTimeFormattingUsesDocumentedUnitBoundaries(int minutesAgo, string expected)
+    {
+        var now = new DateTimeOffset(2026, 11, 11, 12, 0, 0, TimeSpan.Zero);
+
+        Assert.Equal(
+            expected,
+            RecentlyPlayedGames.FormatRelativeLastPlayed(now.AddMinutes(-minutesAgo).UtcDateTime, now));
+    }
+
     [Fact]
     public void RelativeFormattingUsesInstantsForLocalAndUnspecifiedValues()
     {

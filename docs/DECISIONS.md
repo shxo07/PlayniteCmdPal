@@ -77,3 +77,11 @@ The cache is bounded per generation, and a single producer owns publication. A p
 The threat model excludes a malicious process running as the same Windows user. Reparse-point and normalized-path checks are defense-in-depth, not a claim of race-proof containment against same-user path replacement. Transport signature checks do not prove successful decoding; WERD-80 owns decoding and image fallback. A surviving v2 snapshot remains authoritative after producer downgrade; safe rollback requires the owner to stop the producer, verify the v1 snapshot, and explicitly retire the stale v2 snapshot before v1 fallback can occur.
 
 The complete trust boundary, limits, migration, refresh, cleanup, and failure contract is recorded in [Artwork transport](ARTWORK-TRANSPORT.md).
+
+
+## ADR-010: Recently Played presentation and refresh
+**Status:** Accepted for WERD-74
+
+Recently Played is a read-only view over Playnite's authoritative LastActivity value. Sort by UTC instant, treating DateTimeKind.Unspecified as local machine time because that is the documented .NET conversion policy used by this implementation. Display only a relative-age badge; do not display or expose an absolute timestamp, timezone, UTC offset, or hover tooltip. Relative units are truncated to whole minutes (<1 hour), hours (<1 day), days (<7 days), weeks (<30 days), months (<365 days), then years; values under one minute read just now, and future values use in ... wording.
+
+Keep one Refresh Playnite catalog action in the top-level Recently Played command's More commands menu (Ctrl+K). Do not attach duplicate refresh actions to individual game rows or status rows. While the page is open, poll the adapter cache every 10 seconds so relative labels can age; the adapter's normal GetAsync policy limits disk revalidation to once per 30 seconds. An explicit refresh bypasses that interval. The companion plugin periodically re-exports every 30 seconds because Playnite may not emit a reliable LastActivity update event when a game exits.

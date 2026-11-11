@@ -2,7 +2,7 @@
 
 This page explains what is tested, where each check runs, and how to run it. For installing the toolchain and deploying the extension, see [Developer Setup](DEVELOPER-SETUP.md).
 
-**Status (2026-11-07):** Automated coverage is synthetic and is designed to run without Playnite, PowerToys, a personal game library, or secrets. The test commands below are the ones executed by `scripts/ci.ps1`, which Windows CI and CodeQL run on `windows-latest`. The latest verified Windows CI run passed restore, Release build, 101 Core tests, 183 adapter tests, 3 Command Palette command tests, and the .NET Framework smoke test ([run 42331229094](https://github.com/shxo07/PlayniteCmdPal/actions/runs/42331229094)); CodeQL also passed ([run 42331229144](https://github.com/shxo07/PlayniteCmdPal/actions/runs/42331229144)). The WERD-74 merge adds recently-played ordering/presentation tests, v1/v2 timestamp and artwork parser coverage, adapter publication-race tests, and an expanded .NET Framework smoke path; all require a fresh run on the merged PR head. Do not reuse earlier run totals as validation for this merge. See the verification evidence section of [Developer Setup](DEVELOPER-SETUP.md) for the evidence trail and its limits.
+**Status (2026-11-11):** Automated coverage is synthetic and is designed to run without Playnite, PowerToys, a personal game library, or secrets. The test commands below are the ones executed by `scripts/ci.ps1`. The latest previously verified Windows CI run passed restore, Release build, 101 Core tests, 183 adapter tests, 3 Command Palette command tests, and the .NET Framework smoke test ([run 42331229094](https://github.com/shxo07/PlayniteCmdPal/actions/runs/42331229094)); CodeQL also passed ([run 42331229144](https://github.com/shxo07/PlayniteCmdPal/actions/runs/42331229144)). Those runs predate the current WERD-74 head and do not validate it. No CI workflow runs are currently recorded for head `af64ab44701c408a1a37bace3e92ca4686f0fd02`; run the full Windows CI and CodeQL workflows after these final-review updates. The user previously confirmed the populated Recently Played list and relative badges in the installed 0.0.7.0 package; the 0.0.8.0 tooltip-removal build still needs installation verification. See the verification evidence section of [Developer Setup](DEVELOPER-SETUP.md) for the evidence trail and its limits.
 
 ## Test projects
 
@@ -234,11 +234,12 @@ These are deliberately not automated yet; each needs a Windows host and, in most
 
 - [42331229094](https://github.com/shxo07/PlayniteCmdPal/actions/runs/42331229094) — Windows CI on the pre-schema-fix WERD-75 head: Release build, `101/101` Core tests, `183/183` adapter tests, `3/3` Command Palette command tests, and the .NET Framework snapshot smoke step all passed.
 - [42331229144](https://github.com/shxo07/PlayniteCmdPal/actions/runs/42331229144) — CodeQL on the same pre-schema-fix head passed.
-- **WERD-74 merged-head regression coverage:** recently-played presentation, schema v2 `lastActivity` parsing/serialization, adapter race/revalidation, and the combined .NET Framework smoke path. Execution is pending a fresh Windows CI run on the merged head.
+- **WERD-74 current-head regression coverage:** recently-played ordering and relative-time presentation, schema v2 `lastActivity` parsing/serialization, adapter race/revalidation, and the combined .NET Framework smoke path. Execution remains pending on the final-review head; earlier CI totals are not evidence for this revision.
 
 ### Recently Played activity refresh
 
 1. Open PlayniteCmdPal's **Recently played games** page and note the current newest entry.
 2. Launch a game from Playnite, close it, and confirm Playnite records a new **Last activity** value.
-3. Allow up to 30 seconds for the companion plugin's periodic catalog export, then reopen or refresh Recently Played and confirm the game appears near the top.
-4. Open the Recently played games command's **More commands** menu and use **Refresh Playnite catalog**. Confirm the page reloads without a separate refresh row appearing in the list.
+3. Leave Recently Played open. Allow up to 30 seconds for the companion plugin's periodic export and adapter revalidation; the page polls its cache every 10 seconds and should update without a full Command Palette reload.
+4. Select the top-level **Recently played games** command and open its **More commands** menu (Ctrl+K); use **Refresh Playnite catalog**. Confirm it refreshes the page. There should be no refresh command attached to individual game or status rows.
+5. Confirm game rows show only relative-time badges (`just now`, `N minutes ago`, `N hours ago`, `N days ago`, `N weeks ago`, `N months ago`, or `N years ago`). No absolute date/time, timezone, or hover tooltip should be exposed.

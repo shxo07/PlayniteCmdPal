@@ -138,7 +138,6 @@ public sealed class PlayniteCatalogAdapterTests : IDisposable
     [Theory]
     [InlineData("not json", CatalogErrorCode.Malformed)]
     [InlineData("""{"schemaVersion":3,"generatedAtUtc":"2026-10-30T00:00:00Z","games":[]}""", CatalogErrorCode.UnsupportedSchema)]
-    [InlineData("""{"schemaVersion":3,"generatedAtUtc":"2026-10-30T00:00:00Z","games":[]}""", CatalogErrorCode.UnsupportedSchema)]
     public async Task InvalidLaterFileNeverReplacesLastKnownGood(string json, CatalogErrorCode expected)
     {
         await PublishAsync(NewSnapshot(("Halo", false, null, null)));
