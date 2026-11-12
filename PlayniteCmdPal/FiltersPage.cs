@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 using Microsoft.CommandPalette.Extensions;
 using Microsoft.CommandPalette.Extensions.Toolkit;
 using PlayniteCmdPal.Core;
@@ -155,7 +156,7 @@ internal sealed partial class FiltersPage : DynamicListPage
                 return;
         }
 
-        RebuildItems();
+        RebuildItems(notify: false);
         _ = NotifyFiltersChangedAsync();
     }
 
