@@ -35,6 +35,8 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
         // (artwork loading, deferred favorites refresh) can be marshaled back
         // to the UI thread where the Command Palette host processes them.
         _uiContext = SynchronizationContext.Current;
+        // Show installed games by default on first launch; users can clear or change it.
+        _filterState.SetInstalledStatuses([true]);
 
         Icon = IconHelpers.FromRelativePath("Assets\\StoreLogo.png");
         Title = "Playnite";
@@ -204,7 +206,7 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
 
                 _items =
                 [
-                    CreateAdvancedFiltersItem(),
+                    CreateFiltersItem(),
                     CreateStatusItem($"Playnite {failureStage} failed ({exception.GetType().Name}): {detail}"),
                 ];
             }
@@ -387,9 +389,9 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
     private ListItem CreateAdvancedFiltersItem()
     {
         var count = _filterState.ActiveFilterCount;
-        return new ListItem(new AdvancedFiltersPage(_filterState, () => BeginSearch()))
+        return new ListItem(new FiltersPage(_filterState, () => BeginSearch()))
         {
-            Title = count == 0 ? "Advanced filters" : $"Advanced filters ({count})",
+            Title = count == 0 ? "Filters" : $"Filters ({count})",
             Subtitle = count == 0 ? "Installed status, source, and platform" : "Filters are active · Select to edit",
             Icon = new IconInfo("\uE71C"),
         };
