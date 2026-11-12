@@ -32,7 +32,7 @@ internal sealed partial class PlayniteGameFallback : FallbackCommandItem, IDispo
     {
         _directLaunch = new PlayniteDirectLaunch(catalog ?? new PlayniteCatalogAdapter());
         _launch = launch ?? (id => new LaunchGameCommand(id).Invoke());
-        _artwork = artwork ?? new ArtworkIconLoader(PlayniteCatalogAdapter.ResolveArtworkPath);
+        _artwork = artwork ?? new ArtworkIconLoader(artworkId => PlayniteCatalogAdapter.ResolveArtworkPath(artworkId));
         Icon = ArtworkIconLoader.FallbackIcon;
     }
 
