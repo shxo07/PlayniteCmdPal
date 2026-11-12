@@ -34,14 +34,8 @@ internal sealed partial class FiltersPage : DynamicListPage
     {
         var items = new List<IListItem>
         {
-            new ListItem(new NoOpCommand())
-            {
-                Title = "Installed status",
-                Subtitle = "↑/↓ move · Enter toggles · Esc returns",
-            },
             CreateOption("Installed", "status", "installed", _state.InstalledStatuses.Contains(true)),
             CreateOption("Not installed", "status", "not-installed", _state.InstalledStatuses.Contains(false)),
-            new ListItem(new NoOpCommand()) { Title = "Source" },
         };
 
         foreach (var source in _state.Sources)
@@ -49,7 +43,6 @@ internal sealed partial class FiltersPage : DynamicListPage
             items.Add(CreateOption(source, "source", source, _state.SelectedSources.Contains(source, StringComparer.OrdinalIgnoreCase)));
         }
 
-        items.Add(new ListItem(new NoOpCommand()) { Title = "Platform" });
         foreach (var platform in _state.Platforms)
         {
             items.Add(CreateOption(platform, "platform", platform, _state.SelectedPlatforms.Contains(platform, StringComparer.OrdinalIgnoreCase)));
