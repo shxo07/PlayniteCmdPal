@@ -17,7 +17,7 @@ namespace PlayniteCmdPal;
 internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
 {
     private readonly PlayniteCatalogAdapter _catalog = new();
-    private readonly CatalogFilterState _filterState = new();
+    private readonly CatalogFilterState _filterState = new(defaultToInstalled: true);
     private readonly FavoritesStore _favorites = FavoritesPreferences.Store;
     private readonly ArtworkIconLoader _artwork = new(artworkId => PlayniteCatalogAdapter.ResolveArtworkPath(artworkId));
     private readonly EventHandler _favoritesChangedHandler;
@@ -35,8 +35,6 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
         // (artwork loading, deferred favorites refresh) can be marshaled back
         // to the UI thread where the Command Palette host processes them.
         _uiContext = SynchronizationContext.Current;
-        // Show installed games by default on first launch; users can clear or change it.
-        _filterState.SetInstalledStatuses([true]);
 
         Icon = IconHelpers.FromRelativePath("Assets\\StoreLogo.png");
         Title = "Playnite";
