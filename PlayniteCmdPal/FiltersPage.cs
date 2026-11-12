@@ -84,13 +84,13 @@ internal sealed partial class FiltersPage : ContentPage
             new { type = "Action.Submit", title = "Clear all", data = new { action = "clear-all" } },
         };
 
-        return JsonSerializer.Serialize(new
+        return JsonSerializer.Serialize(new Dictionary<string, object>
         {
-            schema = "http://adaptivecards.io/schemas/adaptive-card.json",
-            type = "AdaptiveCard",
-            version = "1.6",
-            body,
-            actions,
+            ["$schema"] = "http://adaptivecards.io/schemas/adaptive-card.json",
+            ["type"] = "AdaptiveCard",
+            ["version"] = "1.6",
+            ["body"] = body,
+            ["actions"] = actions,
         });
     }
 
