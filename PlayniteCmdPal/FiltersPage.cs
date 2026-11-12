@@ -47,6 +47,8 @@ internal sealed partial class FiltersPage : ContentPage
             new { type = "TextBlock", text = "Platform", weight = "Bolder", wrap = true },
             CreateChoiceActions(_state.Platforms.Select(platform =>
                 (platform, "platform", platform, _state.SelectedPlatforms.Contains(platform, StringComparer.OrdinalIgnoreCase))).ToArray()),
+            // Visually separate the filter choices from the clear-action row below.
+            new { type = "TextBlock", text = " ", spacing = "ExtraLarge", separator = true },
         };
 
         var actions = new object[]
