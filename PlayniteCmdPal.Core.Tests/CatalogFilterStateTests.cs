@@ -14,6 +14,16 @@ public sealed class CatalogFilterStateTests
     ];
 
     [Fact]
+    public void InstalledStatusCanBeEnabledAsTheSearchPageDefault()
+    {
+        var defaultState = new CatalogFilterState(defaultToInstalled: true);
+        var unfilteredState = new CatalogFilterState();
+
+        Assert.True(defaultState.ToSearchFilters().IsInstalled);
+        Assert.Null(unfilteredState.ToSearchFilters().IsInstalled);
+    }
+
+    [Fact]
     public void SupportsMultipleSelectionsWithinEveryDimension()
     {
         var state = new CatalogFilterState();
