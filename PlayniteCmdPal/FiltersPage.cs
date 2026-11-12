@@ -1,7 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Threading.Tasks;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.CommandPalette.Extensions;
 using Microsoft.CommandPalette.Extensions.Toolkit;
 using PlayniteCmdPal.Core;
@@ -9,14 +10,14 @@ using PlayniteCmdPal.Core;
 namespace PlayniteCmdPal;
 
 /// <summary>
-/// Keyboard-first filter picker. Each option is a normal Command Palette list item,
-/// so the host owns arrow-key navigation and Enter invokes the toggle command.
+/// Filter form using the Command Palette's Adaptive Card controls. Expanded multi-select
+/// choice sets render as real checkbox controls and retain the familiar grouped layout.
 /// </summary>
-internal sealed partial class FiltersPage : DynamicListPage
+internal sealed partial class FiltersPage : ContentPage
 {
     private readonly CatalogFilterState _state;
     private readonly Action _filtersChanged;
-    private IListItem[] _items = [];
+    private FilterFormContent _form;
 
     public FiltersPage(CatalogFilterState state, Action filtersChanged)
     {
@@ -25,188 +26,156 @@ internal sealed partial class FiltersPage : DynamicListPage
 
         Name = "Filters";
         Title = "Filters";
-        RebuildItems(notify: false);
+        _form = CreateForm();
     }
 
-    public override IListItem[] GetItems() => _items;
+    public override IContent[] GetContent() => [_form];
 
-    // Filters are a fixed option list, not a text-search page. The base class
-    // requires this callback, so intentionally ignore search-text changes.
-    public override void UpdateSearchText(string oldSearch, string newSearch)
+    private FilterFormContent CreateForm() => new(this, BuildTemplate());
+
+    private string BuildTemplate()
     {
-    }
-
-    private void RebuildItems(bool notify = true)
-    {
-        var items = new List<IListItem>
+        var body = new List<object>
         {
-            CreateOption("Installed", "status", "installed", _state.InstalledStatuses.Contains(true)),
-            CreateOption("Not installed", "status", "not-installed", _state.InstalledStatuses.Contains(false)),
-        };
-
-        foreach (var source in _state.Sources)
-        {
-            items.Add(CreateOption(source, "source", source, _state.SelectedSources.Contains(source, StringComparer.OrdinalIgnoreCase)));
-        }
-
-        foreach (var platform in _state.Platforms)
-        {
-            items.Add(CreateOption(platform, "platform", platform, _state.SelectedPlatforms.Contains(platform, StringComparer.OrdinalIgnoreCase)));
-        }
-
-        items.Add(new ListItem(new ClearFiltersCommand(this, "status"))
-        {
-            Title = "Clear installed status",
-            Subtitle = "Keep source and platform selections",
-        });
-        items.Add(new ListItem(new ClearFiltersCommand(this, "sources"))
-        {
-            Title = "Clear sources",
-            Subtitle = "Keep installed status and platform selections",
-        });
-        items.Add(new ListItem(new ClearFiltersCommand(this, "platforms"))
-        {
-            Title = "Clear platforms",
-            Subtitle = "Keep installed status and source selections",
-        });
-        items.Add(new ListItem(new ClearFiltersCommand(this, "all"))
-        {
-            Title = "Clear all filters",
-            Subtitle = "Remove every filter",
-        });
-
-        _items = items.ToArray();
-        if (notify)
-        {
-            RaiseItemsChanged(_items.Length);
-        }
-    }
-
-    private ListItem CreateOption(string title, string dimension, string value, bool selected) =>
-        new(new ToggleFilterCommand(this, dimension, value))
-        {
-            Title = $"{(selected ? "☑" : "☐")} {title}",
-            Subtitle = dimension switch
+            new { type = "TextBlock", text = "Installed status", weight = "Bolder", wrap = true },
+            new
             {
-                "status" => "Installed status",
-                "source" => "Source",
-                "platform" => "Platform",
-                _ => string.Empty,
+                type = "Input.ChoiceSet",
+                id = "installed",
+                style = "expanded",
+                isMultiSelect = true,
+                value = string.Join(",", _state.InstalledStatuses
+                    .OrderByDescending(value => value)
+                    .Select(value => value ? "installed" : "not-installed")),
+                choices = new[]
+                {
+                    new { title = "Installed", value = "installed" },
+                    new { title = "Not installed", value = "not-installed" },
+                },
+            },
+            new { type = "TextBlock", text = "Source", weight = "Bolder", wrap = true },
+            new
+            {
+                type = "Input.ChoiceSet",
+                id = "sources",
+                style = "expanded",
+                isMultiSelect = true,
+                value = string.Join(",", _state.SelectedSources),
+                choices = _state.Sources.Select(value => new { title = value, value }).ToArray(),
+            },
+            new { type = "TextBlock", text = "Platform", weight = "Bolder", wrap = true },
+            new
+            {
+                type = "Input.ChoiceSet",
+                id = "platforms",
+                style = "expanded",
+                isMultiSelect = true,
+                value = string.Join(",", _state.SelectedPlatforms),
+                choices = _state.Platforms.Select(value => new { title = value, value }).ToArray(),
             },
         };
 
-    private void Toggle(string dimension, string value)
-    {
-        switch (dimension)
+        var actions = new object[]
         {
-            case "status":
-                var statuses = _state.InstalledStatuses.ToHashSet();
-                var status = value == "installed";
-                if (!statuses.Add(status))
-                {
-                    statuses.Remove(status);
-                }
-                _state.SetInstalledStatuses(statuses);
-                break;
+            new { type = "Action.Submit", title = "Apply", data = new { action = "apply" } },
+            new { type = "Action.Submit", title = "Clear status", data = new { action = "clear-status" } },
+            new { type = "Action.Submit", title = "Clear sources", data = new { action = "clear-sources" } },
+            new { type = "Action.Submit", title = "Clear platforms", data = new { action = "clear-platforms" } },
+            new { type = "Action.Submit", title = "Clear all", data = new { action = "clear-all" } },
+        };
 
-            case "source":
-                var sources = _state.SelectedSources.ToHashSet(StringComparer.OrdinalIgnoreCase);
-                if (!sources.Add(value))
-                {
-                    sources.Remove(value);
-                }
-                _state.SetSources(sources);
-                break;
-
-            case "platform":
-                var platforms = _state.SelectedPlatforms.ToHashSet(StringComparer.OrdinalIgnoreCase);
-                if (!platforms.Add(value))
-                {
-                    platforms.Remove(value);
-                }
-                _state.SetPlatforms(platforms);
-                break;
-
-            default:
-                return;
-        }
-
-        RebuildItems(notify: false);
-        _ = NotifyFiltersChangedAsync();
+        return JsonSerializer.Serialize(new
+        {
+            schema = "http://adaptivecards.io/schemas/adaptive-card.json",
+            type = "AdaptiveCard",
+            version = "1.6",
+            body,
+            actions,
+        });
     }
 
-    private void Clear(string dimension)
+    private CommandResult Submit(string payload)
     {
-        switch (dimension)
+        JsonObject? values;
+        try
         {
-            case "status":
+            values = JsonNode.Parse(payload)?.AsObject();
+        }
+        catch (JsonException)
+        {
+            return CommandResult.KeepOpen();
+        }
+
+        if (values is null)
+        {
+            return CommandResult.KeepOpen();
+        }
+
+        var action = values["action"]?.GetValue<string>() ?? "apply";
+        switch (action)
+        {
+            case "clear-status":
                 _state.ClearInstalledStatuses();
-                break;
-            case "sources":
-                _state.ClearSources();
-                break;
-            case "platforms":
-                _state.ClearPlatforms();
-                break;
-            case "all":
-                _state.ClearAll();
-                break;
-            default:
-                return;
-        }
+                RefreshForm();
+                return CommandResult.KeepOpen();
 
-        RebuildItems(notify: false);
-        _ = NotifyFiltersChangedAsync();
+            case "clear-sources":
+                _state.ClearSources();
+                RefreshForm();
+                return CommandResult.KeepOpen();
+
+            case "clear-platforms":
+                _state.ClearPlatforms();
+                RefreshForm();
+                return CommandResult.KeepOpen();
+
+            case "clear-all":
+                _state.ClearAll();
+                RefreshForm();
+                return CommandResult.KeepOpen();
+
+            case "apply":
+                _state.SetInstalledStatuses(Parse(values["installed"]?.ToString())
+                    .Select(value => value switch
+                    {
+                        "installed" => (bool?)true,
+                        "not-installed" => false,
+                        _ => null,
+                    })
+                    .Where(value => value.HasValue)
+                    .Select(value => value!.Value));
+                _state.SetSources(Parse(values["sources"]?.ToString()));
+                _state.SetPlatforms(Parse(values["platforms"]?.ToString()));
+                _filtersChanged();
+                return CommandResult.GoBack();
+
+            default:
+                return CommandResult.KeepOpen();
+        }
     }
 
-    private async Task NotifyFiltersChangedAsync()
+    private void RefreshForm()
     {
-        // Defer the parent search refresh until the current command invocation has
-        // returned, avoiding nested Command Palette notifications during dispatch.
-        await Task.Delay(50);
-        RaiseItemsChanged(_items.Length);
+        _form = CreateForm();
+        RaiseItemsChanged(1);
         _filtersChanged();
     }
 
-    private sealed partial class ToggleFilterCommand : InvokableCommand
+    private static string[] Parse(string? value) =>
+        string.IsNullOrWhiteSpace(value)
+            ? []
+            : value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+    private sealed partial class FilterFormContent : FormContent
     {
         private readonly FiltersPage _page;
-        private readonly string _dimension;
-        private readonly string _value;
 
-        public ToggleFilterCommand(FiltersPage page, string dimension, string value)
+        public FilterFormContent(FiltersPage page, string template)
         {
             _page = page;
-            _dimension = dimension;
-            _value = value;
+            TemplateJson = template;
         }
 
-        public override string Name => "Toggle filter";
-
-        public override CommandResult Invoke()
-        {
-            _page.Toggle(_dimension, _value);
-            return CommandResult.KeepOpen();
-        }
-    }
-
-    private sealed partial class ClearFiltersCommand : InvokableCommand
-    {
-        private readonly FiltersPage _page;
-        private readonly string _dimension;
-
-        public ClearFiltersCommand(FiltersPage page, string dimension)
-        {
-            _page = page;
-            _dimension = dimension;
-        }
-
-        public override string Name => "Clear filters";
-
-        public override CommandResult Invoke()
-        {
-            _page.Clear(_dimension);
-            return CommandResult.KeepOpen();
-        }
+        public override CommandResult SubmitForm(string payload) => _page.Submit(payload);
     }
 }
