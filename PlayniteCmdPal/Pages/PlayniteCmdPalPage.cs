@@ -218,7 +218,7 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
 
     private (IListItem[] Items, IReadOnlyList<(ListItem Item, GameEntry Game)> ArtworkItems) BuildItems(CatalogReadResult catalog, string query)
     {
-        var items = new List<IListItem> { CreateAdvancedFiltersItem() };
+        var items = new List<IListItem> { CreateFiltersItem() };
 
         if (!catalog.IsAvailable)
         {
@@ -386,7 +386,7 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
         }
     }
 
-    private ListItem CreateAdvancedFiltersItem()
+    private ListItem CreateFiltersItem()
     {
         var count = _filterState.ActiveFilterCount;
         return new ListItem(new FiltersPage(_filterState, () => BeginSearch()))
