@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.ComponentModel;
 using System.Diagnostics;
 using Microsoft.CommandPalette.Extensions;
@@ -15,6 +16,11 @@ public sealed class PlayniteGameFallbackTests : IDisposable
     private const string GameB = "22222222-2222-4222-8222-222222222222";
     private const string Title = "Orbit Rally 16";
     private const string OtherTitle = "Moon Orchard";
+    private const string IconId = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    private const string OtherIconId = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+    private const string CoverId = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc";
+    private const string IconPath = @"C:\artwork\synthetic-icon.png";
+    private const string OtherIconPath = @"C:\artwork\other-synthetic-icon.png";
     private readonly string _directory = Path.Combine(Path.GetTempPath(), "PlayniteCmdPal.Command.Tests", Guid.NewGuid().ToString("N"));
     private readonly FakeTimeProvider _time = new();
     private string SnapshotPath => Path.Combine(_directory, "catalog-v1.json");
@@ -243,10 +249,199 @@ public sealed class PlayniteGameFallbackTests : IDisposable
         Assert.False(launched);
     }
 
+    [Fact]
+    public async Task SdkCallbackPublishesTheMatchBeforeDecodingAndNotifiesWhenItsSavedIconArrives()
+    {
+        var adapter = await CreateCatalogAsync(new SnapshotGame(GameA, Title, true,
+            coverArtworkId: CoverId, iconArtworkId: IconId));
+        var decodeStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseDecode = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var resolved = new ConcurrentQueue<string>();
+        var loader = CreateArtworkLoader(id => { resolved.Enqueue(id); return IconPath; }, async (_, token) =>
+        {
+            decodeStarted.TrySetResult(true);
+            await releaseDecode.Task.WaitAsync(token);
+            return true;
+        });
+        using var fallback = new PlayniteGameFallback(adapter, artwork: loader);
+        var iconChanged = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        fallback.PropChanged += (_, args) =>
+        {
+            if (args.PropertyName == nameof(fallback.Icon) && !ReferenceEquals(fallback.Icon, ArtworkIconLoader.FallbackIcon))
+            {
+                iconChanged.TrySetResult(true);
+            }
+        };
+
+        // The synchronous SDK callback must finish even while decoding is blocked.
+        IFallbackCommandItem item = fallback;
+        await Task.Run(() => item.FallbackHandler.UpdateQuery(Title)).WaitAsync(TimeSpan.FromSeconds(5));
+        await decodeStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Equal(Title, fallback.Title);
+        Assert.Equal("Open with Playnite", fallback.Subtitle);
+        Assert.Same(ArtworkIconLoader.FallbackIcon, fallback.Icon);
+        var artworkUpdate = fallback.ArtworkUpdate;
+        Assert.False(artworkUpdate.IsCompleted);
+
+        releaseDecode.TrySetResult(true);
+        await artworkUpdate.WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.True(iconChanged.Task.IsCompletedSuccessfully);
+        Assert.Equal(new Uri(IconPath).AbsoluteUri, fallback.Icon!.Light.Icon);
+        Assert.Equal(new[] { IconId }, resolved.ToArray());
+        Assert.Equal(Title, fallback.Title);
+    }
+
+    [Theory]
+    [InlineData("missing-icon")]
+    [InlineData("missing-cache")]
+    [InlineData("corrupt-icon")]
+    [InlineData("read-failure")]
+    public async Task UnavailableArtworkKeepsTheNeutralIconWithoutUsingCoverOrPreventingLaunch(string failure)
+    {
+        var adapter = await CreateCatalogAsync(new SnapshotGame(GameA, Title, true,
+            coverArtworkId: CoverId, iconArtworkId: failure == "missing-icon" ? null : IconId));
+        var resolved = new ConcurrentQueue<string>();
+        var loader = CreateArtworkLoader(id =>
+        {
+            resolved.Enqueue(id);
+            if (failure == "read-failure") throw new IOException("Synthetic artwork read failure");
+            return failure == "missing-cache" ? null : IconPath;
+        }, (_, _) => Task.FromResult(failure != "corrupt-icon"));
+        var launched = new List<string>();
+        using var fallback = new PlayniteGameFallback(adapter,
+            id => { launched.Add(id); return CommandResult.Dismiss(); }, loader);
+
+        await fallback.UpdateQueryAsync(Title);
+        await fallback.ArtworkUpdate.WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.Equal(Title, fallback.Title);
+        Assert.Same(ArtworkIconLoader.FallbackIcon, fallback.Icon);
+        Assert.Equal(failure == "missing-icon" ? Array.Empty<string>() : new[] { IconId }, resolved.ToArray());
+        Assert.Equal(CommandResultKind.Dismiss, Assert.IsAssignableFrom<InvokableCommand>(fallback.Command).Invoke().Kind);
+        Assert.Equal(new[] { GameA }, launched);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("Moon Orchard")]
+    public async Task ClearingOrChangingToAGameWithoutArtworkResetsThePreviousIcon(string nextQuery)
+    {
+        var adapter = await CreateCatalogAsync(
+            new SnapshotGame(GameA, Title, true, iconArtworkId: IconId),
+            new SnapshotGame(GameB, OtherTitle, true));
+        using var fallback = new PlayniteGameFallback(adapter,
+            artwork: CreateArtworkLoader(_ => IconPath, (_, _) => Task.FromResult(true)));
+        await fallback.UpdateQueryAsync(Title);
+        await fallback.ArtworkUpdate.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.NotSame(ArtworkIconLoader.FallbackIcon, fallback.Icon);
+
+        await fallback.UpdateQueryAsync(nextQuery);
+        await fallback.ArtworkUpdate.WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.Equal(nextQuery, fallback.Title);
+        Assert.Same(ArtworkIconLoader.FallbackIcon, fallback.Icon);
+    }
+
+    [Fact]
+    public async Task CancelledOlderIconCannotOverwriteANewerGamesIconEvenIfItsDecoderFinishesLate()
+    {
+        var adapter = await CreateCatalogAsync(
+            new SnapshotGame(GameA, Title, true, iconArtworkId: IconId),
+            new SnapshotGame(GameB, OtherTitle, true, iconArtworkId: OtherIconId));
+        var decodeStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseDecode = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var oldDecodeFinished = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var loader = CreateArtworkLoader(id => id == IconId ? IconPath : OtherIconPath, async (path, _) =>
+        {
+            if (path == IconPath)
+            {
+                decodeStarted.TrySetResult(true);
+                // Simulate a decoder that cannot abort its underlying image operation.
+                await releaseDecode.Task;
+                oldDecodeFinished.TrySetResult(true);
+            }
+            return true;
+        });
+        using var fallback = new PlayniteGameFallback(adapter, artwork: loader);
+        await fallback.UpdateQueryAsync(Title);
+        var oldArtwork = fallback.ArtworkUpdate;
+        await decodeStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        try
+        {
+            await fallback.UpdateQueryAsync(OtherTitle);
+            await fallback.ArtworkUpdate.WaitAsync(TimeSpan.FromSeconds(5));
+            // Leaving the old query cancels its waiter without waiting for that decoder.
+            await oldArtwork.WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.Equal(new Uri(OtherIconPath).AbsoluteUri, fallback.Icon!.Light.Icon);
+        }
+        finally
+        {
+            releaseDecode.TrySetResult(true);
+        }
+        await oldDecodeFinished.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.Equal(OtherTitle, fallback.Title);
+        Assert.Equal(new Uri(OtherIconPath).AbsoluteUri, fallback.Icon!.Light.Icon);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task InvokingOrDisposingDuringArtworkLoadCancelsItWithoutLatePublication(bool dispose)
+    {
+        var adapter = await CreateCatalogAsync(new SnapshotGame(GameA, Title, true, iconArtworkId: IconId));
+        var decodeStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var decodeCancelled = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var loader = CreateArtworkLoader(_ => IconPath, async (_, token) =>
+        {
+            decodeStarted.TrySetResult(true);
+            using var registration = token.Register(() => decodeCancelled.TrySetResult(true));
+            await Task.Delay(Timeout.InfiniteTimeSpan, token);
+            return true;
+        });
+        var launched = new List<string>();
+        using var fallback = new PlayniteGameFallback(adapter,
+            id => { launched.Add(id); return CommandResult.Dismiss(); }, loader);
+        await fallback.UpdateQueryAsync(Title);
+        var artworkUpdate = fallback.ArtworkUpdate;
+        var command = Assert.IsAssignableFrom<InvokableCommand>(fallback.Command);
+        await decodeStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        if (dispose)
+        {
+            fallback.Dispose();
+            Assert.Equal(CommandResultKind.ShowToast, command.Invoke().Kind);
+            Assert.Empty(launched);
+        }
+        else
+        {
+            // Launch uses only the verified game ID; it must never await the image.
+            var result = await Task.Run(() => command.Invoke()).WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.Equal(CommandResultKind.Dismiss, result.Kind);
+            Assert.Equal(new[] { GameA }, launched);
+        }
+        await artworkUpdate.WaitAsync(TimeSpan.FromSeconds(5));
+        await decodeCancelled.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.Empty(fallback.Title);
+        Assert.Same(ArtworkIconLoader.FallbackIcon, fallback.Icon);
+    }
+
+    private static ArtworkIconLoader CreateArtworkLoader(
+        Func<string, string?> resolve,
+        Func<string, CancellationToken, Task<bool>> decode) =>
+        new(resolve, decode, fileExists: _ => true);
+
     private async Task<PlayniteCatalogAdapter> CreateCatalogAsync(params SnapshotGame[] games)
     {
         Directory.CreateDirectory(_directory);
-        await SnapshotFilePublisher.PublishAsync(SnapshotPath, new CatalogSnapshot(_time.GetUtcNow(), games));
+        var schemaVersion = games.Any(game => game.IconArtworkId is not null || game.CoverArtworkId is not null)
+            ? SnapshotLimits.SchemaVersion : SnapshotLimits.LegacySchemaVersion;
+        await SnapshotFilePublisher.PublishAsync(SnapshotPath,
+            new CatalogSnapshot(_time.GetUtcNow(), games, schemaVersion),
+            CancellationToken.None, schemaVersion, includeLastActivity: false);
         return new PlayniteCatalogAdapter(SnapshotPath, _time);
     }
 

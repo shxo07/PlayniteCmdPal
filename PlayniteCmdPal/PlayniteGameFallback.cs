@@ -2,6 +2,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.CommandPalette.Extensions.Toolkit;
+using PlayniteCmdPal.Core;
 using PlayniteCmdPal.Playnite;
 
 namespace PlayniteCmdPal;
@@ -16,17 +17,31 @@ internal sealed partial class PlayniteGameFallback : FallbackCommandItem, IDispo
     private readonly object _gate = new();
     private readonly PlayniteDirectLaunch _directLaunch;
     private readonly Func<string, CommandResult> _launch;
+    private readonly ArtworkIconLoader _artwork;
     private CancellationTokenSource? _queryCancellation;
+    private Task _artworkUpdate = Task.CompletedTask;
     private int _version;
     private bool _disposed;
     private string _title = string.Empty;
 
-    public PlayniteGameFallback(IReadOnlyPlayniteCatalog? catalog = null, Func<string, CommandResult>? launch = null)
+    public PlayniteGameFallback(
+        IReadOnlyPlayniteCatalog? catalog = null,
+        Func<string, CommandResult>? launch = null,
+        ArtworkIconLoader? artwork = null)
         : base(new NoOpCommand(), "Open a game with Playnite", FallbackId)
     {
         _directLaunch = new PlayniteDirectLaunch(catalog ?? new PlayniteCatalogAdapter());
         _launch = launch ?? (id => new LaunchGameCommand(id).Invoke());
-        Icon = new IconInfo("\uE7FC");
+        _artwork = artwork ?? new ArtworkIconLoader(PlayniteCatalogAdapter.ResolveArtworkPath);
+        Icon = ArtworkIconLoader.FallbackIcon;
+    }
+
+    internal Task ArtworkUpdate
+    {
+        get
+        {
+            lock (_gate) return _artworkUpdate;
+        }
     }
 
     // CommandItem normally substitutes Command.Name for an empty Title. For a
@@ -38,8 +53,9 @@ internal sealed partial class PlayniteGameFallback : FallbackCommandItem, IDispo
     }
 
     // The SDK ABI is synchronous. The inspected host dispatches fallback RPC on
-    // background workers. Complete the update before returning so its title-change
-    // detection sees the result; do not use async void or fire-and-forget publication.
+    // background workers. Complete the match update before returning so its title-change
+    // detection sees the result. Only optional artwork updates independently via the
+    // SDK's Icon property notification; image I/O must not delay the query callback.
     public override void UpdateQuery(string query) => UpdateQueryAsync(query).GetAwaiter().GetResult();
 
     internal async Task UpdateQueryAsync(string? query)
@@ -76,6 +92,7 @@ internal sealed partial class PlayniteGameFallback : FallbackCommandItem, IDispo
                 Command = new FallbackLaunchCommand(this, version, query!, game.GameId);
                 Subtitle = "Open with Playnite";
                 Title = game.Title;
+                _artworkUpdate = LoadArtworkAsync(game, version, token);
             }
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested)
@@ -85,6 +102,33 @@ internal sealed partial class PlayniteGameFallback : FallbackCommandItem, IDispo
         catch (Exception)
         {
             // No noisy error row in global search. Search games exposes recovery UX.
+        }
+    }
+
+    private async Task LoadArtworkAsync(GameEntry game, int version, CancellationToken token)
+    {
+        try
+        {
+            var icon = await _artwork.GetIconAsync(game, token).ConfigureAwait(false);
+            lock (_gate)
+            {
+                if (_disposed || version != _version || token.IsCancellationRequested)
+                {
+                    return;
+                }
+
+                // The saved per-game icon is optional. Never reuse an earlier game's
+                // image or substitute cover art when the current icon is unavailable.
+                Icon = icon ?? ArtworkIconLoader.FallbackIcon;
+            }
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested)
+        {
+            // A newer query, invocation, or disposal no longer needs this image.
+        }
+        catch (Exception)
+        {
+            // Image failures must not hide a valid match or prevent launching it.
         }
     }
 
@@ -114,6 +158,7 @@ internal sealed partial class PlayniteGameFallback : FallbackCommandItem, IDispo
                 // Consume this generation before dispatch, including when validation
                 // fails. Overlapping invocations cannot launch the same row twice.
                 ++_version;
+                _queryCancellation?.Cancel();
                 ClearResult();
                 return valid ? _launch(gameId) : Unavailable();
             }
@@ -125,6 +170,7 @@ internal sealed partial class PlayniteGameFallback : FallbackCommandItem, IDispo
                 if (version == _version)
                 {
                     ++_version;
+                    _queryCancellation?.Cancel();
                     ClearResult();
                 }
             }
@@ -138,6 +184,8 @@ internal sealed partial class PlayniteGameFallback : FallbackCommandItem, IDispo
         Title = string.Empty;
         Subtitle = string.Empty;
         Command = new NoOpCommand();
+        Icon = ArtworkIconLoader.FallbackIcon;
+        _artworkUpdate = Task.CompletedTask;
     }
 
     private static CommandResult Unavailable() => CommandResult.ShowToast(

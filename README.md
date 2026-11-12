@@ -18,7 +18,15 @@ Provide a keyboard-first route to a user's unified Playnite library: open Comman
 
 ## Global search prototype (WERD-86)
 
-A conservative exact-title fallback can offer **Open with Playnite** for one unambiguous, healthy catalog match. The inspected PowerToys host can show ordinary fallbacks alongside other results in its **Fallbacks** section, but there is no general query-provider or relative-placement API, and installed-host verification is still pending. **Search games** remains the dependable full-library search/disambiguation route. See [the investigation, safety rules, and host probe](docs/CMDPAL-GLOBAL-SEARCH.md).
+A conservative exact-title result can offer **Open with Playnite** for one unambiguous, healthy catalog match, with its saved Playnite game icon (or the neutral game symbol if unavailable).
+
+To show it in the main **Results** section rather than **Fallbacks**, use CmdPal's own setting (confirmed in PowerToys v0.102.3101 source):
+
+1. Open **Command Palette Settings → Extensions → Playnite**.
+2. Under **Fallback commands**, enable and expand **Open a game with Playnite**.
+3. Check **Include in the Global result** (the host's English label), then return home and enter the full game title.
+
+The host moves the same item into Results, not a second copy. It still controls ranking; the extension cannot force first place or placement relative to another provider. If that option is absent on your version, record the installed PowerToys version rather than editing host configuration files. **Search games** remains the full-library search/disambiguation route. The maintainer reports seeing the prototype under Fallbacks; main-Results placement, icon rendering, and real-game launch for this revision still need desktop verification. See [the investigation, safety rules, and host probe](docs/CMDPAL-GLOBAL-SEARCH.md).
 
 ## MVP
 
