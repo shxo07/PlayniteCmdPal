@@ -30,6 +30,12 @@ internal sealed partial class FiltersPage : DynamicListPage
 
     public override IListItem[] GetItems() => _items;
 
+    // Filters are a fixed option list, not a text-search page. The base class
+    // requires this callback, so intentionally ignore search-text changes.
+    public override void UpdateSearchText(string oldSearch, string newSearch)
+    {
+    }
+
     private void RebuildItems(bool notify = true)
     {
         var items = new List<IListItem>
