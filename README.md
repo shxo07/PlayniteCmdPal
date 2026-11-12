@@ -16,17 +16,13 @@ Search and launch games from a Playnite library through Microsoft PowerToys Comm
 
 Provide a keyboard-first route to a user's unified Playnite library: open Command Palette, type a game name, press Enter, and let Playnite handle launch configuration.
 
-## Global search prototype (WERD-86)
+## Direct game results at the root (WERD-86)
 
-A conservative exact-title result can offer **Open with Playnite** for one unambiguous, healthy catalog match, with its saved Playnite game icon (or the neutral game symbol if unavailable).
+Eligible games are registered as individual **top-level commands** through `TopLevelCommands()`, alongside Search games, Favorites, and Recently played games. Type a game title at Command Palette's home/root and select its **Open with Playnite** row. The row uses the saved Playnite game icon, or the neutral game symbol while unavailable/loading.
 
-To show it in the main **Results** section rather than **Fallbacks**, use CmdPal's own setting (confirmed in PowerToys v0.102.3101 source):
+**This is not a fallback. No “Include in the Global result” setting is required.** The earlier fallback prototype has been replaced. CmdPal searches and ranks the registered games normally; the extension does not control first place or placement relative to other providers. As ordinary root commands, games may also appear in the host's unfiltered/home command catalog.
 
-1. Open **Command Palette Settings → Extensions → Playnite**.
-2. Under **Fallback commands**, enable and expand **Open a game with Playnite**.
-3. Check **Include in the Global result** (the host's English label), then return home and enter the full game title.
-
-The host moves the same item into Results, not a second copy. It still controls ranking; the extension cannot force first place or placement relative to another provider. If that option is absent on your version, record the installed PowerToys version rather than editing host configuration files. **Search games** remains the full-library search/disambiguation route. The maintainer reports seeing the prototype under Fallbacks; main-Results placement, icon rendering, and real-game launch for this revision still need desktop verification. See [the investigation, safety rules, and host probe](docs/CMDPAL-GLOBAL-SEARCH.md).
+Catalog changes refresh automatically. To force a reread, select **Search games → More commands (`Ctrl+K`) → Refresh game commands**. Launch always revalidates the captured stable Playnite ID. Same-title games remain separate, explicitly selectable rows with source/platform/install metadata and distinct Playnite IDs. Unhealthy/stale snapshots do not authorize direct root commands; **Search games** remains the full browsing/recovery route. Deployment, root/icon rendering, and real-game launch checks for this replacement still need desktop verification. See [the supported API, safety rules, and host checks](docs/CMDPAL-GLOBAL-SEARCH.md).
 
 ## MVP
 
@@ -53,7 +49,7 @@ The host moves the same item into Results, not a second copy. It still controls 
 - Central package versions: `Directory.Packages.props`
 - Repo-specific CmdPal instructions: `.github/copilot-instructions.md` and `.github/instructions/cmdpal-extension.instructions.md`
 - GitHub Actions: Windows build/test workflow and CodeQL workflow; Dependabot is configured for NuGet and Actions.
-- Windows CI and CodeQL have successful runs. Both test projects (`PlayniteCmdPal.Core.Tests` and `PlayniteCmdPal.Playnite.Tests`) run in CI through `scripts/ci.ps1` alongside the .NET Framework snapshot smoke test; see [Testing](docs/TESTING.md) for the coverage map. Do not describe the repository as a working end-to-end extension until local deployment and Playnite integration acceptance criteria pass.
+- Windows CI and CodeQL have successful runs. All three test projects (`PlayniteCmdPal.Core.Tests`, `PlayniteCmdPal.Playnite.Tests`, and `PlayniteCmdPal.Command.Tests`) run in CI through `scripts/ci.ps1` alongside the .NET Framework snapshot smoke test; see [Testing](docs/TESTING.md) for the coverage map. Do not describe the repository as a working end-to-end extension until local deployment and Playnite integration acceptance criteria pass.
 - **License:** MIT for PlayniteCmdPal-authored material; see [LICENSE](LICENSE). Third-party components and assets retain their own license and attribution requirements; distribution artifacts carry [third-party notices](third-party/THIRD-PARTY-NOTICES.md). See [licensing and release readiness](docs/LICENSING-AND-RELEASE.md) for the dependency audit and its open review items.
 
 ## Development and project tracking

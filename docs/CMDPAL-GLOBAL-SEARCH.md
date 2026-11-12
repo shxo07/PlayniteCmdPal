@@ -1,181 +1,97 @@
-# WERD-86: direct launch from global Command Palette search
+# WERD-86: direct game commands in global Command Palette results
 
-**Investigated:** 2026-11-12. **Status:** conservative fallback prototype with saved-game icons and a supported, user-controlled main-Results setting. The maintainer reports Fallbacks visibility; main-Results/icon/launch desktop checks remain pending. This is not a claim of extension control over global ranking or placement.
+**Reviewed:** 2026-11-12. **Current design:** individual catalog-backed game commands registered through `TopLevelCommands()`, not a fallback. Installed-host verification of this replacement is still pending.
 
-## Answer
+## Answer and correction
 
-**There is no general query-provider or result-placement API in the inspected SDK.** PlayniteCmdPal cannot request a ranked result immediately above/below another provider, enumerate its matches, or modify them.
+**Yes: the documented top-level-command API can expose individual games directly in the main root/search results.** Returning only the Search games page was a presentation choice, not a platform limitation. The absence of a general per-query extension/ranking API does **not** prevent registering a searchable command per game.
 
-**An ordinary fallback can coexist with other results in the inspected PowerToys v0.102.3101 host.** That host updates enabled fallbacks during normal global searches without first requiring zero matches, and appends nonempty ordinary fallbacks in a separate **Fallbacks** section even when its **Results** section is populated. This is narrower than arbitrary ranked injection and differs from the overview documentation's “when no other results match” description. It is **source-level evidence**, not a desktop observation or a compatibility guarantee for every host version, setting, or aliased query.
+The earlier fallback implementation and its “Include in the Global result” setup recommendation did not meet the requested UX. They are superseded: `FallbackCommands()` now returns an empty array, the fallback implementation is removed, and no fallback-promotion checkbox is needed. [ADR-012](DECISIONS.md#adr-012-catalog-backed-top-level-game-commands) replaces ADR-011.
 
-**The same host can include that fallback in the main Results section through its native “Include in the Global result” setting.** This is the supported route for the requested main-results UX: a user opts in through CmdPal, and the host scores/merges the existing item with other results. External fallbacks are not included there by default. No new extension API, host-settings write, or second registration is needed.
+The provider publishes the existing Search games, Favorites, and Recently played games navigation commands plus one ordinary `CommandItem` per eligible Playnite game:
 
-Returning a static top-level command per game would also use a supported registration shape, but would prepopulate the home command catalog rather than supply query-dependent matches; it is rejected here for noise/duplication and freshness management.
+- **Title:** the saved game title, for example `FIFA 16`.
+- **Subtitle/action:** **Open with Playnite**, plus available source/platform/install metadata; equal-title groups also show the full Playnite ID to make every choice distinct.
+- **Icon:** the saved per-game Playnite icon, or the neutral game symbol while missing/loading/invalid.
+- **Command identity:** `playnitecmdpal.open-game.{canonical-playnite-guid}`.
 
-The prototype therefore registers **one standard SDK fallback**, not one top-level command per game. A unique exact title can display:
+CmdPal searches and ranks this root command catalog itself, including partial/fuzzy queries according to the host's normal rules. Explicitly selecting a row launches its captured stable ID; the extension never guesses a game from a partial query or substitutes a different ID. Other providers can contribute matching results normally. Registration supplies main/root commands, **not** control over first place, adjacency, or another provider's results.
 
-- Title: the catalog's game title, e.g. `FIFA 16`.
-- Subtitle and command action: **Open with Playnite**.
-- Icon: the saved per-game Playnite icon from the existing opaque artwork cache, loaded asynchronously; the neutral game symbol remains when the icon is unavailable. Cover art is never substituted.
+**Tradeoff:** these are real root commands, not items conditionally injected only when a game query is typed. They can also be exposed in the host's unfiltered/home command catalog. That is the supported registration model selected for this request. The extension does not pretend to receive global query text through `TopLevelCommands()`.
 
-CmdPal decides if/where this appears. On a host that only offers fallbacks after other matches are exhausted, a competing match may prevent this row from appearing. The dependable alternative is **Search games → type the title → choose the explicit game row → Enter**. The existing page remains the route for partial queries, ambiguous titles, stale/offline browsing, metadata disambiguation, and recovery.
+## Use it
 
-## Show the game in main Results
+1. Deploy the updated extension and reload Command Palette extensions. Keep the companion Playnite catalog bridge enabled.
+2. At the Command Palette home/root, type a game title. Select its ordinary game row with **Open with Playnite**; no page entry or fallback setting is required.
+3. To force a reread, select the top-level **Search games** command, open **More commands** (`Ctrl+K`), and choose **Refresh game commands**. This stays in the palette and refreshes root registration/artwork; it does not ask Playnite to export or write to its database.
+4. Manage missing/incorrect saved game icons in **Playnite**, not the extension. Let the bridge export the updated catalog/artwork. Missing artwork does not prevent launching.
 
-The exact English UI below is verified in **PowerToys v0.102.3101 source**, not yet on the maintainer's unspecified installed version:
+Same-title entries under different IDs remain separate root choices, with disambiguating metadata and full IDs, even when their metadata or GUID prefixes coincide. Selecting a row is an explicit ID-based choice, not a unique-title guess. Stale/offline browsing, filters, richer details, and integration recovery remain available through **Search games → title → explicitly choose the game**.
 
-1. Open **Command Palette Settings → Extensions → Playnite**.
-2. Find **Fallback commands**, enable **Open a game with Playnite**, and expand that entry.
-3. Enable **Include in the Global result**. The host's description reads “Show results on queries without direct activation command.”
-4. Return to the Command Palette home search and type a unique full game title. Expect one Playnite item in **Results**, not another copy in **Fallbacks**. Disable that checkbox to restore the separate fallback section.
+## Public API evidence and version boundaries
 
-This is CmdPal's per-fallback preference, not an extension setting. The extension deliberately does not edit the host's settings file or call internal host APIs. Inclusion is not a promise of first place, adjacency to an app, or suppression of other providers. The host still owns scoring and ordering. If the checkbox is unavailable, record the actual installed PowerToys/CmdPal version and use Search games; do not substitute undocumented configuration edits.
+The repository still pins `Microsoft.CommandPalette.Extensions` **0.9.260303001**, including its bundled toolkit. No SDK upgrade, template regeneration, host-internal dependency, manifest change, host-settings edit, UI automation, or new catalog transport is introduced.
 
-For the icon, use the same companion-plugin/catalog/artwork setup as Search games. Manage the saved game icon in **Playnite**; the extension does not extract an executable/store/launcher icon or download a replacement. The row is usable before image decoding completes, and missing/corrupt artwork does not prevent launching.
+- The user-linked [Microsoft Learn guide: Add top-level commands](https://learn.microsoft.com/en-us/windows/powertoys/command-palette/add-top-level-commands-to-your-extension) explicitly documents returning multiple `CommandItem`s, caching them, and replacing the catalog with `RaiseItemsChanged()` when it changes. The [reviewed immutable documentation](https://github.com/MicrosoftDocs/windows-dev-docs/blob/a0de70df089aff14491b12c546c1905eaa2af5d9/hub/powertoys/command-palette/add-top-level-commands-to-your-extension.md) is the same supported pattern used here.
+- The pin-era [SDK IDL](https://github.com/microsoft/PowerToys/blob/f6309ac549ae98fdc4925ac290546319affc4ed7/src/modules/cmdpal/extensionsdk/Microsoft.CommandPalette.Extensions/Microsoft.CommandPalette.Extensions.idl#L380-L419) exposes `ICommandProvider.TopLevelCommands()`, `INotifyItemsChanged`, command lookup, and `ICommandProvider4.GetCommandItem`. The [toolkit `CommandProvider`](https://github.com/microsoft/PowerToys/blob/f6309ac549ae98fdc4925ac290546319affc4ed7/src/modules/cmdpal/extensionsdk/Microsoft.CommandPalette.Extensions.Toolkit/CommandProvider.cs) exposes `RaiseItemsChanged(int)`.
+- The [ICommandProvider reference](https://github.com/MicrosoftDocs/windows-dev-docs/blob/a0de70df089aff14491b12c546c1905eaa2af5d9/hub/powertoys/command-palette/microsoft-commandpalette-extensions/icommandprovider.md) describes `Frozen`; this dynamic provider sets it to **false**.
+- Microsoft's [Bookmarks provider in PowerToys v0.102.3101](https://github.com/microsoft/PowerToys/blob/e84973c4f3724eeedd34d836559dac32734c3e22/src/modules/cmdpal/ext/Microsoft.CmdPal.Ext.Bookmark/BookmarksCommandProvider.cs) is a versioned example of individual data-backed top-level commands and rebuilding a cached array before `RaiseItemsChanged`. Host [TopLevelCommandManager](https://github.com/microsoft/PowerToys/blob/e84973c4f3724eeedd34d836559dac32734c3e22/src/modules/cmdpal/Microsoft.CmdPal.UI.ViewModels/TopLevelCommandManager.cs#L159-L206) reloads a provider's top-level items when notified. These sources are evidence only, not referenced runtime assemblies.
 
-## Evidence and version boundaries
+The inspected published host source is **v0.102.3101**, commit `e84973c4f3724eeedd34d836559dac32734c3e22`, not a claim about the maintainer's installed version. The public registration contract establishes the supported main-results path; actual desktop rendering, competing-provider ranking, and real launches still require the checks below.
 
-### Repository baseline
+## Implementation and safety contract
 
-At base commit `6affa451c0bf014c936321be3625bc40d1b12053`:
+Implementation: [provider](../PlayniteCmdPal/PlayniteCmdPalCommandsProvider.cs), [navigation composition](../PlayniteCmdPal/PlayniteCmdPalCommandsProvider.Navigation.cs), [eligibility policy](../PlayniteCmdPal.Core/DirectLaunchGames.cs), [catalog/revalidation service](../PlayniteCmdPal.Playnite/PlayniteDirectLaunch.cs), and [artwork loader](../PlayniteCmdPal/ArtworkIconLoader.cs).
 
-| Item | Observed value |
-| --- | --- |
-| SDK NuGet package | `Microsoft.CommandPalette.Extensions` **0.9.260303001**, centrally pinned in [Directory.Packages.props](../Directory.Packages.props) |
-| Toolkit | `Microsoft.CommandPalette.Extensions.Toolkit` is shipped inside that SDK package, not a separately pinned toolkit dependency |
-| Extension target | `net10.0-windows10.0.26100.0`, minimum platform `10.0.19041.0`, x64/ARM64 |
-| Provider | Cached `TopLevelCommands()` for Search games, Favorites, Recently played games; no fallback override before this spike |
-| Existing launch path | `LaunchGameCommand` → `PlayniteLaunchUri.TryCreate` → `playnite://playnite/start/{canonical-game-guid}` with `UseShellExecute = true` |
-| Installed host in this workspace | **None.** This workspace is Linux; no Windows package catalog or CmdPal desktop is available. Previous project deployment notes do not identify an installed PowerToys version. |
+### Registration and refresh
 
-No template regeneration, SDK upgrade, manifest change, or new transport is part of this spike.
+- `TopLevelCommands()` returns the cached array only: no file reads, image decoding, per-query work, or new command allocation in that getter. Initial catalog loading is asynchronous.
+- Poll the adapter every **10 seconds** for the provider's lifetime. Normal reads respect its **30-second** disk revalidation interval. Slow timer reads coalesce; an explicit refresh can supersede an older read.
+- Build the full replacement array before publishing it and raising `ItemsChanged` outside the provider lock. Reentrant host reads see the new snapshot. Unchanged ID/title/metadata/icon presentation reuses the array and command objects; unrelated LastActivity/cover changes do not churn the root catalog. Displayed metadata changes do trigger replacement.
+- Canonical IDs are mandatory. Identical repeated records count once; conflicting records or invalid identity/display data fail closed. Different IDs with case-insensitively equal titles all register, without choosing by relevance/source/installation. Their subtitles add the full stable ID as well as available source/platform/install metadata; identical metadata or colliding short GUID prefixes cannot make the rows indistinguishable. Eligibility is independent of install state, source, page filters, and catalog input order. Candidate construction scans the catalog once and sorts deterministically; it does not rescan the whole library once per game.
+- Only available, non-stale, complete snapshots with no read issue authorize root game commands. The stale threshold is **at least 24 hours**. A failed read withdraws game commands rather than advertising last-known-good launch rows; navigation/recovery pages remain available.
+- One root command per eligible stable ID, no fallback registration, no duplicate generic Search games fallback, and no extra game row injected into existing pages. The same game can still be deliberately browsed on those pages; they are separate navigation surfaces, not duplicate global registrations.
 
-### Public documentation is not a concurrent-result guarantee
+### Invocation
 
-Reviewed Microsoft documentation at revision [`a0de70df089aff14491b12c546c1905eaa2af5d9`](https://github.com/MicrosoftDocs/windows-dev-docs/tree/a0de70df089aff14491b12c546c1905eaa2af5d9/hub/powertoys/command-palette):
+- Each command captures its displayed title, stable ID, and published catalog generation. Removed/renamed/replaced entries, changed displayed metadata, and commands retained from an obsolete generation cannot retarget to a different game. Another game acquiring the same title is not an identity ambiguity: an explicitly selected ID can still be verified.
+- Immediately before dispatch, explicitly `RefreshAsync` the snapshot, require a healthy catalog and the selected canonical ID with its displayed title/source/platform/install state unchanged, then use the existing `LaunchGameCommand`/`playnite://playnite/start/{id}` shell path. A failed validation forces a versioned root refresh, superseding any older timer read, and returns recovery guidance. Optional icon/cover/LastActivity changes do not invalidate the selected identity.
+- Concurrent invocations of one command are guarded against double dispatch. A valid root command is reusable on later, sequential selections; unlike the old fallback it is not consumed after one launch.
+- Catalog replacement or disposal during revalidation invalidates dispatch. Disposal stops polling and cancels pending read/image publications.
+- Process/URI errors retain the existing actionable failure toast. Accepted shell dispatch is **not proof that the game started**. Rereading a bridge snapshot is not a live Playnite database check or a request for a new plugin export; not-yet-exported changes cannot be observed.
 
-1. [Extensibility overview](https://github.com/MicrosoftDocs/windows-dev-docs/blob/a0de70df089aff14491b12c546c1905eaa2af5d9/hub/powertoys/command-palette/extensibility-overview.md) lists top-level commands, fallbacks, and context-menu items, describing fallbacks as triggered when no other results match.
-2. [IFallbackHandler.UpdateQuery](https://github.com/MicrosoftDocs/windows-dev-docs/blob/a0de70df089aff14491b12c546c1905eaa2af5d9/hub/powertoys/command-palette/microsoft-commandpalette-extensions/ifallbackhandler_updatequery.md) repeats the no-match condition.
-3. [ICommandProvider.FallbackCommands](https://github.com/MicrosoftDocs/windows-dev-docs/blob/a0de70df089aff14491b12c546c1905eaa2af5d9/hub/powertoys/command-palette/microsoft-commandpalette-extensions/icommandprovider_fallbackcommands.md), however, describes query-reactive top-level items shown when the user types. Its return-order wording is not authority over another provider's placement.
-4. The [toolkit constructor reference](https://github.com/MicrosoftDocs/windows-dev-docs/blob/a0de70df089aff14491b12c546c1905eaa2af5d9/hub/powertoys/command-palette/microsoft-commandpalette-extensions-toolkit/fallbackcommanditem_constructor.md) still shows the old one-argument constructor. Do **not** copy it over the pinned SDK's actual three-argument constructor.
+### Saved game icons
 
-The checked-in fallback skill has the same simplified no-match explanation. Use it for the pattern, not as evidence that the host suppresses fallbacks whenever another result exists.
-
-### SDK API cross-check
-
-PowerToys commit [`f6309ac549ae98fdc4925ac290546319affc4ed7`](https://github.com/microsoft/PowerToys/commit/f6309ac549ae98fdc4925ac290546319affc4ed7) introduced the upstream dependency pin to **0.9.260303001** on 2026-03-04. The relevant source at that revision provides:
-
-- [`ICommandProvider.FallbackCommands() : IFallbackCommandItem[]`, `IFallbackCommandItem.FallbackHandler`, and `IFallbackHandler.UpdateQuery(string)`](https://github.com/microsoft/PowerToys/blob/f6309ac549ae98fdc4925ac290546319affc4ed7/src/modules/cmdpal/extensionsdk/Microsoft.CommandPalette.Extensions/Microsoft.CommandPalette.Extensions.idl#L369-L419).
-- [`FallbackCommandItem(ICommand command, string displayTitle, string id)`](https://github.com/microsoft/PowerToys/blob/f6309ac549ae98fdc4925ac290546319affc4ed7/src/modules/cmdpal/extensionsdk/Microsoft.CommandPalette.Extensions.Toolkit/FallbackCommandItem.cs), `IFallbackCommandItem2.Id`, and virtual `UpdateQuery`.
-- [`CommandProvider`](https://github.com/microsoft/PowerToys/blob/f6309ac549ae98fdc4925ac290546319affc4ed7/src/modules/cmdpal/extensionsdk/Microsoft.CommandPalette.Extensions.Toolkit/CommandProvider.cs) and the IDL expose top-level commands, fallback commands, command lookup, interface-cache stubs, and dock bands. They do not expose a per-query ranked-result collection or relative placement controls. `IDynamicListPage` is a page-scoped search API, not a global provider.
-- The [SDK package specification](https://github.com/microsoft/PowerToys/blob/e84973c4f3724eeedd34d836559dac32734c3e22/src/modules/cmdpal/extensionsdk/nuget/Microsoft.CommandPalette.Extensions.SDK.nuspec) bundles the toolkit DLL and SDK WinMD in `Microsoft.CommandPalette.Extensions`.
-
-This is a source/API cross-check, not decompilation of a locally restored NuGet binary. The successful Windows CI run recorded below additionally restores and compiles the prototype against the pinned package. The prototype deliberately uses only these existing entry points; newer SDK source interfaces are not presumed available merely because the host source contains them.
-
-### Versioned host behavior
-
-The [latest published release returned by GitHub during this investigation](https://github.com/microsoft/PowerToys/releases/tag/v0.102.3101) was **v0.102.3101**, published 2026-11-06, commit **`e84973c4f3724eeedd34d836559dac32734c3e22`**. This is the inspected source version, **not** the user's installed host version. Its [central package file](https://github.com/microsoft/PowerToys/blob/e84973c4f3724eeedd34d836559dac32734c3e22/Directory.Packages.props#L45) uses the same SDK pin.
-
-Relevant call/merge path:
-
-1. [`MainListPage.UpdateSearchTextCore`](https://github.com/microsoft/PowerToys/blob/e84973c4f3724eeedd34d836559dac32734c3e22/src/modules/cmdpal/Microsoft.CmdPal.UI.ViewModels/Commands/MainListPage.cs#L650-L733) separates special/user-configured global fallbacks from ordinary enabled fallbacks, calls `_fallbackUpdateManager.BeginUpdate(SearchText, ...)`, and includes ordinary fallbacks independently of normal command/app matches. There is no “other result count is zero” gate on that path. Aliases can take a different earlier path; this is not an all-queries promise.
-2. [`FallbackUpdateManager`](https://github.com/microsoft/PowerToys/blob/e84973c4f3724eeedd34d836559dac32734c3e22/src/modules/cmdpal/Microsoft.CmdPal.UI.ViewModels/FallbackUpdateManager.cs#L65-L172) dispatches fallback updates on background workers. [`TopLevelViewModel`](https://github.com/microsoft/PowerToys/blob/e84973c4f3724eeedd34d836559dac32734c3e22/src/modules/cmdpal/Microsoft.CmdPal.UI.ViewModels/TopLevelViewModel.cs#L417-L465) calls `FallbackHandler.UpdateQuery` and detects title changes.
-3. [`GetSearchViewItems`](https://github.com/microsoft/PowerToys/blob/e84973c4f3724eeedd34d836559dac32734c3e22/src/modules/cmdpal/Microsoft.CmdPal.UI.ViewModels/Commands/MainListPage.cs#L333-L354) drops empty fallback titles. [`MainListPageResultFactory.Create`](https://github.com/microsoft/PowerToys/blob/e84973c4f3724eeedd34d836559dac32734c3e22/src/modules/cmdpal/Microsoft.CmdPal.UI.ViewModels/Commands/MainListPageResultFactory.cs#L34-L62) allocates space for normal results **and** fallbacks; [its final append](https://github.com/microsoft/PowerToys/blob/e84973c4f3724eeedd34d836559dac32734c3e22/src/modules/cmdpal/Microsoft.CmdPal.UI.ViewModels/Commands/MainListPageResultFactory.cs#L141-L160) adds the fallback section even when normal results already exist.
-4. Microsoft's own [`FallbackOpenFileItem`](https://github.com/microsoft/PowerToys/blob/e84973c4f3724eeedd34d836559dac32734c3e22/src/modules/cmdpal/ext/Microsoft.CmdPal.Ext.Indexer/FallbackOpenFileItem.cs) uses the same public fallback pattern, changing the command/title for a direct result and clearing the title when inapplicable.
-
-### Native main-Results preference (follow-up finding)
-
-The same immutable host revision provides the supported user-facing preference:
-
-- [`ExtensionPage.xaml`](https://github.com/microsoft/PowerToys/blob/e84973c4f3724eeedd34d836559dac32734c3e22/src/modules/cmdpal/Microsoft.CmdPal.UI/Settings/ExtensionPage.xaml#L162-L235) exposes the per-fallback expander and binds its checkbox to `IncludeInGlobalResults`. The [English resources](https://github.com/microsoft/PowerToys/blob/e84973c4f3724eeedd34d836559dac32734c3e22/src/modules/cmdpal/Microsoft.CmdPal.UI/Strings/en-us/Resources.resw#L1197-L1202) label it **Include in the Global result**.
-- [`FallbackSettings`](https://github.com/microsoft/PowerToys/blob/e84973c4f3724eeedd34d836559dac32734c3e22/src/modules/cmdpal/Microsoft.CmdPal.UI.ViewModels/FallbackSettings.cs#L9-L28) defaults inclusion to `isBuiltIn`, which explains why an external extension's enabled fallback initially appears separately. [`FallbackSettingsViewModel`](https://github.com/microsoft/PowerToys/blob/e84973c4f3724eeedd34d836559dac32734c3e22/src/modules/cmdpal/Microsoft.CmdPal.UI.ViewModels/FallbackSettingsViewModel.cs#L48-L66) persists a user change and requests command reload.
-- [`SettingsModel.GetGlobalFallbacks`](https://github.com/microsoft/PowerToys/blob/e84973c4f3724eeedd34d836559dac32734c3e22/src/modules/cmdpal/Microsoft.CmdPal.UI.ViewModels/SettingsModel.cs#L513-L531) selects enabled, opted-in IDs. [`MainListPage`](https://github.com/microsoft/PowerToys/blob/e84973c4f3724eeedd34d836559dac32734c3e22/src/modules/cmdpal/Microsoft.CmdPal.UI.ViewModels/Commands/MainListPage.cs#L650-L673) partitions them from common fallbacks, so inclusion does not create a duplicate fallback row.
-- [`ScoreDeferredFallbacks`](https://github.com/microsoft/PowerToys/blob/e84973c4f3724eeedd34d836559dac32734c3e22/src/modules/cmdpal/Microsoft.CmdPal.UI.ViewModels/Commands/MainListPage.cs#L369-L403) scores their current titles and drops empty titles. [`MainListPageResultFactory`](https://github.com/microsoft/PowerToys/blob/e84973c4f3724eeedd34d836559dac32734c3e22/src/modules/cmdpal/Microsoft.CmdPal.UI.ViewModels/Commands/MainListPageResultFactory.cs#L34-L140) merges those scored items with commands/apps under **Results**. [`MainListRanker`](https://github.com/microsoft/PowerToys/blob/e84973c4f3724eeedd34d836559dac32734c3e22/src/modules/cmdpal/Microsoft.CmdPal.UI.ViewModels/Commands/MainListRanker.cs#L85-L120) tiers a fallback's current title like other results. This establishes the merge path, not a guaranteed global rank.
-
-Host internals are read here **only as evidence**. The extension neither references those assemblies nor accesses settings/internal APIs to promote itself into the ranked Results section. User/host ranking configuration is not extension-owned placement.
-
-## Prototype and safety contract
-
-Implementation: [ExactGameMatch](../PlayniteCmdPal.Core/ExactGameMatch.cs), [PlayniteDirectLaunch](../PlayniteCmdPal.Playnite/PlayniteDirectLaunch.cs), [PlayniteGameFallback](../PlayniteCmdPal/PlayniteGameFallback.cs), and the provider's single `FallbackCommands()` item.
-
-- **Exact only:** trim outer query whitespace, then ordinal case-insensitive full-title equality. No fuzzy, prefix, punctuation-folding, substring, or “pick first” auto-launch. Use the complete catalog, not page filters or installation-state preferences, when detecting ambiguity.
-- **Identity:** require the existing canonical, lowercase, nonempty Playnite GUID policy. Identical repeated core records count once; conflicting records fail closed. Distinct IDs with the same title never yield a direct-launch row.
-- **Health:** require an available catalog, no stale flag (the adapter threshold is **at least 24 hours**), no read issue, and **zero skipped records**. A skipped/invalid record could conceal ambiguity. Last-known-good data after a failed refresh stays browsable on the page but cannot authorize direct launch.
-- **Invocation:** explicitly `RefreshAsync` the snapshot, re-run the same health/match checks, and require the *same captured ID*. Removal, rename, title ambiguity, replacement by another ID, or failed refresh rejects the action with recovery guidance. Refresh bypasses the normal 30-second cache interval but can coalesce with an in-flight adapter read.
-- **Races/lifetime:** query changes cancel/obsolete prior work and retained commands. Each command captures its ID and query generation; it never reads a mutable “current game ID.” Revalidation cannot publish or launch over a newer query, and each selected generation is consumed once. Disposal cancels pending work.
-- **Saved icon:** reuse `ArtworkIconLoader` with `PlayniteCatalogAdapter.ResolveArtworkPath`, the same icon-only validation/decoding, bounded cache, and cancellation rules as the existing pages. Publish the match with a neutral symbol before image work; a later SDK `Icon` property notification supplies the saved icon without delaying the synchronous query callback or launch. Query change, clearing, consumption, or disposal resets the icon and cancels the request. Generation/token checks prevent old artwork from overwriting a newer row. Missing/corrupt/unreadable icons leave the usable match intact; covers are never requested.
-- **Dispatch:** after revalidation, reuse `LaunchGameCommand` and its existing Playnite URI path. The only launch change is an injectable process-dispatch seam for synthetic tests. A Windows dispatch exception preserves the existing actionable toast; a successful dispatch is **not confirmation that the game started**.
-- **No duplicates/noise:** one fallback item total; no per-game top-level registration, generic Search games fallback, or extra row inside Search/Favorites/Recently Played. Fallback query handling belongs to the host's main page, while page search remains unchanged. Empty/ambiguous/unhealthy queries hide the item rather than advertising a misleading generic action. `Title` explicitly permits empty without the toolkit substituting `Command.Name`.
-- **Freshness limit:** re-reading a snapshot is not a live Playnite database check or a request to the plugin to export. Changes not yet exported cannot be detected; an absent game ID is still resolved by Playnite, never substituted by title. No new IPC or claim of game-start acknowledgement is introduced.
+- Reuse the trusted opaque `GameEntry.IconReference` resolver and `ArtworkIconLoader`. Never substitute a cover, executable, launcher, storefront, or downloaded image.
+- Publish usable root commands with the neutral symbol before image work. Load at most **four** images concurrently; reuse the loader's bounded **96-entry** successful-result cache. Each ordinary `CommandItem` uses the public SDK `Icon` property notification, without reloading the whole root catalog for each image. Icon state is committed atomically under the provider lock, then the synchronous SDK notification is raised outside it so COM listeners can re-enter the getter.
+- Missing/corrupt/unreadable images keep the neutral symbol without changing launch eligibility. Unchanged catalog refreshes can retry failed images; explicit refresh invalidates cached resolution. Changed content hashes pick up new saved icons.
+- Catalog replacement/disposal cancels obsolete image requests. Generation and token checks prevent late work from changing a newer row. Image decoding never blocks root registration, typing, or launch. Query changes are handled by CmdPal over the registered catalog, not by an extension fallback callback.
 
 ## Reproduce on an installed Windows host (not executed here)
 
-### 1. Minimal host-only coexistence probe
+Record the actual installed Windows build, PowerToys/CmdPal version, extension package/head, and display scaling. Deploy and reload the updated extension first. Do not commit real game names, GUIDs, paths, library snapshots, or host logs containing private queries.
 
-Use a disposable local copy of the extension/template with the **same SDK pin**. Do not publish these probe commands in the production provider. No real library, Playnite install, or game launch is needed.
+### 1. Root registration and coexistence
 
-Add a normal top-level item:
+1. Leave fallback inclusion disabled; there should be no Playnite fallback entry to enable. At home, type a unique saved game title. Confirm an ordinary game row with **Open with Playnite** and its saved icon appears in main **Results**, without entering Search games.
+2. Check full and partial queries. CmdPal owns which registered commands match and their ranking; neither adjacency nor first place is an assertion. Inspect the unfiltered/home catalog too: root commands may be exposed there by the host.
+3. For a harmless host-only control in a disposable local template, return a `CommandItem(new NoOpCommand())` titled `WERD-86 Root Probe` from `TopLevelCommands()`, alongside the normal page command. Do not add a fallback. Verify it is searchable at root. Add/remove it using a cached-array replacement and `RaiseItemsChanged`, and verify the host updates without duplicate rows.
+4. For a different-provider control, temporarily add a Start Menu shortcut to a harmless application such as Notepad named `WERD-86 Root Probe`; verify Apps finds it, then verify both ordinary rows coexist. Remove the temporary shortcut/probe afterward. Do not modify another provider or production catalog to force a result order.
 
-```csharp
-new CommandItem(new NoOpCommand())
-{
-    Title = "WERD-86 Probe",
-    Subtitle = "Normal top-level match; no launch",
-}
-```
+### 2. Catalog, icon, and real launch checks
 
-Return one `ProbeFallback` from that provider's `FallbackCommands()`:
+1. Select a unique game's root row. Confirm that exact game actually starts through Playnite, first with Playnite running and then fully closed. Record dispatch errors separately from Playnite/game-start failures.
+2. Add, rename, and remove games in Playnite; wait for bridge export and normal revalidation, or use **Search games → More commands → Refresh game commands**. Verify the root catalog updates without requiring fallback settings or accumulating duplicates. Verify Search games/Favorites/Recently Played still behave normally.
+3. Introduce duplicate titles under different Playnite IDs, including identical source/platform metadata. Verify one root row per ID, distinguishable metadata/ID subtitles, and that selecting either launches only that exact ID; no arbitrary winner or fallback copy is allowed. In an isolated environment check stale, missing, malformed, and partially invalid snapshots: navigation remains, unsafe root game commands disappear, and retained commands do not launch a replacement ID.
+4. Check saved icons for installed and uninstalled entries, no-icon and cover-only entries, missing cache files, corrupt images, and changed icons. Missing artwork must keep the neutral symbol without disabling a valid launch.
+5. Refresh/change the catalog while icons or invocation revalidation are pending. Old work must not publish over a newer catalog or dispatch after disposal/reload. Confirm launch does not wait for image decoding and repeated later selections still work.
+6. Check typing responsiveness with a large library and icon rendering at 100% and 150% or higher scaling. Synthetic deterministic-list tests are not a host performance benchmark.
+7. In an isolated environment with an unusable URI handler, verify actionable failure feedback without a false “game started” claim. Do not damage the user's normal registration for testing.
 
-```csharp
-internal sealed partial class ProbeFallback : FallbackCommandItem
-{
-    private string _title = string.Empty;
+## Validation record and history
 
-    public ProbeFallback()
-        : base(new NoOpCommand(), "WERD-86 fallback probe", "werd86.probe") { }
-
-    public override string Title
-    {
-        get => _title;
-        set => SetProperty(ref _title, value);
-    }
-
-    public override void UpdateQuery(string query)
-    {
-        var exact = string.Equals(query.Trim(), "WERD-86 Probe", StringComparison.OrdinalIgnoreCase);
-        System.Diagnostics.Debug.WriteLine($"WERD-86: UpdateQuery called; exact={exact}");
-        Subtitle = "Fallback match; no launch";
-        Title = exact ? "WERD-86 Probe" : string.Empty;
-    }
-}
-```
-
-1. Record Windows build, **actual installed** PowerToys/CmdPal version, extension package version, and fallback enabled/ranking settings. Build > Deploy and reload extensions with the packaged profile.
-2. Type `WERD-86 Probe` at home (not inside an extension page). Observe whether `UpdateQuery` runs **while the normal top-level match exists**, and whether both rows are visible. Do not infer invocation solely from row visibility.
-3. Remove the normal probe item, reload, and repeat as the no-competing-match control. Clear/change the query; the fallback must disappear.
-4. For a **different provider** control, create a temporary Start Menu shortcut to a harmless application such as Notepad named `WERD-86 Probe`. Verify the built-in Apps provider actually finds it, then repeat with the normal probe item removed. Record both invocation and visibility. Remove the temporary shortcut and probe afterward.
-5. Save only sanitized outcomes/version information; do not commit host logs with other queries or personal library data. If another installed version suppresses the fallback in the competing-match case, record that limitation rather than trying to override it.
-
-### 2. Playnite integration smoke test
-
-Use the production prototype with a small library managed in Playnite and the companion plugin. Do not hand-edit a real snapshot or run a synthetic GUID as if it were a real game.
-
-1. Record the installed PowerToys/CmdPal version and the fallback's **Include in the Global result** state. Search at home for one unique full game title. With inclusion off, verify the exact title and **Open with Playnite** subtitle/action under **Fallbacks**. Turn inclusion on using the steps above and repeat: the single row should be in **Results**, with no duplicate under Fallbacks. With an app/shortcut match for the same title, check both rows without asserting adjacency or order. Clear the query and verify no generic Playnite launch row remains.
-2. Select the Playnite row; confirm the intended game really starts through Playnite. Record dispatch errors separately from Playnite/game-start errors. Repeat with Playnite fully closed.
-3. Use duplicate titles across two Playnite IDs, a partial title, and an unknown title; no direct-launch fallback should appear. Use Search games to disambiguate explicitly.
-4. Display a matching row, then remove/rename the game or introduce a duplicate title in Playnite and wait for the bridge export. Invoke the retained row: it must not launch a replacement game. Exercise missing/malformed/stale snapshot recovery only in an isolated test environment.
-5. Check query changes during reads, disable/re-enable the fallback, reload/dispose the extension, and verify Search games/Favorites/Recently Played have no extra fallback row.
-6. With a missing/unusable URI handler in an isolated environment, verify actionable failure feedback and no false “game started” message. Do not damage the normal user's registration for testing.
-7. For a game with a saved Playnite icon, verify that exact icon appears in both host placement modes. Test a missing icon, missing cache file, and corrupt image: the neutral game symbol should remain and launch should still work. A cover-only entry must not show its cover as the icon. Include an uninstalled entry; icon eligibility must not depend on installed state.
-8. Change the query while an image is loading; an old image must not appear on the newer match or after clearing the query. Confirm typing and Enter do not wait for image decoding. Repeat icon rendering at 100% and 150% or higher display scaling. A previous Search games icon smoke test does not verify this fallback row.
-
-## Validation record
-
-- **Completed:** repository inspection; version-pinned official documentation, SDK-source, package-layout, and host-call/merge-path investigation. The documented API-level finding answers coexistence for the inspected source without claiming a desktop test.
-- **Added automated coverage:** `ExactGameMatchTests` (exact/ambiguous/no match/deduplication/invalid IDs), `PlayniteDirectLaunchTests` (health, stale/partial/last-known-good rejection, removal/rename/replacement/ambiguity on forced revalidation), `PlayniteGameFallbackTests` (actual row/action, stable-ID dispatch, hidden states, overlapping queries/invocation, disposal, launch failure), and `LaunchGameCommandTests` (URI, invalid ID, process failure). Icon follow-up tests additionally cover a nonblocking SDK callback, saved-icon-only resolution and property notification, missing/cache/corrupt/read-failure fallback without launch failure, reset on query change, late obsolete decoding, and cancellation on invocation/disposal. All data is synthetic and all process dispatches are injected.
-- **Executed on Windows (2026-11-12):** [Windows CI 43265177473](https://github.com/werdscopez7347/PlayniteCmdPal/actions/runs/43265177473) and [CodeQL 43265177609](https://github.com/werdscopez7347/PlayniteCmdPal/actions/runs/43265177609) both completed successfully on prototype commit **`fd34e36240cfbe99dc66eec6585478a77bbb6bf1`**. Both run `scripts/ci.ps1`: restore, Release solution build against the pinned SDK, Core tests, Playnite/adapter tests, Command Palette command tests, and the .NET Framework snapshot smoke test. CodeQL analysis also passed. Run metadata confirms the successful shared-script steps; no unobserved per-test totals are asserted here.
-- **Local static checks:** changed C# files parsed without syntax-error/missing nodes; project/package XML parsed; local documentation link targets and `git diff --check` passed. `dotnet --info` exited 127 because no SDK is installed in the Linux workspace; .NET execution above is CI evidence, not a local run.
-- **Maintainer report (2026-11-12):** the prototype is visible under **Fallbacks** on the maintainer's host. The installed version, competing-provider behavior, main-Results checkbox outcome, fallback icon rendering, and actual launch outcome were not supplied. This confirms reported fallback visibility, not completion of the host/launch matrix.
-- **Still pending:** main-Results placement and duplicate check with the native preference on/off, either controlled installed-host coexistence probe, fallback icon rendering/lifecycle, and a real Playnite launch for this prototype. None was executed in this Linux workspace. A successful synthetic CI run does not establish those outcomes.
-- **Follow-up execution:** per-commit Windows CI/CodeQL results for the icon revision are recorded in [PR #37's checks](https://github.com/werdscopez7347/PlayniteCmdPal/pull/37/checks); require green checks on the eventual merge head. The historical runs above do not validate the icon revision.
-- **Release/issue gate:** [PR #37](https://github.com/werdscopez7347/PlayniteCmdPal/pull/37) remains a draft pending the installed-host probe and real-library smoke checks. Require green checks on the eventual merge head. Do not extrapolate CI or a source tag into a tested installed CmdPal version.
+- **Current automated coverage:** `TopLevelGameEligibilityTests`, `PlayniteDirectLaunchTests`, `PlayniteTopLevelCommandsTests`, `LaunchGameCommandTests`, and the existing icon-loader tests. The command tests exercise the actual provider through `ICommandProvider.TopLevelCommands()`, `ICommandProvider4.GetCommandItem`, and `ItemsChanged` using synthetic catalog/nav/timer/decoder/process seams, not a parallel fake provider. They do not instantiate user pages or render the Windows host.
+- **Execution evidence:** require green current-head Windows CI and CodeQL in [PR #37's checks](https://github.com/werdscopez7347/PlayniteCmdPal/pull/37/checks). The shared `scripts/ci.ps1` restores, builds Release, runs all three test projects, and runs the .NET Framework snapshot smoke test. Per-commit outcomes are recorded in the PR and WERD-86; older fallback CI runs do not validate this replacement.
+- **Environment limit:** the Linux workspace has no `dotnet` executable or installed Windows CmdPal/Playnite host. Local syntax/XML/link/whitespace checks are distinct from Windows CI execution and desktop validation.
+- **Historical report only:** on 2026-11-12 the maintainer saw the former prototype under Fallbacks. Its host version and launch outcome were not supplied. That report and the successful pre-replacement [Windows CI](https://github.com/werdscopez7347/PlayniteCmdPal/actions/runs/43272869507)/[CodeQL](https://github.com/werdscopez7347/PlayniteCmdPal/actions/runs/43272869760) on `35136e9fbbb6ca8712dbacc7e3ec831f6de9fdba` do not verify the new root commands. The [previous investigation](https://github.com/werdscopez7347/PlayniteCmdPal/blob/35136e9fbbb6ca8712dbacc7e3ec831f6de9fdba/docs/CMDPAL-GLOBAL-SEARCH.md) retains that source history; its fallback recommendation is superseded.
+- **Still pending:** installed-host root rendering/coexistence, icon rendering/lifecycle, large-library desktop responsiveness, and a real game launch for this revision. The PR remains draft pending those checks; do not extrapolate public API evidence or synthetic CI into a desktop pass.

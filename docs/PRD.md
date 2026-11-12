@@ -1,6 +1,6 @@
 # Product Requirements Document
 
-Status: Draft v0.1 — overall product scope remains subject to ongoing validation. WERD-80 artwork requirements reviewed: 2026-11-11.
+Status: Draft v0.1 — overall product scope remains subject to ongoing validation. WERD-80 artwork requirements reviewed: 2026-11-11; WERD-86 root-command registration reviewed: 2026-11-12.
 
 ## Summary
 A PowerToys Command Palette extension that searches a user's Playnite library and launches a selected game without switching to the Playnite window.
@@ -96,3 +96,13 @@ Exact title ranks first; prefix/substring results are deterministic; duplicate t
 - The cache and source-file limits documented in [Artwork Transport](ARTWORK-TRANSPORT.md) remain in force.
 
 **Verification status (2026-11-11):** The maintainer confirmed one installed Steam library entry with a saved ICO-backed Playnite icon now displays its icon in Command Palette. Diagnostics showed the Playnite path resolved, ICO conversion succeeded, the converted PNG was published to the content-addressed cache, and the matching icon digest appeared in the v2 snapshot. This verifies one real-library ICO case; it does not establish all formats, uninstalled-game behavior, or high-DPI behavior. See [Testing](TESTING.md) for the manual verification log and remaining checks.
+
+## Direct top-level game commands (WERD-86)
+
+- Expose individual eligible games as ordinary root commands through `TopLevelCommands()`, not through `FallbackCommands()` or a fallback-promotion preference. The earlier fallback prototype is superseded by this requirement.
+- Show the saved game title, **Open with Playnite** subtitle/action, and saved Playnite game icon (neutral symbol if loading/unavailable). Preserve existing navigation pages.
+- Cache registrations and refresh them through the documented `RaiseItemsChanged()` path as the bridge catalog changes. Missing/unhealthy data must not leave unsafe root launch entries advertised; navigation/recovery remains available.
+- Let CmdPal search/rank the registered command catalog, including partial matches. Explicit row selection launches its captured stable ID after revalidation; never infer or substitute another game from a partial title. Root registration may also expose games in the host's unfiltered catalog and does not guarantee first place/adjacency to another provider.
+- Keep direct-launch eligibility conservative: canonical unique IDs, healthy/non-stale/complete snapshots, and a same-ID/displayed-metadata refresh before invocation. Equal titles must remain explicitly selectable root rows with source/platform/install metadata and distinct full IDs; never omit them solely because a title is shared or choose an arbitrary winner. Search games remains the richer details and stale/offline browsing route.
+- Register each eligible game once and no fallback copy. Keep images asynchronous, bounded, optional, and icon-only; catalog replacement/disposal cannot allow stale images or retained commands to target a newer game.
+- Desktop root rendering, coexistence, icon lifecycle, large-library responsiveness, and real launches must be verified separately from synthetic provider tests and CI. The old Fallbacks visibility report is not validation of this replacement.
