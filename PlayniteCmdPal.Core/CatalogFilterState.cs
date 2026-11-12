@@ -15,6 +15,14 @@ public sealed class CatalogFilterState
     private readonly HashSet<string> _selectedSources = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _selectedPlatforms = new(StringComparer.OrdinalIgnoreCase);
 
+    public CatalogFilterState(bool defaultToInstalled = false)
+    {
+        if (defaultToInstalled)
+        {
+            _installedStatuses.Add(true);
+        }
+    }
+
     public event EventHandler? FilterOptionsChanged;
 
     public IReadOnlyList<string> Sources => _sources;
