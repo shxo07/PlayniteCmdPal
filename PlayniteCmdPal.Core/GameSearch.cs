@@ -16,7 +16,18 @@ public static class GameSearch
     /// <returns>A stable, read-only list of matching canonical entries.</returns>
     /// <exception cref="ArgumentNullException">Thrown when catalog is null.</exception>
     /// <exception cref="ArgumentException">Thrown when an entry has an invalid required field.</exception>
-    public static IReadOnlyList<GameEntry> Search(IEnumerable<GameEntry> catalog, string? query)
+    public static IReadOnlyList<GameEntry> Search(IEnumerable<GameEntry> catalog, string? query) =>
+        Search(catalog, query, filters: null);
+
+    /// <summary>
+    /// Searches a catalog by title and applies optional metadata filters before title ranking.
+    /// Filtered results retain the same deterministic ranking and stable tie-break rules as an
+    /// unfiltered search. Blank queries return all entries that satisfy the active filters.
+    /// </summary>
+    public static IReadOnlyList<GameEntry> Search(
+        IEnumerable<GameEntry> catalog,
+        string? query,
+        GameSearchFilters? filters)
     {
         ArgumentNullException.ThrowIfNull(catalog);
 
@@ -32,11 +43,13 @@ public static class GameSearch
             .ThenBy(entry => entry.IconReference, StringComparer.Ordinal)
             .ThenBy(entry => entry.Platform, StringComparer.Ordinal)
             .GroupBy(entry => entry.GameId, StringComparer.Ordinal)
-            .Select(group => group.First());
+            .Select(group => group.First())
+            .Where(entry => filters is null || filters.Matches(entry))
+            .ToArray();
 
         if (!hasQuery)
         {
-            return canonicalEntries.ToArray();
+            return canonicalEntries;
         }
 
         return canonicalEntries
