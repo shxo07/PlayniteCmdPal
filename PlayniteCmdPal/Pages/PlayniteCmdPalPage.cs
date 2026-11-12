@@ -19,8 +19,10 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
     private readonly PlayniteCatalogAdapter _catalog = new();
     private readonly FavoritesStore _favorites = FavoritesPreferences.Store;
     private readonly ArtworkIconLoader _artwork = new(artworkId => PlayniteCatalogAdapter.ResolveArtworkPath(artworkId));
+    private readonly CatalogFilterState _filterState = new();
     private readonly EventHandler _favoritesChangedHandler;
     private readonly SynchronizationContext? _uiContext;
+    private readonly FiltersPage _filtersPage;
     private IListItem[] _items = [CreateStatusItem("Loading your Playnite library…")];
     private CancellationTokenSource? _searchCancellation;
     private string _searchText = string.Empty;
@@ -34,6 +36,7 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
         // (artwork loading, deferred favorites refresh) can be marshaled back
         // to the UI thread where the Command Palette host processes them.
         _uiContext = SynchronizationContext.Current;
+        _filtersPage = new FiltersPage(_filterState, () => BeginSearch());
 
         Icon = IconHelpers.FromRelativePath("Assets\\StoreLogo.png");
         Title = "Playnite";
@@ -120,7 +123,7 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
             query = _searchText;
             cancellationToken = _searchCancellation.Token;
 
-            _items = [CreateStatusItem("Searching your Playnite library…")];
+            _items = [CreateFiltersItem(), CreateStatusItem("Searching your Playnite library…")];
             count = _items.Length;
         }
 
@@ -151,7 +154,7 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
                 _artwork.Invalidate();
             }
 
-            var built = BuildItems(catalog, query);
+            (IListItem[] Items, IReadOnlyList<(ListItem Item, GameEntry Game)> ArtworkItems) built;
             lock (_requestGate)
             {
                 if (version != _requestVersion || cancellationToken.IsCancellationRequested)
@@ -159,6 +162,14 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
                     return;
                 }
 
+                // Do not reinterpret a transient unavailable catalog as an empty snapshot:
+                // that would discard valid source/platform choices while the picker is open.
+                if (catalog.IsAvailable)
+                {
+                    _filterState.UpdateCatalog(catalog.Games);
+                }
+
+                built = BuildItems(catalog, query);
                 _items = built.Items;
                 count = _items.Length;
             }
@@ -179,7 +190,11 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
                     return;
                 }
 
-                _items = [CreateStatusItem("Couldn't read the Playnite catalog. Check the companion plugin and snapshot permissions, then refresh.")];
+                _items =
+                [
+                    CreateFiltersItem(),
+                    CreateStatusItem("Couldn't read the Playnite catalog. Check the companion plugin and snapshot permissions, then refresh."),
+                ];
             }
 
             count = _items.Length;
@@ -189,14 +204,14 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
 
     private (IListItem[] Items, IReadOnlyList<(ListItem Item, GameEntry Game)> ArtworkItems) BuildItems(CatalogReadResult catalog, string query)
     {
+        var items = new List<IListItem> { CreateFiltersItem() };
         if (!catalog.IsAvailable)
         {
             var message = catalog.Issue?.Message
                 ?? "The Playnite catalog is unavailable. Install and start the companion plugin, then refresh.";
-            return ([CreateRefreshItem(message)], Array.Empty<(ListItem Item, GameEntry Game)>());
+            items.Add(CreateRefreshItem(message));
+            return (items.ToArray(), Array.Empty<(ListItem Item, GameEntry Game)>());
         }
-
-        var items = new List<IListItem>();
         if (catalog.IsStale)
         {
             items.Add(CreateStatusItem("The Playnite catalog is over 24 hours old. Open Playnite to refresh it."));
@@ -218,10 +233,21 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
             return (items.ToArray(), Array.Empty<(ListItem Item, GameEntry Game)>());
         }
 
-        var matches = GameSearch.Search(catalog.Games, query);
+        var activeFilters = _filterState.ToSearchFilters();
+        var matches = GameSearch.Search(catalog.Games, query, activeFilters);
         if (matches.Count == 0)
         {
-            items.Add(CreateStatusItem($"No games match “{query.Trim()}”."));
+            var hasActiveFilters = activeFilters.IsInstalled.HasValue
+                || activeFilters.Sources?.Count > 0
+                || activeFilters.Platforms?.Count > 0;
+            var message = hasActiveFilters
+                ? string.IsNullOrWhiteSpace(query)
+                    ? "No games match the selected filters. Clear one or more filters to see more games."
+                    : $"No games match “{query.Trim()}” with the selected filters. Clear a filter or change your search."
+                : string.IsNullOrWhiteSpace(query)
+                    ? "No games are available in the current catalog."
+                    : $"No games match “{query.Trim()}”.";
+            items.Add(CreateStatusItem(message));
             return (items.ToArray(), Array.Empty<(ListItem Item, GameEntry Game)>());
         }
 
@@ -345,6 +371,17 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
         }
     }
 
+    private ListItem CreateFiltersItem()
+    {
+        var count = _filterState.ActiveFilterCount;
+        return new ListItem(_filtersPage)
+        {
+            Title = count == 0 ? "Filters" : $"Filters ({count})",
+            Subtitle = count == 0 ? "Installed status · source · platform" : "Active · Select to edit",
+            Icon = new IconInfo("\uE71C"),
+        };
+    }
+
     private static ListItem CreateStatusItem(string message) =>
         new ListItem(new NoOpCommand()) { Title = message };
 
@@ -364,6 +401,8 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
             _searchCancellation?.Dispose();
             _searchCancellation = null;
         }
+
+        _filtersPage.Dispose();
     }
 
     private sealed partial class RefreshCatalogCommand : InvokableCommand
