@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Threading.Tasks;
 using Microsoft.CommandPalette.Extensions;
 using Microsoft.CommandPalette.Extensions.Toolkit;
 using PlayniteCmdPal.Core;
@@ -16,23 +15,21 @@ internal sealed partial class FiltersPage : DynamicListPage
 {
     private readonly CatalogFilterState _state;
     private readonly Action _filtersChanged;
-    private readonly SynchronizationContext? _uiContext;
     private IListItem[] _items = [];
 
     public FiltersPage(CatalogFilterState state, Action filtersChanged)
     {
         _state = state;
         _filtersChanged = filtersChanged;
-        _uiContext = SynchronizationContext.Current;
 
         Name = "Filters";
         Title = "Filters";
-        RebuildItems();
+        RebuildItems(notify: false);
     }
 
     public override IListItem[] GetItems() => _items;
 
-    private void RebuildItems()
+    private void RebuildItems(bool notify = true)
     {
         var items = new List<IListItem>
         {
@@ -79,7 +76,10 @@ internal sealed partial class FiltersPage : DynamicListPage
         });
 
         _items = items.ToArray();
-        RaiseItemsChanged(_items.Length);
+        if (notify)
+        {
+            RaiseItemsChanged(_items.Length);
+        }
     }
 
     private ListItem CreateOption(string title, string dimension, string value, bool selected) =>
@@ -131,7 +131,7 @@ internal sealed partial class FiltersPage : DynamicListPage
                 return;
         }
 
-        RebuildItems();
+        RebuildItems(notify: false);
         _ = NotifyFiltersChangedAsync();
     }
 
@@ -164,6 +164,7 @@ internal sealed partial class FiltersPage : DynamicListPage
         // Defer the parent search refresh until the current command invocation has
         // returned, avoiding nested Command Palette notifications during dispatch.
         await Task.Delay(50);
+        RaiseItemsChanged(_items.Length);
         _filtersChanged();
     }
 
@@ -208,10 +209,4 @@ internal sealed partial class FiltersPage : DynamicListPage
             return CommandResult.KeepOpen();
         }
     }
-}
-
-internal sealed partial class NoOpCommand : InvokableCommand
-{
-    public override string Name => string.Empty;
-    public override CommandResult Invoke() => CommandResult.KeepOpen();
 }
