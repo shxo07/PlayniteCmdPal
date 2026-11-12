@@ -55,9 +55,14 @@ public partial class PlayniteCmdPalCommandsProvider : CommandProvider
 
         if (startBackgroundRefresh)
         {
+            // Finish the first catalog snapshot before the provider can be returned
+            // to CmdPal. Otherwise the initial TopLevelCommands response and an
+            // asynchronous ItemsChanged publication can race during registration,
+            // letting the host add the same game commands twice. Only catalog/row
+            // preparation is awaited here; saved-icon decoding stays asynchronous.
+            RefreshCatalogAsync().GetAwaiter().GetResult();
             _refreshTimer = (timeProvider ?? TimeProvider.System).CreateTimer(
                 state => { _ = RefreshCatalogAsync(); }, null, CatalogPollInterval, CatalogPollInterval);
-            _ = RefreshCatalogAsync();
         }
     }
 

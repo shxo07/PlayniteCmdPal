@@ -358,26 +358,123 @@ public sealed class PlayniteTopLevelCommandsTests : IDisposable
     }
 
     [Fact]
+    public async Task InitialCatalogIsReadyBeforeTheProviderIsExposedWithoutWaitingForIconsOrALateRootEvent()
+    {
+        var healthy = await (await CreateCatalogAsync(
+            new SnapshotGame(GameA, Title, true, iconArtworkId: IconId))).GetAsync();
+        var readEntered = Signal();
+        var read = new TaskCompletionSource<CatalogReadResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var catalog = new StubCatalog(healthy)
+        {
+            Read = _ => { readEntered.TrySetResult(true); return read.Task; },
+        };
+        var iconEntered = Signal();
+        var iconRelease = Signal();
+        var loader = Loader(_ => IconPath, async (_, token) =>
+        {
+            iconEntered.TrySetResult(true);
+            await iconRelease.Task.WaitAsync(token);
+            return true;
+        });
+        var creation = Task.Run(() => CreateProvider(catalog, loader, startBackgroundRefresh: true));
+        await readEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        try
+        {
+            // Polling and exposure cannot race the pending initial publication.
+            // In the old startup path the timer already existed at this point.
+            Assert.Null(_time.Timer);
+            Assert.False(creation.IsCompleted);
+        }
+        finally { read.TrySetResult(healthy); }
+        using var provider = await creation.WaitAsync(TimeSpan.FromSeconds(5));
+        await iconEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        ICommandProvider sdk = provider;
+        var cached = sdk.TopLevelCommands();
+        var game = Assert.Single(GameItems(provider));
+        Assert.Equal(Title, game.Title);
+        Assert.Same(ArtworkIconLoader.FallbackIcon, game.Icon);
+        Assert.False(provider.ArtworkUpdate.IsCompleted);
+        var rootEvents = 0;
+        provider.ItemsChanged += (_, _) => Interlocked.Increment(ref rootEvents);
+        try
+        {
+            // CmdPal's first response already contains the games. There is no
+            // delayed initial ItemsChanged that can compete with its first append.
+            for (var index = 0; index < 3; index++)
+            {
+                await provider.RefreshCatalogAsync();
+                Assert.Same(cached, sdk.TopLevelCommands());
+                Assert.Single(GameItems(provider));
+                Assert.Empty(sdk.FallbackCommands());
+            }
+        }
+        finally { iconRelease.TrySetResult(true); }
+        await provider.ArtworkUpdate.WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.Equal(0, rootEvents);
+        Assert.Equal(new Uri(IconPath).AbsoluteUri, game.Icon.Light.Icon);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task InitialUnavailableOrFailedReadPreservesNavigationAndPollingRecoversOnlyOneGameRow(bool throws)
+    {
+        var healthy = await (await CreateCatalogAsync(new SnapshotGame(GameA, Title, true))).GetAsync();
+        File.Delete(SnapshotPath);
+        var unavailable = await new PlayniteCatalogAdapter(SnapshotPath, _time).GetAsync();
+        var catalog = new StubCatalog(healthy)
+        {
+            Read = _ => throws
+                ? Task.FromException<CatalogReadResult>(new IOException("Synthetic initial read failure"))
+                : Task.FromResult(unavailable),
+        };
+        using var provider = CreateProvider(catalog, startBackgroundRefresh: true);
+        Assert.Equal(_navigation, provider.TopLevelCommands());
+        var rootEvents = 0;
+        provider.ItemsChanged += (_, _) => Interlocked.Increment(ref rootEvents);
+        var timer = Assert.IsType<ManualTimer>(_time.Timer);
+        catalog.Read = _ => Task.FromResult(healthy);
+        timer.Tick();
+        await provider.RefreshCatalogAsync();
+        var cached = provider.TopLevelCommands();
+
+        for (var index = 0; index < 3; index++)
+        {
+            await provider.RefreshCatalogAsync(forceRefresh: true);
+            Assert.Same(cached, provider.TopLevelCommands());
+            Assert.Single(GameItems(provider));
+            Assert.Empty(provider.FallbackCommands());
+        }
+
+        Assert.Equal(1, rootEvents);
+    }
+
+    [Fact]
     public async Task PeriodicRefreshCoalescesSlowReadsAndDisposalStopsTheTimer()
     {
         var healthy = await (await CreateCatalogAsync(new SnapshotGame(GameA, Title, true))).GetAsync();
-        var entered = Signal();
-        var read = new TaskCompletionSource<CatalogReadResult>(TaskCreationOptions.RunContinuationsAsynchronously);
         var reads = 0;
         var catalog = new StubCatalog(healthy)
         {
-            Read = _ => { Interlocked.Increment(ref reads); entered.TrySetResult(true); return read.Task; },
+            Read = _ => { Interlocked.Increment(ref reads); return Task.FromResult(healthy); },
         };
         using var provider = CreateProvider(catalog, startBackgroundRefresh: true);
-        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Equal(1, reads);
+        var entered = Signal();
+        var read = new TaskCompletionSource<CatalogReadResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+        catalog.Read = _ => { Interlocked.Increment(ref reads); entered.TrySetResult(true); return read.Task; };
         var timer = Assert.IsType<ManualTimer>(_time.Timer);
+        Assert.Equal(PlayniteCmdPalCommandsProvider.CatalogPollInterval, timer.DueTime);
         Assert.Equal(PlayniteCmdPalCommandsProvider.CatalogPollInterval, timer.Period);
         timer.Tick();
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
         timer.Tick();
-        var initial = provider.RefreshCatalogAsync();
+        timer.Tick();
+        var firstPoll = provider.RefreshCatalogAsync();
         read.SetResult(healthy);
-        await initial.WaitAsync(TimeSpan.FromSeconds(5));
-        Assert.Equal(1, reads);
+        await firstPoll.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Equal(2, reads);
 
         var secondEntered = Signal();
         var secondRead = new TaskCompletionSource<CatalogReadResult>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -387,12 +484,12 @@ public sealed class PlayniteTopLevelCommandsTests : IDisposable
         var second = provider.RefreshCatalogAsync();
         secondRead.SetResult(healthy);
         await second.WaitAsync(TimeSpan.FromSeconds(5));
-        Assert.Equal(2, reads);
+        Assert.Equal(3, reads);
         provider.Dispose();
         timer.Tick();
         await provider.RefreshCatalogAsync();
         Assert.True(timer.IsDisposed);
-        Assert.Equal(2, reads);
+        Assert.Equal(3, reads);
         Assert.Empty(provider.TopLevelCommands());
     }
 
