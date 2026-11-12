@@ -10,8 +10,8 @@ using PlayniteCmdPal.Core;
 namespace PlayniteCmdPal;
 
 /// <summary>
-/// Filter form using the Command Palette's Adaptive Card controls. Expanded multi-select
-/// choice sets render as real checkbox controls and retain the familiar grouped layout.
+/// Keyboard-first filter page. Each filter is an Adaptive Card action, so Enter invokes
+/// the focused option and the updated state is applied immediately.
 /// </summary>
 internal sealed partial class FiltersPage : ContentPage
 {
@@ -38,50 +38,23 @@ internal sealed partial class FiltersPage : ContentPage
         var body = new List<object>
         {
             new { type = "TextBlock", text = "Installed status", weight = "Bolder", wrap = true },
-            new
-            {
-                type = "Input.ChoiceSet",
-                id = "installed",
-                style = "expanded",
-                isMultiSelect = true,
-                value = string.Join(",", _state.InstalledStatuses
-                    .OrderByDescending(value => value)
-                    .Select(value => value ? "installed" : "not-installed")),
-                choices = new[]
-                {
-                    new { title = "Installed", value = "installed" },
-                    new { title = "Not installed", value = "not-installed" },
-                },
-            },
+            CreateChoiceActions(
+                ("Installed", "status", "installed", _state.InstalledStatuses.Contains(true)),
+                ("Not installed", "status", "not-installed", _state.InstalledStatuses.Contains(false))),
             new { type = "TextBlock", text = "Source", weight = "Bolder", wrap = true },
-            new
-            {
-                type = "Input.ChoiceSet",
-                id = "sources",
-                style = "expanded",
-                isMultiSelect = true,
-                value = string.Join(",", _state.SelectedSources),
-                choices = _state.Sources.Select(value => new { title = value, value }).ToArray(),
-            },
+            CreateChoiceActions(_state.Sources.Select(source =>
+                (source, "source", source, _state.SelectedSources.Contains(source, StringComparer.OrdinalIgnoreCase))).ToArray()),
             new { type = "TextBlock", text = "Platform", weight = "Bolder", wrap = true },
-            new
-            {
-                type = "Input.ChoiceSet",
-                id = "platforms",
-                style = "expanded",
-                isMultiSelect = true,
-                value = string.Join(",", _state.SelectedPlatforms),
-                choices = _state.Platforms.Select(value => new { title = value, value }).ToArray(),
-            },
+            CreateChoiceActions(_state.Platforms.Select(platform =>
+                (platform, "platform", platform, _state.SelectedPlatforms.Contains(platform, StringComparer.OrdinalIgnoreCase))).ToArray()),
         };
 
         var actions = new object[]
         {
-            new { type = "Action.Submit", title = "Apply", data = new { action = "apply" } },
             new { type = "Action.Submit", title = "Clear status", data = new { action = "clear-status" } },
             new { type = "Action.Submit", title = "Clear sources", data = new { action = "clear-sources" } },
             new { type = "Action.Submit", title = "Clear platforms", data = new { action = "clear-platforms" } },
-            new { type = "Action.Submit", title = "Clear all", data = new { action = "clear-all" } },
+            new { type = "Action.Submit", title = "Clear all", style = "destructive", data = new { action = "clear-all" } },
         };
 
         return JsonSerializer.Serialize(new Dictionary<string, object>
@@ -92,6 +65,28 @@ internal sealed partial class FiltersPage : ContentPage
             ["body"] = body,
             ["actions"] = actions,
         });
+    }
+
+    private static object CreateChoiceActions(params (string Title, string Dimension, string Value, bool Selected)[] choices)
+    {
+        var actions = choices.Select(choice => (object)new Dictionary<string, object>
+        {
+            ["type"] = "Action.Submit",
+            ["title"] = $"{(choice.Selected ? "☑" : "☐")} {choice.Title}",
+            ["style"] = choice.Selected ? "positive" : "default",
+            ["data"] = new
+            {
+                action = "toggle",
+                dimension = choice.Dimension,
+                value = choice.Value,
+            },
+        }).ToArray();
+
+        return new Dictionary<string, object>
+        {
+            ["type"] = "ActionSet",
+            ["actions"] = actions,
+        };
     }
 
     private CommandResult Submit(string payload)
@@ -111,46 +106,67 @@ internal sealed partial class FiltersPage : ContentPage
             return CommandResult.KeepOpen();
         }
 
-        var action = values["action"]?.GetValue<string>() ?? "apply";
+        var action = values["action"]?.GetValue<string>() ?? string.Empty;
         switch (action)
         {
+            case "toggle":
+                Toggle(
+                    values["dimension"]?.GetValue<string>() ?? string.Empty,
+                    values["value"]?.GetValue<string>() ?? string.Empty);
+                break;
+
             case "clear-status":
                 _state.ClearInstalledStatuses();
-                RefreshForm();
-                return CommandResult.KeepOpen();
-
+                break;
             case "clear-sources":
                 _state.ClearSources();
-                RefreshForm();
-                return CommandResult.KeepOpen();
-
+                break;
             case "clear-platforms":
                 _state.ClearPlatforms();
-                RefreshForm();
-                return CommandResult.KeepOpen();
-
+                break;
             case "clear-all":
                 _state.ClearAll();
-                RefreshForm();
-                return CommandResult.KeepOpen();
-
-            case "apply":
-                _state.SetInstalledStatuses(Parse(values["installed"]?.ToString())
-                    .Select(value => value switch
-                    {
-                        "installed" => (bool?)true,
-                        "not-installed" => false,
-                        _ => null,
-                    })
-                    .Where(value => value.HasValue)
-                    .Select(value => value!.Value));
-                _state.SetSources(Parse(values["sources"]?.ToString()));
-                _state.SetPlatforms(Parse(values["platforms"]?.ToString()));
-                _filtersChanged();
-                return CommandResult.GoBack();
-
+                break;
             default:
                 return CommandResult.KeepOpen();
+        }
+
+        RefreshForm();
+        _filtersChanged();
+        return CommandResult.KeepOpen();
+    }
+
+    private void Toggle(string dimension, string value)
+    {
+        switch (dimension)
+        {
+            case "status":
+                var statuses = _state.InstalledStatuses.ToHashSet();
+                var status = value == "installed";
+                if (!statuses.Add(status))
+                {
+                    statuses.Remove(status);
+                }
+                _state.SetInstalledStatuses(statuses);
+                break;
+
+            case "source":
+                var sources = _state.SelectedSources.ToHashSet(StringComparer.OrdinalIgnoreCase);
+                if (!sources.Add(value))
+                {
+                    sources.Remove(value);
+                }
+                _state.SetSources(sources);
+                break;
+
+            case "platform":
+                var platforms = _state.SelectedPlatforms.ToHashSet(StringComparer.OrdinalIgnoreCase);
+                if (!platforms.Add(value))
+                {
+                    platforms.Remove(value);
+                }
+                _state.SetPlatforms(platforms);
+                break;
         }
     }
 
@@ -158,13 +174,7 @@ internal sealed partial class FiltersPage : ContentPage
     {
         _form = CreateForm();
         RaiseItemsChanged(1);
-        _filtersChanged();
     }
-
-    private static string[] Parse(string? value) =>
-        string.IsNullOrWhiteSpace(value)
-            ? []
-            : value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
     private sealed partial class FilterFormContent : FormContent
     {
