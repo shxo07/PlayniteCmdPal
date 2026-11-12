@@ -1,7 +1,7 @@
 # Technical Design
 
 **Status:** Generated CmdPal template build and local deployment validated on Windows. The running- and closed-instance launch URI smoke tests passed. The catalog adapter/bridge implementation is present. Windows CI and CodeQL passed, and the maintainer reports successful packaging and real Playnite library checks; see [Catalog Bridge](CATALOG-BRIDGE.md) for the evidence and remaining gaps.
-**Last reviewed:** 2026-11-11.
+**Last reviewed:** 2026-11-12.
 
 ## Current generated-template baseline
 
@@ -60,6 +60,12 @@ Playnite remains the source of truth for game identity, library metadata, and la
 - Deterministic rank order: exact match, prefix match, word-prefix match, substring match; stable ordinal tie-breaks include source, install state, icon reference, and platform. `GameEntry.Platform` carries the optional platform label separately from source.
 - Handle duplicate display names and empty query/catalog explicitly.
 - Keep search logic independently unit-testable.
+
+### Global direct-launch fallback (WERD-86 prototype)
+
+The provider additionally exposes one `PlayniteGameFallback` via the standard `FallbackCommands()` API. `ExactGameMatch` is SDK-independent and accepts only one full-title match with a valid stable ID; `PlayniteDirectLaunch` rejects stale, partial, unavailable, or failed-refresh catalog data and revalidates the same ID on invocation. The fallback invalidates obsolete query generations and delegates dispatch to the existing `LaunchGameCommand`. Page search and its more permissive browsing/disambiguation behavior are unchanged.
+
+No general query-provider or result-placement API was found. The inspected PowerToys v0.102.3101 source can show ordinary fallbacks alongside other results in a separate Fallbacks section despite the documentation's no-other-match wording. This is not a tested installed-host version or a placement guarantee. See [Global search investigation](CMDPAL-GLOBAL-SEARCH.md) for immutable evidence, safety/freshness limits, and the pending host probe; [ADR-011](DECISIONS.md#adr-011-one-conservative-direct-launch-fallback-not-a-ranked-global-provider) records the decision and supported page alternative.
 
 ## Playnite launch integration
 

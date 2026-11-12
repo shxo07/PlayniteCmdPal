@@ -11,6 +11,8 @@ namespace PlayniteCmdPal;
 public partial class PlayniteCmdPalCommandsProvider : CommandProvider
 {
     private readonly ICommandItem[] _commands;
+    private readonly IFallbackCommandItem[] _fallbacks;
+    private readonly PlayniteGameFallback _gameFallback;
     private readonly PlayniteCmdPalRecentlyPlayedPage _recentlyPlayedPage;
 
     public PlayniteCmdPalCommandsProvider()
@@ -18,6 +20,8 @@ public partial class PlayniteCmdPalCommandsProvider : CommandProvider
         DisplayName = "Playnite";
         Icon = IconHelpers.FromRelativePath("Assets\\StoreLogo.png");
         _recentlyPlayedPage = new PlayniteCmdPalRecentlyPlayedPage();
+        _gameFallback = new PlayniteGameFallback();
+        _fallbacks = [_gameFallback];
         _commands = [
             new CommandItem(new PlayniteCmdPalPage()) { Title = "Search games" },
             new CommandItem(new FavoritesPage()) { Title = "Favorites" },
@@ -34,8 +38,11 @@ public partial class PlayniteCmdPalCommandsProvider : CommandProvider
         return _commands;
     }
 
+    public override IFallbackCommandItem[] FallbackCommands() => _fallbacks;
+
     public override void Dispose()
     {
+        _gameFallback.Dispose();
         _recentlyPlayedPage.Dispose();
         base.Dispose();
         GC.SuppressFinalize(this);

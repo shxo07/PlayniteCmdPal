@@ -16,6 +16,10 @@ Search and launch games from a Playnite library through Microsoft PowerToys Comm
 
 Provide a keyboard-first route to a user's unified Playnite library: open Command Palette, type a game name, press Enter, and let Playnite handle launch configuration.
 
+## Global search prototype (WERD-86)
+
+A conservative exact-title fallback can offer **Open with Playnite** for one unambiguous, healthy catalog match. The inspected PowerToys host can show ordinary fallbacks alongside other results in its **Fallbacks** section, but there is no general query-provider or relative-placement API, and installed-host verification is still pending. **Search games** remains the dependable full-library search/disambiguation route. See [the investigation, safety rules, and host probe](docs/CMDPAL-GLOBAL-SEARCH.md).
+
 ## MVP
 
 - Search Playnite game titles with deterministic ranking.

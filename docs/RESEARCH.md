@@ -1,6 +1,6 @@
 # Research: Market and Feasibility
 
-**Last reviewed:** 2026-10-31. Findings below distinguish documented facts from implementation checks that remain.
+**Last reviewed:** 2026-11-12. Findings below distinguish documented facts from implementation checks that remain.
 
 ## Technical findings
 
@@ -20,6 +20,14 @@
 Keep Playnite authoritative. Use its documented launch-by-ID URI; real-game smoke tests with Playnite running and fully closed have been reported successful. The selected catalog transport is a companion plugin writing a normalized read-only JSON snapshot; do not use direct database writes, UI automation, or IPC.
 
 The launch mechanism and catalog transport decision are documented. The snapshot writer, reader, adapter cache, and companion plugin are implemented. Windows CI [run 41177945707](https://github.com/werdscopez7347/PlayniteCmdPal/actions/runs/41177945707) and CodeQL [run 41177945516](https://github.com/werdscopez7347/PlayniteCmdPal/actions/runs/41177945516) passed; maintainer-reported packaging and real-library verification are recorded in [Catalog Bridge](CATALOG-BRIDGE.md). Field-by-field metadata parity remains to be independently checked.
+
+## Global direct-launch search finding (WERD-86, 2026-11-12)
+
+The pinned SDK remains `Microsoft.CommandPalette.Extensions` **0.9.260303001**; its NuGet package includes the toolkit. The existing provider previously offered only Search games, Favorites, and Recently played games. The public fallback API (`ICommandProvider.FallbackCommands` → `IFallbackCommandItem.FallbackHandler` → `IFallbackHandler.UpdateQuery`) supports query-reactive commands; no general global-query provider or relative-result-placement API was found in the inspected SDK surface.
+
+The overview and `UpdateQuery` documentation describe fallbacks as a no-other-match mechanism. However, the inspected published PowerToys **v0.102.3101** source (commit `e84973c4f3724eeedd34d836559dac32734c3e22`) dispatches enabled fallback updates regardless of ordinary matches, and its result factory appends ordinary fallbacks in a separate **Fallbacks** section even when normal results exist. Therefore **coexistence is possible in that inspected source**, but neither arbitrary placement among other providers nor cross-version/installed-host behavior is guaranteed. The source is evidence, not an integration dependency or an executed desktop test.
+
+The spike adds one conservative exact-title fallback using only that public API, stable-ID revalidation, and the existing Playnite launch path. It leaves partial/ambiguous/stale searches to the existing page. The workspace has no installed Windows host; deployment, competing-provider invocation/visibility, and real-game launch verification remain pending. [The full investigation](CMDPAL-GLOBAL-SEARCH.md) records exact SDK/source/doc revisions, the documentation mismatch, safety policy, tests, and a minimal installed-host probe. See [ADR-011](DECISIONS.md#adr-011-one-conservative-direct-launch-fallback-not-a-ranked-global-provider).
 
 ## Market
 
