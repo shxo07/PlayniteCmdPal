@@ -79,12 +79,14 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage
         bool forceRefresh,
         CancellationToken cancellationToken)
     {
+        var failureStage = "catalog read";
         try
         {
             var catalog = forceRefresh
                 ? await _catalog.RefreshAsync(cancellationToken).ConfigureAwait(false)
                 : await _catalog.GetAsync(cancellationToken).ConfigureAwait(false);
 
+            failureStage = "filtering and result construction";
             lock (_requestGate)
             {
                 if (version != _requestVersion)
@@ -101,7 +103,7 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage
         {
             // A newer query or explicit refresh superseded this request.
         }
-        catch (Exception)
+        catch (Exception exception)
         {
             lock (_requestGate)
             {
@@ -110,10 +112,21 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage
                     return;
                 }
 
+                // Keep the failure stage and exception type visible. The old generic message
+                // incorrectly blamed the bridge even when the snapshot had loaded and a later
+                // filtering/result/UI operation had failed.
+                var detail = string.IsNullOrWhiteSpace(exception.Message)
+                    ? "No additional details were provided."
+                    : exception.Message.Replace('\r', ' ').Replace('\n', ' ').Trim();
+                if (detail.Length > 180)
+                {
+                    detail = detail[..180] + "…";
+                }
+
                 _items =
                 [
                     CreateAdvancedFiltersItem(),
-                    CreateStatusItem("Couldn't read the Playnite catalog. Check the companion plugin and snapshot permissions, then refresh."),
+                    CreateStatusItem($"Playnite {failureStage} failed ({exception.GetType().Name}): {detail}"),
                 ];
                 RaiseItemsChanged();
             }
