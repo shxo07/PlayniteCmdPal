@@ -391,7 +391,7 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
         {
             Title = count == 0 ? "Advanced filters" : $"Advanced filters ({count})",
             Subtitle = count == 0 ? "Installed status, source, and platform" : "Filters are active · Select to edit",
-            Icon = new IconInfo("\\uE71C"),
+            Icon = new IconInfo("\uE71C"),
         };
     }
 
