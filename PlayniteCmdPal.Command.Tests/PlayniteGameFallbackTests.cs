@@ -27,8 +27,10 @@ public sealed class PlayniteGameFallbackTests : IDisposable
         using var fallback = new PlayniteGameFallback(adapter,
             id => new LaunchGameCommand(id, dispatched.Add).Invoke());
 
-        // Exercise the actual synchronous SDK entry point as well as the async test seam.
-        fallback.UpdateQuery("  ORBIT RALLY 16  ");
+        // Exercise the public SDK handler chain, not just the async test seam.
+        IFallbackCommandItem item = fallback;
+        Assert.Same(fallback, item.FallbackHandler);
+        item.FallbackHandler.UpdateQuery("  ORBIT RALLY 16  ");
 
         Assert.Equal(Title, fallback.Title);
         Assert.Equal("Open with Playnite", fallback.Subtitle);
