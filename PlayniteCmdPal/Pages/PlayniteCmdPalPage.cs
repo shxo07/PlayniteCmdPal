@@ -17,6 +17,7 @@ namespace PlayniteCmdPal;
 internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
 {
     private readonly PlayniteCatalogAdapter _catalog = new();
+    private readonly CatalogFilterState _filterState = new();
     private readonly FavoritesStore _favorites = FavoritesPreferences.Store;
     private readonly ArtworkIconLoader _artwork = new(artworkId => PlayniteCatalogAdapter.ResolveArtworkPath(artworkId));
     private readonly EventHandler _favoritesChangedHandler;
@@ -136,6 +137,7 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
         CancellationToken cancellationToken)
     {
         int count = 0;
+        var failureStage = "catalog read";
         try
         {
             var catalog = forceRefresh
@@ -143,6 +145,16 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
                 : await _catalog.GetAsync(cancellationToken);
 
             cancellationToken.ThrowIfCancellationRequested();
+
+            // Do not erase the user's source/platform selections when the catalog is
+            // temporarily unavailable. A valid snapshot (including last-known-good data)
+            // is the only source allowed to update the available filter options.
+            if (catalog.IsAvailable)
+            {
+                _filterState.UpdateCatalog(catalog.Games);
+            }
+
+            failureStage = "filtering and result construction";
 
             // A normal search/pin refresh reuses validated artwork. Only an explicit
             // catalog refresh should invalidate artwork references and force disk resolution.
@@ -170,7 +182,7 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
         {
             // A newer query or explicit refresh superseded this request.
         }
-        catch (Exception)
+        catch (Exception exception)
         {
             lock (_requestGate)
             {
@@ -179,7 +191,22 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
                     return;
                 }
 
-                _items = [CreateStatusItem("Couldn't read the Playnite catalog. Check the companion plugin and snapshot permissions, then refresh.")];
+                // The former generic message blamed the bridge for failures that could
+                // actually occur after a successful read, during filtering or UI result
+                // construction. Surface the phase and exception so failures are actionable.
+                var detail = string.IsNullOrWhiteSpace(exception.Message)
+                    ? "No additional details were provided."
+                    : exception.Message.Replace('\r', ' ').Replace('\n', ' ').Trim();
+                if (detail.Length > 180)
+                {
+                    detail = detail[..180] + "…";
+                }
+
+                _items =
+                [
+                    CreateAdvancedFiltersItem(),
+                    CreateStatusItem($"Playnite {failureStage} failed ({exception.GetType().Name}): {detail}"),
+                ];
             }
 
             count = _items.Length;
@@ -189,14 +216,15 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
 
     private (IListItem[] Items, IReadOnlyList<(ListItem Item, GameEntry Game)> ArtworkItems) BuildItems(CatalogReadResult catalog, string query)
     {
+        var items = new List<IListItem> { CreateAdvancedFiltersItem() };
+
         if (!catalog.IsAvailable)
         {
             var message = catalog.Issue?.Message
                 ?? "The Playnite catalog is unavailable. Install and start the companion plugin, then refresh.";
-            return ([CreateRefreshItem(message)], Array.Empty<(ListItem Item, GameEntry Game)>());
+            items.Add(CreateRefreshItem(message));
+            return (items.ToArray(), Array.Empty<(ListItem Item, GameEntry Game)>());
         }
-
-        var items = new List<IListItem>();
         if (catalog.IsStale)
         {
             items.Add(CreateStatusItem("The Playnite catalog is over 24 hours old. Open Playnite to refresh it."));
@@ -218,10 +246,21 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
             return (items.ToArray(), Array.Empty<(ListItem Item, GameEntry Game)>());
         }
 
-        var matches = GameSearch.Search(catalog.Games, query);
+        var activeFilters = _filterState.ToSearchFilters();
+        var matches = GameSearch.Search(catalog.Games, query, activeFilters);
         if (matches.Count == 0)
         {
-            items.Add(CreateStatusItem($"No games match “{query.Trim()}”."));
+            var hasActiveFilters = activeFilters.IsInstalled.HasValue
+                || activeFilters.Sources?.Count > 0
+                || activeFilters.Platforms?.Count > 0;
+            var message = hasActiveFilters
+                ? string.IsNullOrWhiteSpace(query)
+                    ? "No games match the selected filters. Clear one or more filters to see more games."
+                    : $"No games match “{query.Trim()}” with the selected filters. Clear a filter or change your search."
+                : string.IsNullOrWhiteSpace(query)
+                    ? "No games are available in the current catalog."
+                    : $"No games match “{query.Trim()}”.";
+            items.Add(CreateStatusItem(message));
             return (items.ToArray(), Array.Empty<(ListItem Item, GameEntry Game)>());
         }
 
@@ -343,6 +382,17 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
         {
             // A newer query replaced this result set.
         }
+    }
+
+    private ListItem CreateAdvancedFiltersItem()
+    {
+        var count = _filterState.ActiveFilterCount;
+        return new ListItem(new AdvancedFiltersPage(_filterState, () => BeginSearch()))
+        {
+            Title = count == 0 ? "Advanced filters" : $"Advanced filters ({count})",
+            Subtitle = count == 0 ? "Installed status, source, and platform" : "Filters are active · Select to edit",
+            Icon = new IconInfo("\\uE71C"),
+        };
     }
 
     private static ListItem CreateStatusItem(string message) =>
