@@ -1,6 +1,6 @@
 # Product Requirements Document
 
-Status: Draft v0.1 — overall product scope remains subject to ongoing validation. WERD-80 artwork requirements reviewed: 2026-11-11; WERD-86 root-command registration reviewed: 2026-11-12.
+Status: Draft v0.1 — overall product scope remains subject to ongoing validation. WERD-80 artwork requirements reviewed: 2026-11-11; WERD-86 fallback-results requirements updated: 2026-11-12.
 
 ## Summary
 A PowerToys Command Palette extension that searches a user's Playnite library and launches a selected game without switching to the Playnite window.
@@ -97,12 +97,13 @@ Exact title ranks first; prefix/substring results are deterministic; duplicate t
 
 **Verification status (2026-11-11):** The maintainer confirmed one installed Steam library entry with a saved ICO-backed Playnite icon now displays its icon in Command Palette. Diagnostics showed the Playnite path resolved, ICO conversion succeeded, the converted PNG was published to the content-addressed cache, and the matching icon digest appeared in the v2 snapshot. This verifies one real-library ICO case; it does not establish all formats, uninstalled-game behavior, or high-DPI behavior. See [Testing](TESTING.md) for the manual verification log and remaining checks.
 
-## Direct top-level game commands (WERD-86)
+## Installed-game fallback result (WERD-86)
 
-- Expose individual eligible games as ordinary root commands through `TopLevelCommands()`, not through `FallbackCommands()` or a fallback-promotion preference. The earlier fallback prototype is superseded by this requirement.
-- Show the saved game title, **Open with Playnite** subtitle/action, and saved Playnite game icon (neutral symbol if loading/unavailable). Preserve existing navigation pages.
-- Cache registrations and refresh them through the documented `RaiseItemsChanged()` path as the bridge catalog changes. Missing/unhealthy data must not leave unsafe root launch entries advertised; navigation/recovery remains available.
-- Let CmdPal search/rank the registered command catalog, including partial matches. Explicit row selection launches its captured stable ID after revalidation; never infer or substitute another game from a partial title. Root registration may also expose games in the host's unfiltered catalog and does not guarantee first place/adjacency to another provider.
-- Keep direct-launch eligibility conservative: canonical unique IDs, healthy/non-stale/complete snapshots, and a same-ID/displayed-metadata refresh before invocation. Equal titles must remain explicitly selectable root rows with source/platform/install metadata and distinct full IDs; never omit them solely because a title is shared or choose an arbitrary winner. Search games remains the richer details and stale/offline browsing route.
-- Register each eligible game once and no fallback copy. Keep images asynchronous, bounded, optional, and icon-only; catalog replacement/disposal cannot allow stale images or retained commands to target a newer game.
-- Desktop root rendering, coexistence, icon lifecycle, large-library responsiveness, and real launches must be verified separately from synthetic provider tests and CI. The old Fallbacks visibility report is not validation of this replacement.
+- Keep **Search games**, Favorites, and Recently played games as the provider's top-level navigation. Do not register every Playnite game as a root command.
+- Expose a single query-reactive `FallbackCommandItem` through `FallbackCommands()`. It can show one direct-launch row when the query is an exact, case-insensitive match (after trimming surrounding query whitespace) to exactly one installed game title. Partial, unknown, and ambiguous installed-title matches produce no row.
+- Exclude uninstalled and installation-unknown games from this global direct-launch fallback. The broader library pages retain their existing browsing/filter behavior.
+- Show the matched saved title, the subtitle/action **Open with Playnite**, and the saved Playnite game icon; use the neutral symbol while loading or when saved artwork is missing/invalid. Do not append PC, platform, source, installation-state, or other metadata labels to the fallback row.
+- Fallback results occupy the host-managed **Fallbacks** section by default, separate from regular Results. An Apps-provider row may still rank above it. Do not claim or attempt control of global rank, adjacency, or another provider's results; do not enable a host option that merges fallbacks into regular Results by default.
+- `playnite` should not display every game: the root provider contains navigation only, and the fallback returns no game unless an installed game title exactly matches the query. Preserve stable canonical Playnite IDs; revalidate the same installed ID and exact displayed title before dispatch. Never infer a game from a partial query or retarget another same-title ID.
+- Reject unhealthy, stale, partial, invalid, or conflicting catalogs for fallback launch. Keep saved-icon resolution asynchronous, bounded, icon-only, cancellation/version guarded, and nonessential to launch.
+- Synthetic tests must cover installed/uninstalled filtering, exact/no/ambiguous matching, stable-ID launch revalidation, asynchronous saved icons, fallback/provider registration, and race/disposal safety. Desktop fallback rendering/coexistence/icon scaling and actual launches remain separate manual checks.

@@ -15,170 +15,165 @@ public sealed class PlayniteDirectLaunchTests : IDisposable
     private string SnapshotPath => Path.Combine(_directory, "catalog.json");
 
     [Fact]
-    public async Task HealthySnapshotProvidesAndRevalidatesTheSelectedStableId()
+    public async Task HealthyCatalogMatchesAnInstalledExactTitleAndRevalidatesItsStableId()
     {
         await PublishAsync(new SnapshotGame(GameA, Title, true, "Store A", "PC"));
         var service = new PlayniteDirectLaunch(new PlayniteCatalogAdapter(SnapshotPath, _time));
 
-        var game = Assert.Single(await service.GetCandidatesAsync());
+        Assert.Null(await service.FindMatchAsync("Orbit"));
+        var match = await service.FindMatchAsync("  ORBIT RALLY 16  ");
 
-        Assert.Equal(new GameEntry(GameA, Title, "Store A", true, Platform: "PC"), game);
-        Assert.True(await service.RevalidateAsync(game));
+        Assert.Equal(new GameEntry(GameA, Title, "Store A", true, Platform: "PC"), match);
+        Assert.True(await service.RevalidateAsync(Title, GameA));
+        Assert.False(await service.RevalidateAsync(Title, GameB));
+    }
+
+    [Fact]
+    public async Task UninstalledEntriesAreExcludedAndDoNotMakeAnInstalledDuplicateAmbiguous()
+    {
+        await PublishAsync(
+            new SnapshotGame(GameA, Title, true, "Store A"),
+            new SnapshotGame(GameB, Title, false, "Store B"));
+        var service = new PlayniteDirectLaunch(new PlayniteCatalogAdapter(SnapshotPath, _time));
+
+        Assert.Equal(GameA, (await service.FindMatchAsync(Title))?.GameId);
+        Assert.True(await service.RevalidateAsync(Title, GameA));
+
+        await PublishAsync(new SnapshotGame(GameB, Title, false, "Store B"));
+        Assert.Null(await service.FindMatchAsync(Title, forceRefresh: true));
+        Assert.False(await service.RevalidateAsync(Title, GameA));
+    }
+
+    [Fact]
+    public async Task SameTitleOwnedByMultipleInstalledGamesIsSuppressed()
+    {
+        await PublishAsync(new SnapshotGame(GameA, Title, true), new SnapshotGame(GameB, Title, true));
+        var service = new PlayniteDirectLaunch(new PlayniteCatalogAdapter(SnapshotPath, _time));
+
+        Assert.Null(await service.FindMatchAsync(Title));
+        Assert.False(await service.RevalidateAsync(Title, GameA));
+        Assert.False(await service.RevalidateAsync(Title, GameB));
     }
 
     [Theory]
     [InlineData("removed")]
     [InlineData("renamed")]
     [InlineData("replaced")]
-    [InlineData("source")]
-    [InlineData("platform")]
-    [InlineData("installation")]
-    public async Task InvocationRefreshesInsideTheCacheIntervalAndNeverRetargetsOrUsesChangedMetadata(string change)
+    [InlineData("uninstalled")]
+    [InlineData("ambiguous")]
+    public async Task InvocationForceRefreshNeverRetargetsChangedOrUnavailableMatches(string change)
     {
         await PublishAsync(new SnapshotGame(GameA, Title, true));
         var service = new PlayniteDirectLaunch(new PlayniteCatalogAdapter(SnapshotPath, _time));
-        var displayed = Assert.Single(await service.GetCandidatesAsync());
+        Assert.Equal(GameA, (await service.FindMatchAsync(Title))?.GameId);
 
         var games = change switch
         {
             "removed" => Array.Empty<SnapshotGame>(),
             "renamed" => new[] { new SnapshotGame(GameA, "Orbit Rally 17", true) },
             "replaced" => new[] { new SnapshotGame(GameB, Title, true) },
-            "source" => new[] { new SnapshotGame(GameA, Title, true, "Other store") },
-            "platform" => new[] { new SnapshotGame(GameA, Title, true, platform: "Other platform") },
-            _ => new[] { new SnapshotGame(GameA, Title, false) },
+            "uninstalled" => new[] { new SnapshotGame(GameA, Title, false) },
+            _ => new[] { new SnapshotGame(GameA, Title, true), new SnapshotGame(GameB, Title, true) },
         };
         await PublishAsync(games);
 
-        // The normal cache still holds the displayed game; invocation must bypass it.
-        Assert.Equal(displayed, Assert.Single(await service.GetCandidatesAsync()));
-        Assert.False(await service.RevalidateAsync(displayed));
+        // The normal read can still see the adapter cache; invocation bypasses it.
+        Assert.False(await service.RevalidateAsync(Title, GameA));
     }
 
     [Fact]
-    public async Task EqualTitlesCanRevalidateEachExplicitIdAndNewSameTitleIdsDoNotRetargetTheSelection()
-    {
-        await PublishAsync(new SnapshotGame(GameA, Title, true, "Store A"));
-        var service = new PlayniteDirectLaunch(new PlayniteCatalogAdapter(SnapshotPath, _time));
-        var displayed = Assert.Single(await service.GetCandidatesAsync());
-        await PublishAsync(new SnapshotGame(GameA, Title, true, "Store A"),
-            new SnapshotGame(GameB, Title, false, "Store B"));
-
-        Assert.Single(await service.GetCandidatesAsync());
-        var games = await service.GetCandidatesAsync(forceRefresh: true);
-        Assert.Equal(new[] { GameA, GameB }, games.Select(game => game.GameId));
-        Assert.True(await service.RevalidateAsync(displayed));
-        Assert.True(await service.RevalidateAsync(games[1]));
-
-        await PublishAsync(new SnapshotGame(GameB, Title, false, "Store B"));
-        Assert.False(await service.RevalidateAsync(displayed));
-        Assert.True(await service.RevalidateAsync(games[1]));
-    }
-
-    [Fact]
-    public async Task OptionalArtworkAndLastActivityChangesDoNotInvalidateTheSelectedGame()
+    public async Task OptionalArtworkAndActivityChangesDoNotInvalidateAnInstalledMatch()
     {
         await PublishAsync(new SnapshotGame(GameA, Title, true));
         var service = new PlayniteDirectLaunch(new PlayniteCatalogAdapter(SnapshotPath, _time));
-        var displayed = Assert.Single(await service.GetCandidatesAsync());
+        Assert.Equal(GameA, (await service.FindMatchAsync(Title))?.GameId);
         await PublishAsync(new SnapshotGame(GameA, Title, true,
             iconArtworkId: new string('a', 64), coverArtworkId: new string('b', 64),
             lastActivity: new DateTime(2026, 11, 12, 11, 0, 0, DateTimeKind.Utc)));
 
-        Assert.True(await service.RevalidateAsync(displayed));
+        Assert.True(await service.RevalidateAsync(Title, GameA));
     }
 
     [Fact]
-    public async Task StaleSnapshotRemainsBrowsableButCannotAuthorizeRootCommands()
+    public async Task StaleSnapshotCannotAuthorizeOrRevalidateAGlobalFallback()
     {
         await PublishAsync(new SnapshotGame(GameA, Title, true));
-        var adapter = new PlayniteCatalogAdapter(SnapshotPath, _time);
-        var service = new PlayniteDirectLaunch(adapter);
-        var displayed = Assert.Single(await service.GetCandidatesAsync());
+        var service = new PlayniteDirectLaunch(new PlayniteCatalogAdapter(SnapshotPath, _time));
+        Assert.Equal(GameA, (await service.FindMatchAsync(Title))?.GameId);
 
         _time.Advance(PlayniteCatalogAdapter.StaleAfter);
 
-        Assert.Empty(await service.GetCandidatesAsync());
-        Assert.False(await service.RevalidateAsync(displayed));
-        Assert.Single((await adapter.GetAsync()).Games);
+        Assert.Null(await service.FindMatchAsync(Title, forceRefresh: true));
+        Assert.False(await service.RevalidateAsync(Title, GameA));
     }
 
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task FailedRefreshDoesNotDirectLaunchFromLastKnownGood(bool missing)
+    public async Task FailedRefreshDoesNotAuthorizeFromLastKnownGood(bool missing)
     {
         await PublishAsync(new SnapshotGame(GameA, Title, true));
-        var adapter = new PlayniteCatalogAdapter(SnapshotPath, _time);
-        var service = new PlayniteDirectLaunch(adapter);
-        var displayed = Assert.Single(await service.GetCandidatesAsync());
+        var service = new PlayniteDirectLaunch(new PlayniteCatalogAdapter(SnapshotPath, _time));
+        Assert.Equal(GameA, (await service.FindMatchAsync(Title))?.GameId);
         if (missing) File.Delete(SnapshotPath);
         else await File.WriteAllTextAsync(SnapshotPath, "not json");
 
-        Assert.False(await service.RevalidateAsync(displayed));
-        Assert.Empty(await service.GetCandidatesAsync());
-        Assert.Single((await adapter.GetAsync()).Games);
+        Assert.False(await service.RevalidateAsync(Title, GameA));
+        Assert.Null(await service.FindMatchAsync(Title, forceRefresh: true));
     }
 
-    [Theory]
-    [InlineData("not-an-id", "Orbit Rally 16")]
-    [InlineData(GameA, "Conflicting duplicate record")]
-    public async Task PartialOrConflictingCatalogCannotAuthorizeDirectCommands(string invalidId, string invalidTitle)
+    [Fact]
+    public async Task PartialCatalogCannotAuthorizeAnInstalledMatch()
     {
         Directory.CreateDirectory(_directory);
         await File.WriteAllTextAsync(SnapshotPath, $$"""
         {"schemaVersion":1,"generatedAtUtc":"2026-11-12T12:00:00Z","games":[
           {"id":"{{GameA}}","name":"{{Title}}","isInstalled":true},
-          {"id":"{{invalidId}}","name":"{{invalidTitle}}","isInstalled":false}
+          {"id":"not-an-id","name":"Unrelated","isInstalled":false}
         ]}
         """);
-        var adapter = new PlayniteCatalogAdapter(SnapshotPath, _time);
-        var service = new PlayniteDirectLaunch(adapter);
+        var service = new PlayniteDirectLaunch(new PlayniteCatalogAdapter(SnapshotPath, _time));
 
-        Assert.Equal(1, (await adapter.GetAsync()).SkippedRecordCount);
-        Assert.Empty(await service.GetCandidatesAsync());
-        Assert.False(await service.RevalidateAsync(new GameEntry(GameA, Title, IsInstalled: true)));
+        Assert.Null(await service.FindMatchAsync(Title));
+        Assert.False(await service.RevalidateAsync(Title, GameA));
     }
 
     [Fact]
-    public async Task UnavailableEmptyAndMissingIdsDoNotAuthorizeACommand()
+    public async Task EmptyUnavailableAndMissingIdsDoNotAuthorizeACommand()
     {
         var service = new PlayniteDirectLaunch(new PlayniteCatalogAdapter(SnapshotPath, _time));
-        Assert.Empty(await service.GetCandidatesAsync());
-        Assert.False(await service.RevalidateAsync(new GameEntry(GameA, Title)));
+        Assert.Null(await service.FindMatchAsync(Title));
+        Assert.False(await service.RevalidateAsync(Title, GameA));
 
         await PublishAsync();
-        Assert.Empty(await service.GetCandidatesAsync(forceRefresh: true));
+        Assert.Null(await service.FindMatchAsync(Title, forceRefresh: true));
         await PublishAsync(new SnapshotGame(GameB, Title, true));
-        Assert.False(await service.RevalidateAsync(new GameEntry(GameA, Title, IsInstalled: true)));
+        Assert.False(await service.RevalidateAsync(Title, GameA));
     }
 
     [Fact]
-    public async Task RootCatalogCanRecoverAfterBeingUnavailableWithoutAProviderReload()
-    {
-        var service = new PlayniteDirectLaunch(new PlayniteCatalogAdapter(SnapshotPath, _time));
-        Assert.Empty(await service.GetCandidatesAsync());
-        await PublishAsync(new SnapshotGame(GameA, Title, true));
-
-        Assert.Equal(GameA, Assert.Single(await service.GetCandidatesAsync(forceRefresh: true)).GameId);
-    }
-
-    [Fact]
-    public async Task CancelledRequestsDoNotReadOrAuthorizeACommand()
+    public async Task CancelledRequestsDoNotReadOrAuthorizeAMatch()
     {
         await PublishAsync(new SnapshotGame(GameA, Title, true));
         var service = new PlayniteDirectLaunch(new PlayniteCatalogAdapter(SnapshotPath, _time));
         using var cancellation = new CancellationTokenSource();
         cancellation.Cancel();
 
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => service.GetCandidatesAsync(cancellationToken: cancellation.Token));
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => service.RevalidateAsync(
-            new GameEntry(GameA, Title, IsInstalled: true), cancellation.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            service.FindMatchAsync(Title, cancellation.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            service.RevalidateAsync(Title, GameA, cancellation.Token));
     }
 
-    private Task PublishAsync(params SnapshotGame[] games) =>
-        SnapshotFilePublisher.PublishAsync(SnapshotPath, new CatalogSnapshot(_time.GetUtcNow(), games, SnapshotLimits.SchemaVersion),
-            CancellationToken.None, SnapshotLimits.SchemaVersion, includeLastActivity: true);
+    private Task PublishAsync(params SnapshotGame[] games)
+    {
+        Directory.CreateDirectory(_directory);
+        var schemaVersion = games.Any(game => game.IconArtworkId is not null || game.CoverArtworkId is not null || game.LastActivity.HasValue)
+            ? SnapshotLimits.SchemaVersion : SnapshotLimits.LegacySchemaVersion;
+        return SnapshotFilePublisher.PublishAsync(SnapshotPath,
+            new CatalogSnapshot(_time.GetUtcNow(), games, schemaVersion),
+            CancellationToken.None, schemaVersion, includeLastActivity: true);
+    }
 
     public void Dispose()
     {

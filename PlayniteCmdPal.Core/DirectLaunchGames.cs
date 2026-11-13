@@ -26,6 +26,38 @@ public static class DirectLaunchGames
     }
 
     /// <summary>
+    /// Finds a unique installed game by exact title for the global fallback. Installation
+    /// state must be true; uninstalled/unknown entries do not appear or create ambiguity.
+    /// The entire catalog is validated first so an invalid or conflicting ID cannot hide a
+    /// duplicate and make an otherwise unsafe title look unique. Query matching is trimmed
+    /// and case-insensitive but stored titles are not rewritten.
+    /// </summary>
+    public static GameEntry? FindInstalledExactTitle(IEnumerable<GameEntry> catalog, string? query)
+    {
+        ArgumentNullException.ThrowIfNull(catalog);
+        if (string.IsNullOrWhiteSpace(query)) return null;
+
+        var entries = ReadCanonicalEntries(catalog);
+        if (entries is null) return null;
+
+        var title = query.Trim();
+        GameEntry? match = null;
+        foreach (var game in entries.Values)
+        {
+            if (game.IsInstalled is not true ||
+                !string.Equals(game.Title, title, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            if (match is not null) return null;
+            match = game;
+        }
+
+        return match;
+    }
+
+    /// <summary>
     /// Resolves only the explicitly selected canonical ID, not a title/query. Validates
     /// the entire input so a conflicting duplicate ID cannot silently retarget a row.
     /// </summary>

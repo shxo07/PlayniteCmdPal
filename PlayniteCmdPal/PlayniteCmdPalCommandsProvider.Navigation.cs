@@ -1,4 +1,4 @@
-// Copyright (c) Microsoft Corporation
+// Copyright (c) Microsoft Corporation. All rights reserved.
 // The Microsoft Corporation licenses this file to you under the MIT license.
 // See third-party/Microsoft-PowerToys-LICENSE.txt for the license text.
 
@@ -14,7 +14,6 @@ public partial class PlayniteCmdPalCommandsProvider
         : this(new PlayniteCatalogAdapter(), CreateNavigationCommands())
     {
         Icon = IconHelpers.FromRelativePath("Assets\\StoreLogo.png");
-        ((CommandItem)_navigationCommands[0]).MoreCommands = [CreateRefreshContextItem()];
     }
 
     private static ICommandItem[] CreateNavigationCommands()

@@ -16,13 +16,13 @@ Search and launch games from a Playnite library through Microsoft PowerToys Comm
 
 Provide a keyboard-first route to a user's unified Playnite library: open Command Palette, type a game name, press Enter, and let Playnite handle launch configuration.
 
-## Direct game results at the root (WERD-86)
+## Installed-game fallback result (WERD-86)
 
-Eligible games are registered as individual **top-level commands** through `TopLevelCommands()`, alongside Search games, Favorites, and Recently played games. Type a game title at Command Palette's home/root and select its **Open with Playnite** row. The row uses the saved Playnite game icon, or the neutral game symbol while unavailable/loading.
+Search games, Favorites, and Recently played games remain the extension's ordinary top-level navigation commands. A game is **not** registered as a root command. Instead, an exact, unambiguous title match for an **installed** game appears as one PlayniteCmdPal fallback result. The row shows the game title, the subtitle/action **Open with Playnite**, and the saved Playnite game icon (or a neutral symbol while it loads or when no valid icon is available). It does not show platform/install labels.
 
-**This is not a fallback. No “Include in the Global result” setting is required.** The earlier fallback prototype has been replaced. CmdPal searches and ranks the registered games normally; the extension does not control first place or placement relative to other providers. As ordinary root commands, games may also appear in the host's unfiltered/home command catalog.
+Fallbacks are separate from the host's regular **Results** section, so a Windows app/game result may still appear above it. The extension does not control global result ordering. Searching `playnite` no longer floods Results with every game; no game is returned unless its installed title exactly matches the query. Partial, unknown, or ambiguous installed-title queries do not produce a launch row.
 
-Catalog changes refresh automatically. To force a reread, select **Search games → More commands (`Ctrl+K`) → Refresh game commands**. Launch always revalidates the captured stable Playnite ID. Same-title games remain separate, explicitly selectable rows with source/platform/install metadata and distinct Playnite IDs. Unhealthy/stale snapshots do not authorize direct root commands; **Search games** remains the full browsing/recovery route. The maintainer has confirmed root results and supplied a screenshot with icons, but also reported two identical Playnite rows. The initial catalog is now prepared before exposing the provider to avoid a startup-registration race; this duplicate-row fix and real-game launch/lifecycle checks still need desktop verification. See [the supported API, safety rules, and host checks](docs/CMDPAL-GLOBAL-SEARCH.md).
+Uninstalled or installation-unknown games are excluded from this global direct-launch fallback, but remain available in the existing library pages. Launch revalidates the exact stable Playnite game ID immediately before using Playnite's URI. See [the matching, icon, safety, and desktop-check details](docs/CMDPAL-GLOBAL-SEARCH.md).
 
 ## MVP
 
