@@ -2,17 +2,19 @@
 
 This page explains what is tested, where each check runs, and how to run it. For installing the toolchain and deploying the extension, see [Developer Setup](DEVELOPER-SETUP.md).
 
-**Status (2026-11-11):** Automated coverage is synthetic and runs without Playnite, PowerToys, a personal game library, or secrets. The latest previously verified Windows CI and CodeQL runs are the WERD-80 runs ([CI run 42948025706](https://github.com/shxo07/PlayniteCmdPal/actions/runs/42948025706), [CodeQL run 42948025712](https://github.com/shxo07/PlayniteCmdPal/actions/runs/42948025712)); they predate the current WERD-74 merge and do not validate it. The current WERD-74 head must pass a fresh full Windows CI run (restore, Release build, Core, Playnite/adapter, Command Palette tests, and the .NET Framework snapshot smoke test) and CodeQL before merge. The test commands below are executed by `scripts/ci.ps1`. The user previously confirmed the populated Recently Played list and relative badges in 0.0.7.0; the 0.0.8.0 tooltip-removal build still needs installation verification. See the verification evidence section of [Developer Setup](DEVELOPER-SETUP.md) for the evidence trail and its limits.
+**WERD-86 fallback-results change (2026-11-12):** the selected design keeps only navigation in `TopLevelCommands()` and uses one query-reactive installed-game fallback with saved icon. The current-head Windows CI and CodeQL are required in [PR #37's checks](https://github.com/werdscopez7347/PlayniteCmdPal/pull/37/checks); those outcomes will be recorded after this change is pushed. The earlier root implementation and duplicate-startup fix are historical, superseded by the fallback-only design, and not a current acceptance gate. Installed-host fallback placement/coexistence, icon rendering/lifecycle, and actual game launch remain manual checks in [the investigation](CMDPAL-GLOBAL-SEARCH.md#tests-and-manual-verification). This Linux workspace has no local .NET/Windows host execution.
+
+**Prior verification context (2026-11-11):** Automated coverage is synthetic and runs without Playnite, PowerToys, a personal game library, or secrets. The latest previously verified Windows CI and CodeQL runs are the WERD-80 runs ([CI run 42948025706](https://github.com/shxo07/PlayniteCmdPal/actions/runs/42948025706), [CodeQL run 42948025712](https://github.com/shxo07/PlayniteCmdPal/actions/runs/42948025712)); they predate later changes and do not validate this WERD-86 revision. The separate WERD-74 validation gate in the earlier note is historical; current WERD-86 CI/CodeQL requirements are listed above. The test commands below are executed by `scripts/ci.ps1`. The user previously confirmed the populated Recently Played list and relative badges in 0.0.7.0; the 0.0.8.0 tooltip-removal build still needs installation verification. See the verification evidence section of [Developer Setup](DEVELOPER-SETUP.md) for the evidence trail and its limits.
 
 ## Test projects
 
 | Project | Target | References | Needs Playnite installed? |
 |---|---|---|---|
 | `PlayniteCmdPal.Core.Tests` | `net10.0` | `PlayniteCmdPal.Core` | No |
-| `PlayniteCmdPal.Command.Tests` | `net10.0-windows10.0.26100.0` | `PlayniteCmdPal.Core`, linked production `ToggleFavoriteCommand.cs`, Command Palette SDK | No |
+| `PlayniteCmdPal.Command.Tests` | `net10.0-windows10.0.26100.0` | Core/read-only adapter, linked production provider/commands/artwork loader, Command Palette SDK | No |
 | `PlayniteCmdPal.Playnite.Tests` | `net10.0` | `PlayniteCmdPal.Playnite`, `PlayniteCmdPal.Snapshot` | No |
 
-`PlayniteCmdPal.Core.Tests` and `PlayniteCmdPal.Playnite.Tests` do not reference `PlayniteCmdPal/` (the CmdPal host) or `PlayniteCmdPal.PlaynitePlugin/` (the `net462` companion plugin). `PlayniteCmdPal.Command.Tests` compiles the production `ToggleFavoriteCommand.cs` into a focused Windows test assembly so it can assert the actual SDK command-result and toast-follow-up values without loading the full WinUI host. The companion plugin is only compiled; its SDK usage is exercised indirectly by the behavior it delegates to the shared snapshot assembly.
+`PlayniteCmdPal.Core.Tests` and `PlayniteCmdPal.Playnite.Tests` do not reference `PlayniteCmdPal/` (the CmdPal host) or `PlayniteCmdPal.PlaynitePlugin/` (the `net462` companion plugin). `PlayniteCmdPal.Command.Tests` links production `ToggleFavoriteCommand.cs`, `LaunchGameCommand.cs`, `PlayniteCmdPalCommandsProvider.cs`, and `ArtworkIconLoader.cs` into a focused Windows test assembly. The provider's navigation-construction partial is deliberately not linked: tests inject synthetic navigation, catalog, timer, decoder, and process dispatch into the real provider logic instead of starting pages/reading preferences. They exercise actual SDK root arrays, `ItemsChanged`, command lookup, rows/icons, and invocation without loading the WinUI host or starting Playnite/a real game. The companion plugin is compiled; its SDK usage is exercised indirectly through the shared snapshot assembly.
 
 Test data is generated in the test process and written to a temporary directory (`%TEMP%\PlayniteCmdPal.Tests\<guid>`). Each test class that touches disk owns and deletes its directory. No test reads `%LOCALAPPDATA%`, Playnite storage, `playnite.log`, or any real library export.
 
@@ -29,11 +31,24 @@ Test data is generated in the test process and written to a temporary directory 
 | `GameSearchTests` | Baseline ranking order (exact, prefix, word-prefix, substring), case-insensitivity, duplicate titles, tie-breaks, blank/null query, empty catalog, invalid entries. |
 | `GameSearchRankingTests` | Query trimming versus untrimmed stored titles, multi-word and partial queries, word-boundary rules (only non-alphanumeric characters start a word), earliest-match index ordering, ordinal ID ordering for duplicate titles, canonical duplicate-ID selection independent of input order, returned collection immutability, single enumeration of the catalog, argument precedence (blank query short-circuits), and a 5,000-entry determinism check. |
 
-### Favorites command results (`PlayniteCmdPal.Command.Tests`)
+### Command results and provider registration (`PlayniteCmdPal.Command.Tests`)
 
 | File | Covers |
 |---|---|
 | `ToggleFavoriteCommandTests` | Successful and failed pin/unpin invocations return `CommandResult.KeepOpen()`; the notification is displayed separately, preserving the current page stack and query. |
+| `LaunchGameCommandTests` | Exact canonical-ID URI and shell-dispatch options, invalid-ID rejection without dispatch, and actionable process/URI-handler failure feedback. |
+| `PlayniteTopLevelCommandsTests` | The actual SDK provider exposes only the three navigation items at top level and one cached dynamic fallback. `playnite` does not produce a game row; an exact installed title produces a fallback with the saved icon and **Open with Playnite** only; uninstalled-only titles remain hidden. Also covers stable-ID URI launch and provider lookup. |
+| `PlayniteGameFallbackTests` | Actual fallback-handler callback and title/action, exact/partial/no-match/installed-title ambiguity, installed/uninstalled duplicate policy, stable-ID revalidation, retained command/query/invocation/disposal races, read/launch failures, async saved-icon property notification, neutral icon behavior, cover exclusion, obsolete icon cancellation, and cross-thread/reentrant property changes. All catalog data, artwork, and dispatch are synthetic. |
+
+### Global direct-launch policy (WERD-86)
+
+| File | Project | Covers |
+|---|---|---|
+| `TopLevelGameEligibilityTests` | Core | Canonical stable-ID deduplication, invalid/conflicting identity rejection, deterministic ordering, and preservation of distinct equal-title IDs for library browsing. |
+| `InstalledGameMatchTests` | Core | Exact unique installed title; case-insensitive trimmed query; exclusion of uninstalled/unknown state; uninstalled duplicates do not block an installed match; multiple installed same-title IDs, invalid/conflicting records, partial and blank queries fail closed. |
+| `PlayniteDirectLaunchTests` | Playnite/adapter | Healthy exact installed-title match, forced same-ID revalidation, uninstalled/ambiguous suppression, removal/rename/replacement/uninstall, optional artwork/activity updates, stale/partial/failed snapshot rejection, and cancellation. |
+
+These tests are synthetic, not installed-host integration tests. The [global-search design](CMDPAL-GLOBAL-SEARCH.md) uses the pinned SDK's fallback callback, not provider-level query injection. Record the installed CmdPal version, query `playnite`, fallback-section coexistence with another Results/Apps item, installed/uninstalled/ambiguous title behavior, saved and neutral icon rendering, query/icon lifecycle, and actual Playnite launch. Do not assert adjacency or a particular rank. Existing `scripts/ci.ps1` discovers the tests without a new workflow step.
 
 ### Command Palette artwork (WERD-80)
 
@@ -173,9 +188,7 @@ dotnet test .\PlayniteCmdPal.Core.Tests\PlayniteCmdPal.Core.Tests.csproj --logge
 
 ### Coverage at a glance
 
-The suites currently contain **293 authored test cases** (facts plus `[InlineData]` rows) split across three
-test projects: **107** for domain/search, **3** for Command Palette favorite command results,
-and **183** for the snapshot contract, publication, refresh, and adapter policy. Of those, 148 were added for
+The historical count baseline below predates the later WERD-74/WERD-80/WERD-86 changes; it is **not the current suite total**. At that baseline there were **293 authored cases** (facts plus `[InlineData]` rows): **107** domain/search, **3** Command Palette favorite command results, and **183** snapshot/adapter cases. Of those, 148 were added for
 [WERD-62](https://linear.app/werdscopez7347/issue/WERD-62/expand-automated-tests-and-finalize-the-developer-setup-guide).
 
 How that number is established, so it can be re-derived rather than trusted:
@@ -253,7 +266,7 @@ These are deliberately not automated yet; each needs a Windows host and, in most
 
 - **Clean-machine setup (deferred, not passed):** the [Developer Setup](DEVELOPER-SETUP.md) steps have not been replayed on a freshly imaged Windows machine by an independent contributor. Deferred on 2026-10-31: the maintainer develops and tests on Windows 10 build 19041 and no separate clean Windows machine was available. This is an environmental limitation, not a failure, and the step must not be reported as complete until it actually happens.
 - The companion plugin's Playnite event wiring (`OnDatabaseOpened`, game/source/platform collection changes, relevance filtering of game updates) is compiled but not unit tested, because `PlayniteApi` is supplied by the Playnite host. Its observable behavior is covered manually through the [Catalog Bridge checklist](CATALOG-BRIDGE.md#manual-playnite-verification-still-required).
-- The CmdPal presentation layer (search page, ranking display, launch action) has no automated tests; it is exercised by manual deploy/reload and the launch-by-ID smoke test.
+- Search-page rendering/ranking and installed CmdPal behavior require manual deploy/reload and the launch-by-ID smoke test. Focused command tests exercise the actual provider/fallback and asynchronous saved-icon loading, but do not render the host UI. The earlier root rows had a maintainer-reported duplicate; per-game root registration is now removed. Desktop verification of fallback-section visibility/coexistence, `playnite` query behavior, installed/uninstalled/ambiguous matching, saved/neutral icon lifecycle, and real-game launch remain pending. Historical fallback visibility and public source evidence are not a desktop pass for this revision.
 - No test verifies the real Playnite library contents against the snapshot (by design: that would require personal data).
 - Minimum supported versions of Windows, Visual Studio, PowerToys, and Playnite are recorded as "validated once", not as tested minimums. See the contributor environment table in [Developer Setup](DEVELOPER-SETUP.md).
 

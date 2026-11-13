@@ -9,10 +9,12 @@ namespace PlayniteCmdPal;
 internal sealed partial class LaunchGameCommand : InvokableCommand
 {
     private readonly string _gameId;
+    private readonly Action<ProcessStartInfo> _startProcess;
 
-    public LaunchGameCommand(string gameId)
+    public LaunchGameCommand(string gameId, Action<ProcessStartInfo>? startProcess = null)
     {
         _gameId = gameId;
+        _startProcess = startProcess ?? (startInfo => Process.Start(startInfo));
     }
 
     public override string Name => "Launch with Playnite";
@@ -28,7 +30,7 @@ internal sealed partial class LaunchGameCommand : InvokableCommand
         {
             // Let Playnite resolve the game and apply its configured launch actions.
             // Never execute an executable path from catalog data.
-            Process.Start(new ProcessStartInfo(launchUri.AbsoluteUri)
+            _startProcess(new ProcessStartInfo(launchUri.AbsoluteUri)
             {
                 UseShellExecute = true,
             });

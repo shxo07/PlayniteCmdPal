@@ -19,6 +19,10 @@
 
   <ItemGroup>
     <ProjectReference Include="..\PlayniteCmdPal.Core\PlayniteCmdPal.Core.csproj" />
+    <ProjectReference Include="..\PlayniteCmdPal.Playnite\PlayniteCmdPal.Playnite.csproj" />
+    <Compile Include="..\PlayniteCmdPal\LaunchGameCommand.cs" Link="LaunchGameCommand.cs" />
+    <Compile Include="..\PlayniteCmdPal\PlayniteGameFallback.cs" Link="PlayniteGameFallback.cs" />
+    <Compile Include="..\PlayniteCmdPal\PlayniteCmdPalCommandsProvider.cs" Link="PlayniteCmdPalCommandsProvider.cs" />
     <Compile Include="..\PlayniteCmdPal\ToggleFavoriteCommand.cs" Link="ToggleFavoriteCommand.cs" />
     <Compile Include="..\PlayniteCmdPal\ArtworkIconLoader.cs" Link="ArtworkIconLoader.cs" />
   </ItemGroup>

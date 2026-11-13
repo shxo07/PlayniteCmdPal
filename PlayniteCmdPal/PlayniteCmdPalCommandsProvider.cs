@@ -1,44 +1,57 @@
-// Copyright (c) Microsoft Corporation
-// The Microsoft Corporation licenses this file to you under the MIT license.
-// See third-party/Microsoft-PowerToys-LICENSE.txt for the license text.
-
 using System;
+using System.Linq;
+using System.Threading;
 using Microsoft.CommandPalette.Extensions;
 using Microsoft.CommandPalette.Extensions.Toolkit;
+using PlayniteCmdPal.Playnite;
 
 namespace PlayniteCmdPal;
 
 public partial class PlayniteCmdPalCommandsProvider : CommandProvider
 {
-    private readonly ICommandItem[] _commands;
-    private readonly PlayniteCmdPalRecentlyPlayedPage _recentlyPlayedPage;
+    private readonly ICommandItem[] _navigationCommands;
+    private readonly IFallbackCommandItem[] _fallbackCommands;
+    private readonly PlayniteGameFallback _gameFallback;
+    private int _disposed;
 
-    public PlayniteCmdPalCommandsProvider()
+    // The pinned SDK has a query-aware fallback callback but no provider-level search
+    // injection hook. Keep the ordinary root list small/static and expose one dynamic,
+    // query-specific installed-game fallback instead of registering every game at root.
+    internal PlayniteCmdPalCommandsProvider(
+        IReadOnlyPlayniteCatalog catalog,
+        ICommandItem[] navigationCommands,
+        ArtworkIconLoader? artwork = null,
+        Func<string, CommandResult>? launch = null)
     {
+        ArgumentNullException.ThrowIfNull(catalog);
+        ArgumentNullException.ThrowIfNull(navigationCommands);
         DisplayName = "Playnite";
-        Icon = IconHelpers.FromRelativePath("Assets\\StoreLogo.png");
-        _recentlyPlayedPage = new PlayniteCmdPalRecentlyPlayedPage();
-        _commands = [
-            new CommandItem(new PlayniteCmdPalPage()) { Title = "Search games" },
-            new CommandItem(new FavoritesPage()) { Title = "Favorites" },
-            new CommandItem(_recentlyPlayedPage)
-            {
-                Title = "Recently played games",
-                MoreCommands = [_recentlyPlayedPage.CreateRefreshContextItem()],
-            },
-        ];
+        _navigationCommands = navigationCommands.ToArray();
+        _gameFallback = new PlayniteGameFallback(catalog, launch, artwork);
+        _fallbackCommands = [_gameFallback];
     }
 
-    public override ICommandItem[] TopLevelCommands()
+    public override ICommandItem[] TopLevelCommands() => _navigationCommands;
+
+    public override IFallbackCommandItem[] FallbackCommands() => _fallbackCommands;
+
+    public override ICommandItem? GetCommandItem(string id)
     {
-        return _commands;
+        if (string.IsNullOrWhiteSpace(id)) return null;
+        return _navigationCommands.FirstOrDefault(item => item.Command?.Id == id);
     }
+
+    public override ICommand? GetCommand(string id) => GetCommandItem(id)?.Command;
 
     public override void Dispose()
     {
-        _recentlyPlayedPage.Dispose();
+        if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+        _gameFallback.Dispose();
+        foreach (var item in _navigationCommands)
+        {
+            if (item.Command is IDisposable disposable) disposable.Dispose();
+        }
         base.Dispose();
         GC.SuppressFinalize(this);
     }
-
 }

@@ -16,6 +16,14 @@ Search and launch games from a Playnite library through Microsoft PowerToys Comm
 
 Provide a keyboard-first route to a user's unified Playnite library: open Command Palette, type a game name, press Enter, and let Playnite handle launch configuration.
 
+## Installed-game fallback result (WERD-86)
+
+Search games, Favorites, and Recently played games remain the extension's ordinary top-level navigation commands. A game is **not** registered as a root command. Instead, an exact, unambiguous title match for an **installed** game appears as one PlayniteCmdPal fallback result. The row shows the game title, the subtitle/action **Open with Playnite**, and the saved Playnite game icon (or a neutral symbol while it loads or when no valid icon is available). It does not show platform/install labels.
+
+Fallbacks are separate from the host's regular **Results** section, so a Windows app/game result may still appear above it. The extension does not control global result ordering. Searching `playnite` no longer floods Results with every game; no game is returned unless its installed title exactly matches the query. Partial, unknown, or ambiguous installed-title queries do not produce a launch row.
+
+Uninstalled or installation-unknown games are excluded from this global direct-launch fallback, but remain available in the existing library pages. Launch revalidates the exact stable Playnite game ID immediately before using Playnite's URI. See [the matching, icon, safety, and desktop-check details](docs/CMDPAL-GLOBAL-SEARCH.md).
+
 ## MVP
 
 - Search Playnite game titles with deterministic ranking.
@@ -41,7 +49,7 @@ Provide a keyboard-first route to a user's unified Playnite library: open Comman
 - Central package versions: `Directory.Packages.props`
 - Repo-specific CmdPal instructions: `.github/copilot-instructions.md` and `.github/instructions/cmdpal-extension.instructions.md`
 - GitHub Actions: Windows build/test workflow and CodeQL workflow; Dependabot is configured for NuGet and Actions.
-- Windows CI and CodeQL have successful runs. Both test projects (`PlayniteCmdPal.Core.Tests` and `PlayniteCmdPal.Playnite.Tests`) run in CI through `scripts/ci.ps1` alongside the .NET Framework snapshot smoke test; see [Testing](docs/TESTING.md) for the coverage map. Do not describe the repository as a working end-to-end extension until local deployment and Playnite integration acceptance criteria pass.
+- Windows CI and CodeQL have successful runs. All three test projects (`PlayniteCmdPal.Core.Tests`, `PlayniteCmdPal.Playnite.Tests`, and `PlayniteCmdPal.Command.Tests`) run in CI through `scripts/ci.ps1` alongside the .NET Framework snapshot smoke test; see [Testing](docs/TESTING.md) for the coverage map. Do not describe the repository as a working end-to-end extension until local deployment and Playnite integration acceptance criteria pass.
 - **License:** MIT for PlayniteCmdPal-authored material; see [LICENSE](LICENSE). Third-party components and assets retain their own license and attribution requirements; distribution artifacts carry [third-party notices](third-party/THIRD-PARTY-NOTICES.md). See [licensing and release readiness](docs/LICENSING-AND-RELEASE.md) for the dependency audit and its open review items.
 
 ## Development and project tracking

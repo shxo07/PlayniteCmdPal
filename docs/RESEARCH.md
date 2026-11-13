@@ -1,6 +1,6 @@
 # Research: Market and Feasibility
 
-**Last reviewed:** 2026-10-31. Findings below distinguish documented facts from implementation checks that remain.
+**Last reviewed:** 2026-11-12. Findings below distinguish documented facts from implementation checks that remain.
 
 ## Technical findings
 
@@ -20,6 +20,26 @@
 Keep Playnite authoritative. Use its documented launch-by-ID URI; real-game smoke tests with Playnite running and fully closed have been reported successful. The selected catalog transport is a companion plugin writing a normalized read-only JSON snapshot; do not use direct database writes, UI automation, or IPC.
 
 The launch mechanism and catalog transport decision are documented. The snapshot writer, reader, adapter cache, and companion plugin are implemented. Windows CI [run 41177945707](https://github.com/werdscopez7347/PlayniteCmdPal/actions/runs/41177945707) and CodeQL [run 41177945516](https://github.com/werdscopez7347/PlayniteCmdPal/actions/runs/41177945516) passed; maintainer-reported packaging and real-library verification are recorded in [Catalog Bridge](CATALOG-BRIDGE.md). Field-by-field metadata parity remains to be independently checked.
+
+## Global direct-launch search finding (WERD-86, updated 2026-11-12)
+
+The repository pins `Microsoft.CommandPalette.Extensions` **0.9.260303001**. The supported API includes multiple cached `TopLevelCommands()` items and `IFallbackHandler.UpdateQuery(string)` on fallback items. It does **not** provide the proposed provider-level `UpdateQuery(string, ICommandContext)`, `ICommandContext.AddResult`, or an `ICommandProvider` per-query hook. The newer main-branch `IFallbackQueryHandler.QueryAsync` is not in the pinned package and remains fallback-scoped. See the [versioned SDK and host evidence](CMDPAL-GLOBAL-SEARCH.md#sdk-and-host-evidence).
+
+The maintainer previously selected ordinary per-game root commands, then reported that searching `playnite` flooded Results because the host scores subtitle and extension display name as well as command title. The provider's current design follows the maintainer's 2026-11-12 choice to use fallback results: only navigation pages remain at the root, and one query-reactive fallback can show the game. No game-specific root rows are registered, so `playnite` no longer matches every game's title/subtitle. Fallback results appear in the host-managed **Fallbacks** section by default; an Apps result may remain above them in regular Results. No relative rank is promised.
+
+The fallback only displays one exact, case-insensitive title match among installed games. Uninstalled/unknown-installation records are excluded; a distinct installed duplicate title is ambiguous and yields no row. The row uses the saved game title, subtitle **Open with Playnite**, and the saved icon (neutral fallback while loading/unavailable), without platform/install/source labels. The command force-revalidates the same canonical Playnite ID and installed exact-title match before using the existing URI launch path. Partial, ambiguous, stale, malformed, or incomplete matches fail closed. This is a conservative single result, not a multi-game root list or a ranking provider.
+
+Historical note: the earlier root implementation and duplicate-row startup investigation are preserved in [ADR-012](DECISIONS.md#adr-012-catalog-backed-top-level-game-commands) and the previous commits. The initial root-row timing hypothesis was source-supported but not proven as the user's installed-host cause. The new fallback-only path removes those per-game root rows, so the old root duplicate retest is no longer an acceptance gate; current fallback icon/placement/launch behavior still requires desktop testing. The separate app-looking screenshot row is not modified or suppressed.
+
+## Duplicate-row startup finding (historical; root design superseded)
+
+In the inspected PowerToys v0.102.3101 source, [initial provider registration appends its loaded snapshot](https://github.com/microsoft/PowerToys/blob/e84973c4f3724eeedd34d836559dac32734c3e22/src/modules/cmdpal/Microsoft.CmdPal.UI.ViewModels/TopLevelCommandManager.cs#L462-L514), while a [provider change separately removes/reinserts that provider's rows](https://github.com/microsoft/PowerToys/blob/e84973c4f3724eeedd34d836559dac32734c3e22/src/modules/cmdpal/Microsoft.CmdPal.UI.ViewModels/TopLevelCommandManager.cs#L153-L206). That made a startup timing race plausible for the earlier root design, but did not prove the maintainer's installed version/cause. The `f954d9e` fix prepared root commands before first registration and passed its Windows CI/CodeQL. Per-game root rows are now removed by ADR-013, so this source-level theory is historical only.
+
+## `playnite` query and fallback boundaries
+
+The inspected host [search page](https://github.com/microsoft/PowerToys/blob/e84973c4f3724eeedd34d836559dac32734c3e22/src/modules/cmdpal/Microsoft.CmdPal.UI.ViewModels/Commands/MainListPage.cs) and [ranker](https://github.com/microsoft/PowerToys/blob/e84973c4f3724eeedd34d836559dac32734c3e22/src/modules/cmdpal/Microsoft.CmdPal.UI.ViewModels/Commands/MainListRanker.cs) score top-level items by title, subtitle, alias, and extension display name. The older per-game root commands therefore matched `playnite` through their **Open with Playnite** subtitle and the extension's **Playnite** display name. The current implementation removes per-game root commands and uses the supported fallback query callback instead; its matcher searches only installed exact game titles. Navigation rows remain the only PlayniteCmdPal root items.
+
+In PowerToys v0.102.3101, [`SafeUpdateFallbackTextSynchronous`](https://github.com/microsoft/PowerToys/blob/e84973c4f3724eeedd34d836559dac32734c3e22/src/modules/cmdpal/Microsoft.CmdPal.UI.ViewModels/TopLevelViewModel.cs#L417-L465) rejects non-fallback items, then calls `IFallbackHandler.UpdateQuery` on a fallback. This is the query-aware API used here, not a way to inject or reorder arbitrary top-level results. The inspected host source shows fallback results are distinct from normal Results by default; actual installed-host coexistence/rank and whether the result is visible with another provider's match still need a Windows retest.
 
 ## Market
 

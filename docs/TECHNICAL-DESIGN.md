@@ -1,7 +1,7 @@
 # Technical Design
 
 **Status:** Generated CmdPal template build and local deployment validated on Windows. The running- and closed-instance launch URI smoke tests passed. The catalog adapter/bridge implementation is present. Windows CI and CodeQL passed, and the maintainer reports successful packaging and real Playnite library checks; see [Catalog Bridge](CATALOG-BRIDGE.md) for the evidence and remaining gaps.
-**Last reviewed:** 2026-11-11.
+**Last reviewed:** 2026-11-12.
 
 ## Current generated-template baseline
 
@@ -60,6 +60,16 @@ Playnite remains the source of truth for game identity, library metadata, and la
 - Deterministic rank order: exact match, prefix match, word-prefix match, substring match; stable ordinal tie-breaks include source, install state, icon reference, and platform. `GameEntry.Platform` carries the optional platform label separately from source.
 - Handle duplicate display names and empty query/catalog explicitly.
 - Keep search logic independently unit-testable.
+
+### Installed-game fallback result (WERD-86)
+
+The provider's `TopLevelCommands()` contains only Search games, Favorites, and Recently played games. It returns one stable `FallbackCommandItem` from `FallbackCommands()` and updates that item's title, command, and icon for the current query. The pinned SDK has a query callback on fallback items, but no provider-level method for injecting query-aware root results. The implementation does not put per-game commands in the root list or copy every game into separate fallback registrations.
+
+The fallback uses `InstalledGameMatch` to scan the healthy catalog and find one unique case-insensitive exact title after trimming the query. Only `IsInstalled == true` is eligible. Uninstalled or unknown-installation entries are excluded; they do not make a same-title installed entry ambiguous. Two installed IDs with the same exact title are ambiguous and produce no direct-launch row. Invalid IDs, conflicting duplicate records, partial/unhealthy catalogs, and stale data fail closed. Existing Search games/Favorites/Recently played pages retain their broader browsing behavior.
+
+The fallback's visible title is the saved game title, its subtitle is only **Open with Playnite**, and its icon is the saved Playnite game icon or neutral fallback. No source, platform, install-state, or `PC` label is appended. `ArtworkIconLoader` resolves the icon reference asynchronously, outside the synchronous host query callback. Icon failure does not disable a valid result; a query change, launch, or disposal cancels/version-guards obsolete image work. Repeated or overlapping query callbacks cannot publish stale titles/icons, and SDK property notifications run outside the state lock so a host listener can re-enter safely.
+
+Before launching, force-refresh the snapshot and require that the same canonical ID is still the unique exact-title match among installed games. Invocation cannot retarget another same-title ID. Dispatch reuses `LaunchGameCommand` and the stable `playnite://playnite/start/{id}` URI. The host owns placement: by default the result appears in the separate **Fallbacks** section, while an Apps match may remain in regular Results above it. The extension does not promote fallbacks, modify other providers, or promise adjacency. See [the global-search design and installed-host checklist](CMDPAL-GLOBAL-SEARCH.md).
 
 ## Playnite launch integration
 
