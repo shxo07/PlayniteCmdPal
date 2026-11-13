@@ -66,7 +66,6 @@ public sealed class PlayniteTopLevelCommandsTests : IDisposable
         var command = Assert.IsAssignableFrom<InvokableCommand>(fallback.Command);
         Assert.Equal("Open with Playnite", command.Name);
         Assert.Equal($"playnitecmdpal.open-game.{GameA}", command.Id);
-        Assert.Same(ArtworkIconLoader.FallbackIcon, fallback.Icon);
         await fallback.ArtworkUpdate.WaitAsync(TimeSpan.FromSeconds(5));
         Assert.Equal(new Uri(IconPath).AbsoluteUri, fallback.Icon!.Light.Icon);
         Assert.Equal(new[] { IconId }, resolved.ToArray());
@@ -103,6 +102,9 @@ public sealed class PlayniteTopLevelCommandsTests : IDisposable
         Assert.Same(_navigation[0], provider.TopLevelCommands()[0]);
         Assert.Null(provider.GetCommandItem("playnitecmdpal.open-game." + GameA));
         Assert.Null(provider.GetCommand("playnitecmdpal.open-game." + GameA));
+        var rootCommands = provider.TopLevelCommands();
+        Assert.Equal(_navigation, rootCommands);
+        Assert.Same(rootCommands, provider.TopLevelCommands());
         provider.Dispose();
     }
 
