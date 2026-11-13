@@ -35,7 +35,7 @@ internal sealed partial class PlayniteGameFallback : FallbackCommandItem, IDispo
         ArgumentNullException.ThrowIfNull(catalog);
         _directLaunch = new PlayniteDirectLaunch(catalog);
         _launch = launch ?? (id => new LaunchGameCommand(id).Invoke());
-        _artwork = artwork ?? new ArtworkIconLoader(PlayniteCatalogAdapter.ResolveArtworkPath);
+        _artwork = artwork ?? new ArtworkIconLoader(id => PlayniteCatalogAdapter.ResolveArtworkPath(id));
         Volatile.Write(ref _state, new FallbackState(
             string.Empty,
             string.Empty,
