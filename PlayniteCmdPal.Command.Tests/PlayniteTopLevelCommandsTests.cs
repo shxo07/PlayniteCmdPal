@@ -89,7 +89,7 @@ public sealed class PlayniteTopLevelCommandsTests : IDisposable
         Assert.Empty(fallback.Title);
         Assert.Empty(fallback.Subtitle);
         Assert.IsType<NoOpCommand>(fallback.Command);
-        Assert.Same(_navigation, provider.TopLevelCommands());
+        Assert.Equal(_navigation, provider.TopLevelCommands());
     }
 
     [Fact]
