@@ -143,4 +143,39 @@ public sealed class CatalogFilterStateTests
         state.UpdateCatalog(Catalog);
         return state;
     }
+
+    [Fact]
+    public void RestoredSelectionsSurviveUntilCatalogOptionsAreLoadedAndCanBeCapturedAgain()
+    {
+        var state = new CatalogFilterState();
+        var saved = new CatalogFilterSelection([false], ["Steam"], ["PC"]);
+
+        state.RestoreSelections(saved);
+        Assert.False(state.ToSearchFilters().IsInstalled);
+        Assert.Equal(new[] { "Steam" }, state.SelectedSources);
+        Assert.Equal(new[] { "PC" }, state.SelectedPlatforms);
+
+        state.UpdateCatalog(Catalog);
+
+        var captured = state.CaptureSelections();
+        Assert.Equal(new[] { false }, captured.InstalledStatuses);
+        Assert.Equal(new[] { "Steam" }, captured.Sources);
+        Assert.Equal(new[] { "PC" }, captured.Platforms);
+    }
+
+    [Fact]
+    public void SelectionChangesNotifyPersistenceListenerButNoOpChangesDoNot()
+    {
+        var state = CreateState();
+        var notifications = 0;
+        state.FilterSelectionsChanged += (_, _) => notifications++;
+
+        state.SetSources(["Steam"]);
+        state.SetSources(["steam"]);
+        state.SetInstalledStatuses([false]);
+        state.ClearPlatforms();
+        state.ClearAll();
+
+        Assert.Equal(3, notifications);
+    }
 }
