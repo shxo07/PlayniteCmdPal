@@ -38,6 +38,8 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
         // (artwork loading, deferred favorites refresh) can be marshaled back
         // to the UI thread where the Command Palette host processes them.
         _uiContext = SynchronizationContext.Current;
+        _filterState.RestoreSelections(CatalogFilterPreferences.Load());
+        _filterState.FilterSelectionsChanged += OnFilterSelectionsChanged;
         _filtersPage = new FiltersPage(_filterState, () => BeginSearch());
 
         Icon = IconHelpers.FromRelativePath("Assets\\StoreLogo.png");
@@ -315,7 +317,7 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
             mode,
             query,
             favoriteIds,
-            mode == PlayniteLibraryViewMode.Search ? _filterState.ToSearchFilters() : null);
+            _filterState.ToSearchFilters());
 
         if (matches.Count == 0)
         {
@@ -493,8 +495,7 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
             CreatePlayniteLibraryViewModeItem(PlayniteLibraryViewMode.RecentlyPlayed),
             CreatePlayniteLibraryViewModeItem(PlayniteLibraryViewMode.Favorites),
         };
-        if (mode == PlayniteLibraryViewMode.Search)
-            items.Add(CreateFiltersItem());
+        items.Add(CreateFiltersItem());
         return items;
     }
 
@@ -515,13 +516,28 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
             _ => ArtworkIconLoader.FallbackIcon,
         };
 
+        var isActive = _viewMode == mode;
         return new ListItem(new SwitchViewCommand(this, mode))
         {
-            Title = title,
-            Subtitle = _viewMode == mode ? "Current view" : "Switch view",
+            // ListItem exposes plain-text titles rather than font-weight/inline styling.
+            // Mathematical bold glyphs provide a stronger active label, while the heavy
+            // rule on its right is an in-row state marker (not the host's focus outline).
+            Title = isActive ? $"{ToBoldLabel(title)}  ━━━" : title,
+            Subtitle = isActive ? "Current view" : "Switch view",
             Icon = icon,
         };
     }
+
+    private static string ToBoldLabel(string value) =>
+        string.Concat(value.Select(character => character switch
+        {
+            >= 'A' and <= 'Z' => char.ConvertFromUtf32(0x1D400 + character - 'A'),
+            >= 'a' and <= 'z' => char.ConvertFromUtf32(0x1D41A + character - 'a'),
+            _ => character.ToString(),
+        }));
+
+    private void OnFilterSelectionsChanged(object? sender, EventArgs e) =>
+        CatalogFilterPreferences.Save(_filterState.CaptureSelections());
 
     private ListItem CreateFiltersItem()
     {
@@ -556,6 +572,7 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
 
         _recentRefreshTimer.Dispose();
         _filtersPage.Dispose();
+        _filterState.FilterSelectionsChanged -= OnFilterSelectionsChanged;
     }
 
     private sealed partial class SwitchViewCommand : InvokableCommand
