@@ -132,10 +132,15 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
                 return;
         }
 
-        BeginSearch();
+        // Keep the populated list visible while polling; the previous Recently Played
+        // page refreshed in the background without replacing results with a loading row.
+        BeginSearch(preserveItems: true);
     }
 
-    private void BeginSearch(bool forceRefresh = false, string? searchText = null)
+    private void BeginSearch(
+        bool forceRefresh = false,
+        string? searchText = null,
+        bool preserveItems = false)
     {
         int version;
         string query;
@@ -162,14 +167,22 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
             mode = _viewMode;
             cancellationToken = _searchCancellation.Token;
 
-            var loadingItems = CreateViewItems(mode);
-            loadingItems.Add(CreateStatusItem("Searching your Playnite library…"));
-            _items = loadingItems.ToArray();
-            count = _items.Length;
+            if (!preserveItems)
+            {
+                var loadingItems = CreateViewItems(mode);
+                loadingItems.Add(CreateStatusItem("Searching your Playnite library…"));
+                _items = loadingItems.ToArray();
+                count = _items.Length;
+            }
         }
 
         // Notify outside the request lock: the host may synchronously re-enter GetItems.
-        RaiseItemsChangedOnUIContext(count);
+        // A timer-driven refresh deliberately leaves the current list untouched until
+        // the refreshed snapshot is ready, avoiding a periodic loading-state flicker.
+        if (!preserveItems)
+        {
+            RaiseItemsChangedOnUIContext(count);
+        }
         _ = LoadItemsAsync(version, query, mode, forceRefresh, cancellationToken);
     }
 
