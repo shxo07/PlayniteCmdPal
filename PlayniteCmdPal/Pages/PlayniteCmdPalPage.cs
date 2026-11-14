@@ -27,7 +27,7 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
     // Keep command/item identities stable across catalog refreshes. Command Palette can
     // then retain the selected row when RaiseItemsChanged rebinds the list.
     private readonly Dictionary<PlayniteLibraryViewMode, ListItem> _viewModeItems = [];
-    private readonly Dictionary<string, ListItem> _gameItemsById = new(StringComparer.Ordinal);
+    private readonly KeyedItemCache<ListItem> _gameItemsById = new();
     private ListItem? _filtersItem;
     private readonly PlayniteLibraryNavigationState _navigation = new();
     private readonly PlayniteLibraryRequestCoordinator _requests = new();
@@ -299,6 +299,10 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
             items.Add(CreateStatusItem($"{catalog.SkippedRecordCount} invalid catalog entr{(catalog.SkippedRecordCount == 1 ? "y was" : "ies were")} skipped."));
         }
 
+        // The catalog snapshot is authoritative when available. Prune rows for games
+        // removed from Playnite, but keep cached rows across searches and view switches.
+        _gameItemsById.RetainKeys(catalog.Games.Select(game => game.GameId));
+
         if (catalog.Games.Count == 0)
         {
             var emptyMessage = mode switch
@@ -402,14 +406,12 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
                 metadata.Add($"ID {game.GameId[..8]}");
             }
 
-            if (!_gameItemsById.TryGetValue(game.GameId, out var item))
-            {
-                item = new ListItem(new LaunchGameCommand(game.GameId))
+            var item = _gameItemsById.GetOrAdd(
+                game.GameId,
+                () => new ListItem(new LaunchGameCommand(game.GameId))
                 {
                     Icon = ArtworkIconLoader.FallbackIcon,
-                };
-                _gameItemsById.Add(game.GameId, item);
-            }
+                });
 
             // Update the existing row instead of replacing it. Its command identity remains
             // stable, allowing the host to preserve selection across list refreshes.
