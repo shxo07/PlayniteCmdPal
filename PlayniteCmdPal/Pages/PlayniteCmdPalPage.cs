@@ -209,6 +209,13 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
                 _artwork.Invalidate();
             }
 
+            // Reading favorites takes a cross-process file lock. Keep that I/O outside
+            // the page request lock so GetItems() and view changes are never blocked by it.
+            var favoriteIds = mode == PlayniteLibraryViewMode.Favorites
+                ? _favorites.GetFavoriteIds()
+                : Array.Empty<string>();
+            cancellationToken.ThrowIfCancellationRequested();
+
             (IListItem[] Items, IReadOnlyList<(ListItem Item, GameEntry Game)> ArtworkItems) built;
             lock (_requestGate)
             {
@@ -224,7 +231,7 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
                     _filterState.UpdateCatalog(catalog.Games);
                 }
 
-                built = BuildItems(catalog, query, mode);
+                built = BuildItems(catalog, query, mode, favoriteIds);
                 _items = built.Items;
                 count = _items.Length;
             }
@@ -260,7 +267,8 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
     private (IListItem[] Items, IReadOnlyList<(ListItem Item, GameEntry Game)> ArtworkItems) BuildItems(
         CatalogReadResult catalog,
         string query,
-        PlayniteLibraryViewMode mode)
+        PlayniteLibraryViewMode mode,
+        IReadOnlyCollection<string> favoriteIds)
     {
         var items = CreateViewItems(mode);
         if (!catalog.IsAvailable)
@@ -284,10 +292,6 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
         {
             items.Add(CreateStatusItem($"{catalog.SkippedRecordCount} invalid catalog entr{(catalog.SkippedRecordCount == 1 ? "y was" : "ies were")} skipped."));
         }
-
-        var favoriteIds = mode == PlayniteLibraryViewMode.Favorites
-            ? _favorites.GetFavoriteIds()
-            : Array.Empty<string>();
 
         if (catalog.Games.Count == 0)
         {
