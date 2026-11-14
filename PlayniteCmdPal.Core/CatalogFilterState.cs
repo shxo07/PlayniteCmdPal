@@ -162,6 +162,25 @@ public sealed class CatalogFilterState
     public void SetPlatforms(IEnumerable<string>? platforms) =>
         SetValues(_selectedPlatforms, platforms, isSource: false);
 
+    public bool ToggleInstalledStatus(bool status)
+    {
+        bool changed;
+        lock (_gate)
+        {
+            if (!_installedStatuses.Add(status))
+                changed = _installedStatuses.Remove(status);
+            else
+                changed = true;
+        }
+
+        if (changed)
+            FilterSelectionsChanged?.Invoke(this, EventArgs.Empty);
+        return changed;
+    }
+
+    public bool ToggleSource(string source) => ToggleValue(_selectedSources, source, _sources);
+    public bool TogglePlatform(string platform) => ToggleValue(_selectedPlatforms, platform, _platforms);
+
     public void ClearInstalledStatuses() => SetInstalledStatuses([]);
     public void ClearSources() => SetSources([]);
     public void ClearPlatforms() => SetPlatforms([]);
@@ -215,6 +234,29 @@ public sealed class CatalogFilterState
         foreach (var value in stale)
             selected.Remove(value);
         return stale.Length > 0;
+    }
+
+    private bool ToggleValue(HashSet<string> target, string value, IReadOnlyCollection<string> available)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return false;
+
+        bool changed;
+        lock (_gate)
+        {
+            var canonical = available.FirstOrDefault(option =>
+                string.Equals(option, value.Trim(), StringComparison.OrdinalIgnoreCase));
+            if (canonical is null)
+                return false;
+
+            changed = !target.Add(canonical);
+            if (changed)
+                target.Remove(canonical);
+        }
+
+        if (changed)
+            FilterSelectionsChanged?.Invoke(this, EventArgs.Empty);
+        return changed;
     }
 
     private void SetValues(HashSet<string> target, IEnumerable<string>? values, bool isSource)
