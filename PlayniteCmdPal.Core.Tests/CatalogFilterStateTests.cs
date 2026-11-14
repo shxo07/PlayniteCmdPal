@@ -163,6 +163,23 @@ public sealed class CatalogFilterStateTests
     }
 
     [Fact]
+    public void CapturedSelectionArraysAreDetachedFromMutableState()
+    {
+        var state = CreateState();
+        state.SetSources(["Steam"]);
+        state.SetPlatforms(["PC"]);
+
+        var captured = state.CaptureSelections();
+        captured.Sources[0] = "Changed";
+        captured.Platforms[0] = "Changed";
+        captured.InstalledStatuses[0] = false;
+
+        Assert.Equal(new[] { "Steam" }, state.SelectedSources);
+        Assert.Equal(new[] { "PC" }, state.SelectedPlatforms);
+        Assert.Equal(new[] { true }, state.InstalledStatuses);
+    }
+
+    [Fact]
     public void SelectionNotificationsAreRaisedOutsideTheStateLock()
     {
         var state = CreateState();
