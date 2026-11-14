@@ -494,23 +494,16 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
 
     private List<IListItem> CreateViewItems(PlayniteLibraryViewMode mode)
     {
-        // Command Palette's native blue selection rail belongs to the host-selected
-        // list row (normally the first row), not to a page's semantic "current view".
-        // Put the active view first so the host's built-in selection treatment appears
-        // on that row without drawing a custom accent or changing its typography.
-        var modes = new[]
-        {
-            PlayniteLibraryViewMode.Search,
-            PlayniteLibraryViewMode.RecentlyPlayed,
-            PlayniteLibraryViewMode.Favorites,
-        };
-        var items = modes
-            .OrderBy(mode => mode == _viewMode ? 0 : 1)
-            .Select(CreatePlayniteLibraryViewModeItem)
-            .Cast<IListItem>()
-            .ToList();
-        items.Add(CreateFiltersItem());
-        return items;
+        // Keep the view selector order stable. The extension SDK does not expose
+        // the host ListView's SelectedItem/SelectedIndex, so the semantic active view
+        // cannot drive the native keyboard-selection accent from this page.
+        return
+        [
+            CreatePlayniteLibraryViewModeItem(PlayniteLibraryViewMode.Search),
+            CreatePlayniteLibraryViewModeItem(PlayniteLibraryViewMode.RecentlyPlayed),
+            CreatePlayniteLibraryViewModeItem(PlayniteLibraryViewMode.Favorites),
+            CreateFiltersItem(),
+        ];
     }
 
     private ListItem CreatePlayniteLibraryViewModeItem(PlayniteLibraryViewMode mode)
