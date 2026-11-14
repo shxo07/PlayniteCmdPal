@@ -146,7 +146,7 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
         string query;
         PlayniteLibraryViewMode mode;
         CancellationToken cancellationToken;
-        int count;
+        int count = 0;
 
         lock (_requestGate)
         {
