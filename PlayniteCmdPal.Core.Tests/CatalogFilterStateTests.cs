@@ -137,6 +137,75 @@ public sealed class CatalogFilterStateTests
         Assert.Equal(0, state.ActiveFilterCount);
     }
 
+    [Fact]
+    public void SelectionNotificationsAreRaisedOutsideTheStateLock()
+    {
+        var state = CreateState();
+        state.FilterSelectionsChanged += (_, _) =>
+        {
+            // If the callback ran while the state lock was held by this thread, this
+            // independent reader could not complete until the callback returned.
+            var read = Task.Run(state.CaptureSelections);
+            Assert.True(read.Wait(TimeSpan.FromSeconds(2)));
+        };
+
+        state.SetSources(["Steam"]);
+    }
+
+    [Fact]
+    public async Task ConcurrentCatalogRefreshAndSelectionChangesRemainConsistent()
+    {
+        var state = CreateState();
+        var failures = new System.Collections.Concurrent.ConcurrentQueue<Exception>();
+
+        var catalogUpdates = Task.Run(() =>
+        {
+            try
+            {
+                for (var i = 0; i < 500; i++)
+                {
+                    state.UpdateCatalog(i % 2 == 0
+                        ? Catalog
+                        : [new GameEntry("other", "Other", "GOG", true, Platform: "Linux")]);
+                    _ = state.CaptureSelections();
+                    _ = state.ToSearchFilters();
+                }
+            }
+            catch (Exception exception)
+            {
+                failures.Enqueue(exception);
+            }
+        });
+
+        var selectionUpdates = Task.Run(() =>
+        {
+            try
+            {
+                for (var i = 0; i < 500; i++)
+                {
+                    state.SetSources(i % 2 == 0 ? ["Steam"] : ["GOG"]);
+                    state.SetPlatforms(i % 2 == 0 ? ["PC"] : ["Linux"]);
+                    state.SetInstalledStatuses(i % 2 == 0 ? [true] : [false]);
+                    _ = state.ActiveFilterCount;
+                    _ = state.SelectedSources.ToArray();
+                    _ = state.SelectedPlatforms.ToArray();
+                }
+            }
+            catch (Exception exception)
+            {
+                failures.Enqueue(exception);
+            }
+        });
+
+        await Task.WhenAll(catalogUpdates, selectionUpdates);
+
+        Assert.Empty(failures);
+        var snapshot = state.CaptureSelections();
+        Assert.NotNull(snapshot.InstalledStatuses);
+        Assert.NotNull(snapshot.Sources);
+        Assert.NotNull(snapshot.Platforms);
+    }
+
     private static CatalogFilterState CreateState()
     {
         var state = new CatalogFilterState();
