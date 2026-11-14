@@ -18,5 +18,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\PlayniteCmdPal.Core\PlayniteCmdPal.Core.csproj" />
+    <Compile Include="..\PlayniteCmdPal\CatalogFilterPreferences.cs" Link="CatalogFilterPreferences.cs" />
   </ItemGroup>
 </Project>
