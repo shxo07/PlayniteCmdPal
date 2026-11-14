@@ -24,6 +24,11 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
     private readonly SynchronizationContext? _uiContext;
     private readonly FiltersPage _filtersPage;
     private IListItem[] _items = [CreateStatusItem("Loading your Playnite library…")];
+    // Keep command/item identities stable across catalog refreshes. Command Palette can
+    // then retain the selected row when RaiseItemsChanged rebinds the list.
+    private readonly Dictionary<PlayniteLibraryViewMode, ListItem> _viewModeItems = [];
+    private readonly Dictionary<string, ListItem> _gameItemsById = new(StringComparer.Ordinal);
+    private ListItem? _filtersItem;
     private readonly PlayniteLibraryNavigationState _navigation = new();
     private readonly PlayniteLibraryRequestCoordinator _requests = new();
     private readonly System.Timers.Timer _recentRefreshTimer;
@@ -105,7 +110,7 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
 
     internal void RefreshCatalog()
     {
-        BeginSearch(forceRefresh: true);
+        BeginSearch(forceRefresh: true, preserveItems: true);
     }
 
     internal IContextItem CreateRefreshContextItem() =>
@@ -119,7 +124,9 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
                 return;
         }
 
-        BeginSearch();
+        // Keep the currently focused selector row in the list while the new view loads.
+        // The final result set reuses the same selector/game item instances as well.
+        BeginSearch(preserveItems: true);
     }
 
     private void RefreshRecentlyPlayedView()
@@ -395,20 +402,27 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
                 metadata.Add($"ID {game.GameId[..8]}");
             }
 
-            var item = new ListItem(new LaunchGameCommand(game.GameId))
+            if (!_gameItemsById.TryGetValue(game.GameId, out var item))
             {
-                Title = game.Title,
-                Subtitle = string.Join(" · ", metadata),
-                Icon = ArtworkIconLoader.FallbackIcon,
-                Tags = mode == PlayniteLibraryViewMode.RecentlyPlayed && game.LastActivity.HasValue
-                    ? [new Tag(RecentlyPlayedGames.FormatRelativeLastPlayed(game.LastActivity.Value, DateTimeOffset.UtcNow))]
-                    : [],
-                MoreCommands =
-                [
-                    new CommandContextItem(new ShowGameDetailsCommand(game.GameId)),
-                    new CommandContextItem(new ToggleFavoriteCommand(_favorites, game.GameId)),
-                ],
-            };
+                item = new ListItem(new LaunchGameCommand(game.GameId))
+                {
+                    Icon = ArtworkIconLoader.FallbackIcon,
+                };
+                _gameItemsById.Add(game.GameId, item);
+            }
+
+            // Update the existing row instead of replacing it. Its command identity remains
+            // stable, allowing the host to preserve selection across list refreshes.
+            item.Title = game.Title;
+            item.Subtitle = string.Join(" · ", metadata);
+            item.Tags = mode == PlayniteLibraryViewMode.RecentlyPlayed && game.LastActivity.HasValue
+                ? [new Tag(RecentlyPlayedGames.FormatRelativeLastPlayed(game.LastActivity.Value, DateTimeOffset.UtcNow))]
+                : [];
+            item.MoreCommands =
+            [
+                new CommandContextItem(new ShowGameDetailsCommand(game.GameId)),
+                new CommandContextItem(new ToggleFavoriteCommand(_favorites, game.GameId)),
+            ];
 
             items.Add(item);
             artworkItems.Add((item, game));
@@ -520,13 +534,18 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
             _ => ArtworkIconLoader.FallbackIcon,
         };
 
-        var isActive = _navigation.Capture().ViewMode == mode;
-        return new ListItem(new SwitchViewCommand(this, mode))
+        if (!_viewModeItems.TryGetValue(mode, out var item))
         {
-            Title = title,
-            Subtitle = isActive ? "Current view" : string.Empty,
-            Icon = icon,
-        };
+            item = new ListItem(new SwitchViewCommand(this, mode))
+            {
+                Title = title,
+                Icon = icon,
+            };
+            _viewModeItems.Add(mode, item);
+        }
+
+        item.Subtitle = _navigation.Capture().ViewMode == mode ? "Current view" : string.Empty;
+        return item;
     }
 
     private void OnFilterSelectionsChanged(object? sender, EventArgs e)
@@ -549,12 +568,13 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
     private ListItem CreateFiltersItem()
     {
         var count = _filterState.ActiveFilterCount;
-        return new ListItem(_filtersPage)
+        _filtersItem ??= new ListItem(_filtersPage)
         {
-            Title = count == 0 ? "Filters" : $"Filters ({count})",
-            Subtitle = count == 0 ? "Installed status · source · platform" : "Active · Select to edit",
             Icon = new IconInfo("\uE71C"),
         };
+        _filtersItem.Title = count == 0 ? "Filters" : $"Filters ({count})";
+        _filtersItem.Subtitle = count == 0 ? "Installed status · source · platform" : "Active · Select to edit";
+        return _filtersItem;
     }
 
     private static ListItem CreateStatusItem(string message) =>
