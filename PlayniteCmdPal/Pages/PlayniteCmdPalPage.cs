@@ -27,7 +27,7 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
     private CancellationTokenSource? _searchCancellation;
     private string _searchText = string.Empty;
     private PlayniteLibraryViewMode _viewMode = PlayniteLibraryViewMode.Search;
-    private readonly Timer _recentRefreshTimer;
+    private readonly System.Timers.Timer _recentRefreshTimer;
     private int _requestVersion;
     private readonly object _requestGate = new();
     private bool _disposed;
@@ -62,11 +62,12 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
         _favoritesChangedHandler = weakHandler;
         _favorites.FavoritesChanged += _favoritesChangedHandler;
 
-        _recentRefreshTimer = new Timer(
-            _ => RefreshRecentlyPlayedView(),
-            null,
-            dueTime: TimeSpan.FromSeconds(10),
-            period: TimeSpan.FromSeconds(10));
+        _recentRefreshTimer = new System.Timers.Timer(TimeSpan.FromSeconds(10).TotalMilliseconds)
+        {
+            AutoReset = true,
+        };
+        _recentRefreshTimer.Elapsed += (_, _) => RefreshRecentlyPlayedView();
+        _recentRefreshTimer.Start();
         BeginSearch();
     }
 
