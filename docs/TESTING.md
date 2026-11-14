@@ -42,6 +42,7 @@ Test data is generated in the test process and written to a temporary directory 
 | `CatalogFilterStateTests` | Independent filter dimensions, canonicalization, stale-option pruning, detached snapshots, atomic toggles, notifications outside the state lock, and concurrent catalog/selection access. |
 | `CatalogFilterPreferencesTests` | Real file save/load round trips, restoration into a fresh filter state after catalog load, first-run defaults, corrupt and partial JSON recovery, and failed atomic writes without temporary-file leakage. |
 | `PlayniteLibraryNavigationStateTests` | Initial Search state, view switching, preservation of shared search text across Recently Played/Favorites, no-op switches, and invalid view rejection. |
+| `PlayniteLibraryRequestCoordinatorTests` | New requests cancel and invalidate prior view/search/artwork leases; disposal cancels the current request and rejects future requests. |
 | `PlayniteGameFallbackTests` | Actual fallback-handler callback and title/action, exact/partial/no-match/installed-title ambiguity, installed/uninstalled duplicate policy, stable-ID revalidation, retained command/query/invocation/disposal races, read/launch failures, async saved-icon property notification, neutral icon behavior, cover exclusion, obsolete icon cancellation, and cross-thread/reentrant property changes. All catalog data, artwork, and dispatch are synthetic. |
 
 ### Global direct-launch policy (WERD-86)
