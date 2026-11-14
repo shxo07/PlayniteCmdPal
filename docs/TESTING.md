@@ -2,7 +2,7 @@
 
 This page explains what is tested, where each check runs, and how to run it. For installing the toolchain and deploying the extension, see [Developer Setup](DEVELOPER-SETUP.md).
 
-**WERD-86 fallback-results change (2026-11-12):** the selected design keeps only navigation in `TopLevelCommands()` and uses one query-reactive installed-game fallback with saved icon. The current-head Windows CI and CodeQL are required in [PR #37's checks](https://github.com/werdscopez7347/PlayniteCmdPal/pull/37/checks); those outcomes will be recorded after this change is pushed. The earlier root implementation and duplicate-startup fix are historical, superseded by the fallback-only design, and not a current acceptance gate. Installed-host fallback placement/coexistence, icon rendering/lifecycle, and actual game launch remain manual checks in [the investigation](CMDPAL-GLOBAL-SEARCH.md#tests-and-manual-verification). This Linux workspace has no local .NET/Windows host execution.
+**WERD-85 unified navigation (2026-11-14):** the provider now exposes exactly one Playnite top-level command. Search games, Recently played, and Favorites are view modes inside one page; automated CI and installed-host keyboard/UI verification are required on the final head. The installed-game fallback remains a separate host-managed fallback result. The current-head Windows CI and CodeQL are required in [PR #37's checks](https://github.com/werdscopez7347/PlayniteCmdPal/pull/37/checks); those outcomes will be recorded after this change is pushed. The earlier root implementation and duplicate-startup fix are historical, superseded by the fallback-only design, and not a current acceptance gate. Installed-host fallback placement/coexistence, icon rendering/lifecycle, and actual game launch remain manual checks in [the investigation](CMDPAL-GLOBAL-SEARCH.md#tests-and-manual-verification). This Linux workspace has no local .NET/Windows host execution.
 
 **Prior verification context (2026-11-11):** Automated coverage is synthetic and runs without Playnite, PowerToys, a personal game library, or secrets. The latest previously verified Windows CI and CodeQL runs are the WERD-80 runs ([CI run 42948025706](https://github.com/shxo07/PlayniteCmdPal/actions/runs/42948025706), [CodeQL run 42948025712](https://github.com/shxo07/PlayniteCmdPal/actions/runs/42948025712)); they predate later changes and do not validate this WERD-86 revision. The separate WERD-74 validation gate in the earlier note is historical; current WERD-86 CI/CodeQL requirements are listed above. The test commands below are executed by `scripts/ci.ps1`. The user previously confirmed the populated Recently Played list and relative badges in 0.0.7.0; the 0.0.8.0 tooltip-removal build still needs installation verification. See the verification evidence section of [Developer Setup](DEVELOPER-SETUP.md) for the evidence trail and its limits.
 
@@ -37,7 +37,7 @@ Test data is generated in the test process and written to a temporary directory 
 |---|---|
 | `ToggleFavoriteCommandTests` | Successful and failed pin/unpin invocations return `CommandResult.KeepOpen()`; the notification is displayed separately, preserving the current page stack and query. |
 | `LaunchGameCommandTests` | Exact canonical-ID URI and shell-dispatch options, invalid-ID rejection without dispatch, and actionable process/URI-handler failure feedback. |
-| `PlayniteTopLevelCommandsTests` | The actual SDK provider exposes only the three navigation items at top level and one cached dynamic fallback. `playnite` does not produce a game row; an exact installed title produces a fallback with the saved icon and **Open with Playnite** only; uninstalled-only titles remain hidden. Also covers stable-ID URI launch and provider lookup. |
+| `PlayniteTopLevelCommandsTests` | The actual SDK provider exposes exactly one unified Playnite navigation item at top level and one cached dynamic fallback. `playnite` does not produce a game row; an exact installed title produces a fallback with the saved icon and **Open with Playnite** only; uninstalled-only titles remain hidden. Also covers stable-ID URI launch and provider lookup. |
 | `PlayniteGameFallbackTests` | Actual fallback-handler callback and title/action, exact/partial/no-match/installed-title ambiguity, installed/uninstalled duplicate policy, stable-ID revalidation, retained command/query/invocation/disposal races, read/launch failures, async saved-icon property notification, neutral icon behavior, cover exclusion, obsolete icon cancellation, and cross-thread/reentrant property changes. All catalog data, artwork, and dispatch are synthetic. |
 
 ### Global direct-launch policy (WERD-86)
@@ -74,13 +74,13 @@ Record the PowerToys version, Windows build, display scaling, and outcome. Do no
 - **Still pending:** Uninstalled-game display; missing/invalid/unreadable/unsupported icon fallback against a real library; changing an icon in Playnite and observing refresh without stale reuse; other supported raster formats; rapid query changes while images load; Favorites lifecycle checks; and 100% / 150% (or higher) display scaling.
 - **Evidence hygiene:** Real game IDs, original file paths, and personal library contents are intentionally not committed. The test above proves one real ICO-backed Steam case only; do not generalize it to every library entry or format.
 
-### Favorites UI smoke test (manual)
+### Unified Playnite page and Favorites UI smoke test (manual)
 
 Run with a local Playnite library and the PowerToys Command Palette extension:
 
-1. Open **Search games**, open a game's More actions, and choose **Pin to favorites**. Confirm the toast appears, **Command Palette stays visible on the same Search Games page with the same query**, and the game is still launchable.
-2. Open **Favorites** without changing its query. Confirm the newly pinned game appears immediately.
-3. Unpin the game from **Favorites**. Confirm the toast appears while **Favorites remains visible with its existing query**, and the game disappears immediately; pin it again from **Search games** and confirm it reappears without closing the palette.
+1. Open the single top-level **Playnite** command. Confirm the page shows Search games, Recently played, and Favorites view selectors without returning to the Command Palette home page.
+2. In **Search games**, open a game's More actions and choose **Pin to favorites**. Confirm the toast appears, the palette stays on the same page with the same query, and the game remains launchable.
+3. Switch to **Favorites** using the in-page selector. Confirm the newly pinned game appears immediately. Unpin it and confirm the toast appears while the unified page remains open and the game disappears immediately; switch back to Search games and pin it again.
 4. Search Favorites for a non-matching title and confirm the no-match state; clear the query and confirm the pinned game returns.
 5. Restart the Command Palette extension and Playnite, then confirm the favorite remains.
 6. Remove a favorited game from the current Playnite library (or test with a known missing ID) and confirm it is hidden from Favorites without deleting its saved preference.
@@ -277,9 +277,9 @@ These are deliberately not automated yet; each needs a Windows host and, in most
 
 ### Recently Played activity refresh
 
-1. Open PlayniteCmdPal's **Recently played games** page and note the current newest entry.
+1. Open the single top-level **Playnite** command and switch to **Recently played** using the in-page selector. Note the current newest entry.
 2. Launch a game from Playnite, close it, and confirm Playnite records a new **Last activity** value.
-3. Leave Recently Played open. Allow up to 30 seconds for the companion plugin's periodic export and adapter revalidation; the page polls its cache every 10 seconds and should update without a full Command Palette reload.
-4. Select the top-level **Recently played games** command and open its **More commands** menu (Ctrl+K); use **Refresh Playnite catalog**. Confirm it refreshes the page. There should be no refresh command attached to individual game or status rows.
+3. Leave Recently played selected. Allow up to 30 seconds for the companion plugin's periodic export and adapter revalidation; the unified page polls its cache every 10 seconds while this view is active and should update without a full Command Palette reload.
+4. Open the unified page's **More commands** menu (Ctrl+K); use the single **Refresh Playnite catalog** action. Confirm it refreshes the current view. There should be no refresh command attached to individual game or status rows.
 5. Confirm game rows show only relative-time badges (`just now`, `N minutes ago`, `N hours ago`, `N days ago`, `N weeks ago`, `N months ago`, or `N years ago`). No absolute date/time, timezone, or hover tooltip should be exposed.
 6. Confirm each Recently Played game row displays the fallback icon immediately, then replaces it with the saved Playnite icon when the artwork is available. Games without a valid saved icon must retain the fallback; cover artwork must not be substituted.

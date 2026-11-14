@@ -18,9 +18,7 @@ public sealed class PlayniteTopLevelCommandsTests : IDisposable
     private const string IconPath = @"C:\artwork\synthetic-installed-icon.png";
     private readonly string _directory = Path.Combine(Path.GetTempPath(), "PlayniteCmdPal.Command.Tests", Guid.NewGuid().ToString("N"));
     private readonly ICommandItem[] _navigation = [
-        new CommandItem(new NoOpCommand()) { Title = "Search games" },
-        new CommandItem(new NoOpCommand()) { Title = "Favorites" },
-        new CommandItem(new NoOpCommand()) { Title = "Recently played games" },
+        new CommandItem(new NoOpCommand()) { Title = "Playnite" },
     ];
     private string SnapshotPath => Path.Combine(_directory, "catalog.json");
 
@@ -48,6 +46,7 @@ public sealed class PlayniteTopLevelCommandsTests : IDisposable
         Assert.True(sdk.Frozen);
         var rootCommands = sdk.TopLevelCommands();
         Assert.Equal(_navigation, rootCommands);
+        Assert.Equal("Playnite", Assert.Single(rootCommands).Title);
         Assert.Same(rootCommands, sdk.TopLevelCommands());
         Assert.Same(sdk.FallbackCommands(), sdk.FallbackCommands());
         var fallback = Assert.IsType<PlayniteGameFallback>(Assert.Single(sdk.FallbackCommands()));
@@ -93,7 +92,7 @@ public sealed class PlayniteTopLevelCommandsTests : IDisposable
     }
 
     [Fact]
-    public void ProviderLookupOnlyResolvesTheThreeStaticNavigationItems()
+    public void ProviderLookupOnlyResolvesTheSingleUnifiedNavigationItem()
     {
         var provider = new PlayniteCmdPalCommandsProvider(
             new StubCatalog(CatalogReadResult.Unavailable(new CatalogIssue(CatalogErrorCode.Missing, "Synthetic missing catalog"))),

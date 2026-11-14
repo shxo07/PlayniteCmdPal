@@ -26,6 +26,8 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
     private IListItem[] _items = [CreateStatusItem("Loading your Playnite library…")];
     private CancellationTokenSource? _searchCancellation;
     private string _searchText = string.Empty;
+    private ViewMode _viewMode = ViewMode.Search;
+    private readonly Timer _recentRefreshTimer;
     private int _requestVersion;
     private readonly object _requestGate = new();
     private bool _disposed;
@@ -60,6 +62,11 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
         _favoritesChangedHandler = weakHandler;
         _favorites.FavoritesChanged += _favoritesChangedHandler;
 
+        _recentRefreshTimer = new Timer(
+            _ => RefreshRecentlyPlayedView(),
+            null,
+            dueTime: TimeSpan.FromSeconds(10),
+            period: TimeSpan.FromSeconds(10));
         BeginSearch();
     }
 
@@ -98,10 +105,40 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
         BeginSearch(forceRefresh: true);
     }
 
+    internal IContextItem CreateRefreshContextItem() =>
+        new CommandContextItem(new RefreshCatalogCommand(this));
+
+    private void SetViewMode(ViewMode mode)
+    {
+        lock (_requestGate)
+        {
+            if (_disposed || _viewMode == mode)
+                return;
+            _viewMode = mode;
+        }
+
+        BeginSearch();
+    }
+
+    private void RefreshRecentlyPlayedView()
+    {
+        if (Volatile.Read(ref _disposed))
+            return;
+
+        lock (_requestGate)
+        {
+            if (_viewMode != ViewMode.RecentlyPlayed)
+                return;
+        }
+
+        BeginSearch();
+    }
+
     private void BeginSearch(bool forceRefresh = false, string? searchText = null)
     {
         int version;
         string query;
+        ViewMode mode;
         CancellationToken cancellationToken;
         int count;
 
@@ -121,6 +158,7 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
 
             version = ++_requestVersion;
             query = _searchText;
+            mode = _viewMode;
             cancellationToken = _searchCancellation.Token;
 
             _items = [CreateFiltersItem(), CreateStatusItem("Searching your Playnite library…")];
@@ -129,12 +167,13 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
 
         // Notify outside the request lock: the host may synchronously re-enter GetItems.
         RaiseItemsChangedOnUIContext(count);
-        _ = LoadItemsAsync(version, query, forceRefresh, cancellationToken);
+        _ = LoadItemsAsync(version, query, mode, forceRefresh, cancellationToken);
     }
 
     private async Task LoadItemsAsync(
         int version,
         string query,
+        ViewMode mode,
         bool forceRefresh,
         CancellationToken cancellationToken)
     {
@@ -169,7 +208,7 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
                     _filterState.UpdateCatalog(catalog.Games);
                 }
 
-                built = BuildItems(catalog, query);
+                built = BuildItems(catalog, query, mode);
                 _items = built.Items;
                 count = _items.Length;
             }
@@ -202,9 +241,19 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
         }
     }
 
-    private (IListItem[] Items, IReadOnlyList<(ListItem Item, GameEntry Game)> ArtworkItems) BuildItems(CatalogReadResult catalog, string query)
+    private (IListItem[] Items, IReadOnlyList<(ListItem Item, GameEntry Game)> ArtworkItems) BuildItems(
+        CatalogReadResult catalog,
+        string query,
+        ViewMode mode)
     {
-        var items = new List<IListItem> { CreateFiltersItem() };
+        var items = new List<IListItem>
+        {
+            CreateViewModeItem(ViewMode.Search),
+            CreateViewModeItem(ViewMode.RecentlyPlayed),
+            CreateViewModeItem(ViewMode.Favorites),
+        };
+        if (mode == ViewMode.Search)
+            items.Add(CreateFiltersItem());
         if (!catalog.IsAvailable)
         {
             var message = catalog.Issue?.Message
@@ -229,24 +278,66 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
 
         if (catalog.Games.Count == 0)
         {
-            items.Add(CreateRefreshItem("Your Playnite library is empty. Add games in Playnite, then refresh."));
+            items.Add(CreateStatusItem("Your Playnite library is empty. Add games in Playnite, then use Refresh Playnite catalog."));
             return (items.ToArray(), Array.Empty<(ListItem Item, GameEntry Game)>());
         }
 
-        var activeFilters = _filterState.ToSearchFilters();
-        var matches = GameSearch.Search(catalog.Games, query, activeFilters);
+        IReadOnlyList<GameEntry> matches;
+        var favoriteIds = mode == ViewMode.Favorites
+            ? _favorites.GetFavoriteIds().ToHashSet(StringComparer.Ordinal)
+            : new HashSet<string>(StringComparer.Ordinal);
+        switch (mode)
+        {
+            case ViewMode.Favorites:
+                matches = GameSearch.Search(catalog.Games.Where(game => favoriteIds.Contains(game.GameId)), query);
+                break;
+            case ViewMode.RecentlyPlayed:
+                var recentGames = RecentlyPlayedGames.Sort(catalog.Games);
+                var recentQuery = query.Trim();
+                matches = string.IsNullOrEmpty(recentQuery)
+                    ? recentGames
+                    : recentGames.Where(game => game.Title.Contains(recentQuery, StringComparison.OrdinalIgnoreCase)).ToArray();
+                break;
+            default:
+                matches = GameSearch.Search(catalog.Games, query, _filterState.ToSearchFilters());
+                break;
+        }
+
         if (matches.Count == 0)
         {
-            var hasActiveFilters = activeFilters.IsInstalled.HasValue
-                || activeFilters.Sources?.Count > 0
-                || activeFilters.Platforms?.Count > 0;
-            var message = hasActiveFilters
-                ? string.IsNullOrWhiteSpace(query)
-                    ? "No games match the selected filters. Clear one or more filters to see more games."
-                    : $"No games match “{query.Trim()}” with the selected filters. Clear a filter or change your search."
-                : string.IsNullOrWhiteSpace(query)
-                    ? "No games are available in the current catalog."
-                    : $"No games match “{query.Trim()}”.";
+            string message;
+            if (mode == ViewMode.Favorites)
+            {
+                message = favoriteIds.Count == 0
+                    ? "No favorites yet. Pin a game from its search result actions."
+                    : "No saved favorites match this search in the current Playnite library.";
+            }
+            else if (mode == ViewMode.RecentlyPlayed)
+            {
+                var recentEmptyState = RecentlyPlayedGames.GetEmptyState(catalog.Games.Count, catalog.SkippedRecordCount);
+                message = recentEmptyState switch
+                {
+                    RecentlyPlayedEmptyState.EmptyLibrary => "Your Playnite library is empty. Add games in Playnite.",
+                    RecentlyPlayedEmptyState.NoUsableRecords => "No usable game records were found. Check the companion plugin and refresh the catalog.",
+                    _ when RecentlyPlayedGames.Sort(catalog.Games).Count == 0 => "No games have a recorded last-played date yet.",
+                    _ => $"No recently played games match “{query.Trim()}”.",
+                };
+            }
+            else
+            {
+                var activeFilters = _filterState.ToSearchFilters();
+                var hasActiveFilters = activeFilters.IsInstalled.HasValue
+                    || activeFilters.Sources?.Count > 0
+                    || activeFilters.Platforms?.Count > 0;
+                message = hasActiveFilters
+                    ? string.IsNullOrWhiteSpace(query)
+                        ? "No games match the selected filters. Clear one or more filters to see more games."
+                        : $"No games match “{query.Trim()}” with the selected filters. Clear a filter or change your search."
+                    : string.IsNullOrWhiteSpace(query)
+                        ? "No games are available in the current catalog."
+                        : $"No games match “{query.Trim()}”.";
+            }
+
             items.Add(CreateStatusItem(message));
             return (items.ToArray(), Array.Empty<(ListItem Item, GameEntry Game)>());
         }
@@ -292,6 +383,13 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
                     new CommandContextItem(new ToggleFavoriteCommand(_favorites, game.GameId)),
                 ],
             };
+            if (mode == ViewMode.RecentlyPlayed && game.LastActivity.HasValue)
+            {
+                item.Tags = [new Tag(RecentlyPlayedGames.FormatRelativeLastPlayed(
+                    game.LastActivity.Value,
+                    DateTimeOffset.UtcNow))];
+            }
+
             items.Add(item);
             artworkItems.Add((item, game));
         }
@@ -371,6 +469,31 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
         }
     }
 
+    private ListItem CreateViewModeItem(ViewMode mode)
+    {
+        var title = mode switch
+        {
+            ViewMode.Search => "Search games",
+            ViewMode.RecentlyPlayed => "Recently played",
+            ViewMode.Favorites => "Favorites",
+            _ => throw new ArgumentOutOfRangeException(nameof(mode)),
+        };
+        var icon = mode switch
+        {
+            ViewMode.Search => new IconInfo("\uE721"),
+            ViewMode.RecentlyPlayed => new IconInfo("\uE823"),
+            ViewMode.Favorites => new IconInfo("\uE734"),
+            _ => ArtworkIconLoader.FallbackIcon,
+        };
+
+        return new ListItem(new SwitchViewCommand(this, mode))
+        {
+            Title = title,
+            Subtitle = _viewMode == mode ? "Current view" : "Switch view",
+            Icon = icon,
+        };
+    }
+
     private ListItem CreateFiltersItem()
     {
         var count = _filterState.ActiveFilterCount;
@@ -385,8 +508,8 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
     private static ListItem CreateStatusItem(string message) =>
         new ListItem(new NoOpCommand()) { Title = message };
 
-    private ListItem CreateRefreshItem(string message) =>
-        new ListItem(new RefreshCatalogCommand(this)) { Title = message, Subtitle = "Press Enter to retry" };
+    private static ListItem CreateRefreshItem(string message) =>
+        CreateStatusItem(message + " Use the page-level Refresh Playnite catalog action to retry.");
 
     public void Dispose()
     {
@@ -402,7 +525,41 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
             _searchCancellation = null;
         }
 
+        _recentRefreshTimer.Dispose();
         _filtersPage.Dispose();
+    }
+
+    private enum ViewMode
+    {
+        Search,
+        RecentlyPlayed,
+        Favorites,
+    }
+
+    private sealed partial class SwitchViewCommand : InvokableCommand
+    {
+        private readonly PlayniteCmdPalPage _page;
+        private readonly ViewMode _mode;
+
+        public SwitchViewCommand(PlayniteCmdPalPage page, ViewMode mode)
+        {
+            _page = page;
+            _mode = mode;
+        }
+
+        public override string Name => _mode switch
+        {
+            ViewMode.Search => "Show search games",
+            ViewMode.RecentlyPlayed => "Show recently played games",
+            ViewMode.Favorites => "Show favorites",
+            _ => "Switch Playnite view",
+        };
+
+        public override CommandResult Invoke()
+        {
+            _page.SetViewMode(_mode);
+            return CommandResult.KeepOpen();
+        }
     }
 
     private sealed partial class RefreshCatalogCommand : InvokableCommand
