@@ -584,6 +584,14 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
         _recentRefreshTimer.Dispose();
         _filtersPage.Dispose();
         _filterState.FilterSelectionsChanged -= OnFilterSelectionsChanged;
+
+        // Flush the final snapshot synchronously during page disposal so an immediate
+        // Command Palette close cannot discard the last queued preference write.
+        Interlocked.Increment(ref _preferencesWriteVersion);
+        lock (PreferencesSaveGate)
+        {
+            CatalogFilterPreferences.Save(_filterState.CaptureSelections());
+        }
     }
 
     private sealed partial class SwitchViewCommand : InvokableCommand
