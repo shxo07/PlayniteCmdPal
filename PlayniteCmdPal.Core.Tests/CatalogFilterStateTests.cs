@@ -187,7 +187,7 @@ public sealed class CatalogFilterStateTests
         {
             // If the callback ran while the state lock was held by this thread, this
             // independent reader could not complete until the callback returned.
-            var read = Task.Run(state.CaptureSelections);
+            var read = Task.Run(() => state.CaptureSelections());
             Assert.True(read.Wait(TimeSpan.FromSeconds(2)));
         };
 
