@@ -206,9 +206,10 @@ public sealed class CatalogFilterStateTests
             {
                 for (var i = 0; i < 500; i++)
                 {
-                    state.UpdateCatalog(i % 2 == 0
+                    IEnumerable<GameEntry> nextCatalog = i % 2 == 0
                         ? Catalog
-                        : [new GameEntry("other", "Other", "GOG", true, Platform: "Linux")]);
+                        : new[] { new GameEntry("other", "Other", "GOG", true, Platform: "Linux") };
+                    state.UpdateCatalog(nextCatalog);
                     _ = state.CaptureSelections();
                     _ = state.ToSearchFilters();
                 }
@@ -225,9 +226,9 @@ public sealed class CatalogFilterStateTests
             {
                 for (var i = 0; i < 500; i++)
                 {
-                    state.SetSources(i % 2 == 0 ? ["Steam"] : ["GOG"]);
-                    state.SetPlatforms(i % 2 == 0 ? ["PC"] : ["Linux"]);
-                    state.SetInstalledStatuses(i % 2 == 0 ? [true] : [false]);
+                    state.SetSources(i % 2 == 0 ? new[] { "Steam" } : new[] { "GOG" });
+                    state.SetPlatforms(i % 2 == 0 ? new[] { "PC" } : new[] { "Linux" });
+                    state.SetInstalledStatuses(i % 2 == 0 ? new[] { true } : new[] { false });
                     _ = state.ActiveFilterCount;
                     _ = state.SelectedSources.ToArray();
                     _ = state.SelectedPlatforms.ToArray();
