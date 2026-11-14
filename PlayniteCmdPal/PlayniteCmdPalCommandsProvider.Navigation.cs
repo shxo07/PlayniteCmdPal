@@ -24,6 +24,7 @@ public partial class PlayniteCmdPalCommandsProvider
             new CommandItem(page)
             {
                 Title = "Playnite",
+                Subtitle = "Search through your Playnite library",
                 MoreCommands = [page.CreateRefreshContextItem()],
             },
         ];
