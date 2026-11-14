@@ -178,8 +178,8 @@ public sealed class CatalogFilterState
         return changed;
     }
 
-    public bool ToggleSource(string source) => ToggleValue(_selectedSources, source, _sources);
-    public bool TogglePlatform(string platform) => ToggleValue(_selectedPlatforms, platform, _platforms);
+    public bool ToggleSource(string source) => ToggleValue(_selectedSources, source, isSource: true);
+    public bool TogglePlatform(string platform) => ToggleValue(_selectedPlatforms, platform, isSource: false);
 
     public void ClearInstalledStatuses() => SetInstalledStatuses([]);
     public void ClearSources() => SetSources([]);
@@ -236,27 +236,25 @@ public sealed class CatalogFilterState
         return stale.Length > 0;
     }
 
-    private bool ToggleValue(HashSet<string> target, string value, IReadOnlyCollection<string> available)
+    private bool ToggleValue(HashSet<string> target, string value, bool isSource)
     {
         if (string.IsNullOrWhiteSpace(value))
             return false;
 
-        bool changed;
         lock (_gate)
         {
+            var available = isSource ? _sources : _platforms;
             var canonical = available.FirstOrDefault(option =>
                 string.Equals(option, value.Trim(), StringComparison.OrdinalIgnoreCase));
             if (canonical is null)
                 return false;
 
-            changed = !target.Add(canonical);
-            if (changed)
+            if (!target.Add(canonical))
                 target.Remove(canonical);
         }
 
-        if (changed)
-            FilterSelectionsChanged?.Invoke(this, EventArgs.Empty);
-        return changed;
+        FilterSelectionsChanged?.Invoke(this, EventArgs.Empty);
+        return true;
     }
 
     private void SetValues(HashSet<string> target, IEnumerable<string>? values, bool isSource)
