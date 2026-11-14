@@ -25,8 +25,7 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
     private readonly FiltersPage _filtersPage;
     private IListItem[] _items = [CreateStatusItem("Loading your Playnite library…")];
     private CancellationTokenSource? _searchCancellation;
-    private string _searchText = string.Empty;
-    private PlayniteLibraryViewMode _viewMode = PlayniteLibraryViewMode.Search;
+    private readonly PlayniteLibraryNavigationState _navigation = new();
     private readonly System.Timers.Timer _recentRefreshTimer;
     private int _requestVersion;
     private readonly object _requestGate = new();
@@ -115,9 +114,8 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
     {
         lock (_requestGate)
         {
-            if (_disposed || _viewMode == mode)
+            if (_disposed || !_navigation.SwitchView(mode))
                 return;
-            _viewMode = mode;
         }
 
         BeginSearch();
@@ -130,7 +128,7 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
 
         lock (_requestGate)
         {
-            if (_viewMode != PlayniteLibraryViewMode.RecentlyPlayed)
+            if (_navigation.Capture().ViewMode != PlayniteLibraryViewMode.RecentlyPlayed)
                 return;
         }
 
@@ -157,7 +155,7 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
 
             if (searchText is not null)
             {
-                _searchText = searchText;
+                _navigation.SetSearchText(searchText);
             }
 
             _searchCancellation?.Cancel();
@@ -165,8 +163,9 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
             _searchCancellation = new CancellationTokenSource();
 
             version = ++_requestVersion;
-            query = _searchText;
-            mode = _viewMode;
+            var navigation = _navigation.Capture();
+            query = navigation.SearchText;
+            mode = navigation.ViewMode;
             cancellationToken = _searchCancellation.Token;
 
             if (!preserveItems)
@@ -523,7 +522,7 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
             _ => ArtworkIconLoader.FallbackIcon,
         };
 
-        var isActive = _viewMode == mode;
+        var isActive = _navigation.Capture().ViewMode == mode;
         return new ListItem(new SwitchViewCommand(this, mode))
         {
             Title = title,
