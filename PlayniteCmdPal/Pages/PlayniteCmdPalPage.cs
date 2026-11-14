@@ -527,9 +527,19 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
             // ListItem exposes plain-text titles rather than font-weight/inline styling.
             // Mathematical bold glyphs provide a stronger active label, while the heavy
             // rule on its right is an in-row state marker (not the host's focus outline).
-            Title = isActive ? $"{ToBoldLabel(title)}  ━━━" : title,
+            Title = isActive ? ToBoldLabel(title) : title,
             Subtitle = isActive ? "Current view" : "Switch view",
             Icon = icon,
+            // Tags render at the trailing edge of the list row. Keep the marker there
+            // rather than appending a fake horizontal rule to the title text, so it
+            // remains visually separate from the host's left-side keyboard-focus rail.
+            Tags = isActive
+                ? [new Tag("▎")
+                {
+                    Foreground = ColorHelpers.FromRgb(76, 132, 255),
+                    ToolTip = "Current view",
+                }]
+                : [],
         };
     }
 
