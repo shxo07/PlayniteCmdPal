@@ -42,7 +42,7 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
 
         Icon = IconHelpers.FromRelativePath("Assets\\StoreLogo.png");
         Title = "Playnite";
-        Name = "Search games";
+        Name = "Playnite";
 
         // Keep Search Games in sync when a game is pinned or unpinned from any page.
         // Capture this page weakly so the shared store cannot retain retired pages.
@@ -326,7 +326,10 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
             return (items.ToArray(), Array.Empty<(ListItem Item, GameEntry Game)>());
         }
 
-        var duplicateIds = matches
+        var duplicateTitleGames = mode == PlayniteLibraryViewMode.RecentlyPlayed
+            ? RecentlyPlayedGames.Sort(catalog.Games)
+            : matches;
+        var duplicateIds = duplicateTitleGames
             .GroupBy(game => game.Title, StringComparer.OrdinalIgnoreCase)
             .Where(group => group.Count() > 1)
             .SelectMany(group => group.Select(game => game.GameId))
