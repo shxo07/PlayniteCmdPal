@@ -322,29 +322,34 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
         if (matches.Count == 0)
         {
             string message;
+            var hasActiveFilters = _filterState.ActiveFilterCount > 0;
             if (mode == PlayniteLibraryViewMode.Favorites)
             {
                 message = favoriteIds.Count == 0
                     ? "No favorites yet. Pin a game from its search result actions."
-                    : "No saved favorites match this search in the current Playnite library.";
+                    : hasActiveFilters
+                        ? string.IsNullOrWhiteSpace(query)
+                            ? "No favorites match the selected filters. Clear one or more filters to see more games."
+                            : $"No favorites match “{query.Trim()}” with the selected filters."
+                        : "No saved favorites match this search in the current Playnite library.";
             }
             else if (mode == PlayniteLibraryViewMode.RecentlyPlayed)
             {
                 var recentEmptyState = RecentlyPlayedGames.GetEmptyState(catalog.Games.Count, catalog.SkippedRecordCount);
+                var hasRecentGames = RecentlyPlayedGames.Sort(catalog.Games).Count > 0;
                 message = recentEmptyState switch
                 {
                     RecentlyPlayedEmptyState.EmptyLibrary => "Your Playnite library is empty. Add games in Playnite.",
                     RecentlyPlayedEmptyState.NoUsableRecords => "No usable game records were found. Check the companion plugin and refresh the catalog.",
-                    _ when RecentlyPlayedGames.Sort(catalog.Games).Count == 0 => "No games have a recorded last-played date yet.",
+                    _ when !hasRecentGames => "No games have a recorded last-played date yet.",
+                    _ when hasActiveFilters && string.IsNullOrWhiteSpace(query) => "No recently played games match the selected filters. Clear one or more filters to see more games.",
+                    _ when hasActiveFilters => $"No recently played games match “{query.Trim()}” with the selected filters.",
+                    _ when string.IsNullOrWhiteSpace(query) => "No recently played games match the current view.",
                     _ => $"No recently played games match “{query.Trim()}”.",
                 };
             }
             else
             {
-                var activeFilters = _filterState.ToSearchFilters();
-                var hasActiveFilters = activeFilters.IsInstalled.HasValue
-                    || activeFilters.Sources?.Count > 0
-                    || activeFilters.Platforms?.Count > 0;
                 message = hasActiveFilters
                     ? string.IsNullOrWhiteSpace(query)
                         ? "No games match the selected filters. Clear one or more filters to see more games."
