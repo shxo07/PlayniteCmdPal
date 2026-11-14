@@ -112,7 +112,7 @@ public sealed class PlayniteLibraryViewsTests
         {
             new GameEntry("a", "Portal Stories", "Steam", IsInstalled: true, Platform: "PC"),
             new GameEntry("b", "Portal 2", "Epic", IsInstalled: true, Platform: "PC"),
-            new GameEntry("c", "Portal 3", "Steam", IsInstalled: false, Platform: "PC"),
+            new GameEntry("c", "Portal 3", "Steam", IsInstalled: true, Platform: "Linux"),
         };
 
         var results = PlayniteLibraryViews.Search(
@@ -120,7 +120,7 @@ public sealed class PlayniteLibraryViewsTests
             PlayniteLibraryViewMode.Favorites,
             "portal",
             new List<string> { "a", "b", "c" },
-            new GameSearchFilters(IsInstalled: true, Sources: ["Steam"]));
+            new GameSearchFilters(IsInstalled: true, Sources: ["Steam"], Platforms: ["PC"]));
 
         Assert.Equal("a", Assert.Single(results).GameId);
     }
@@ -133,14 +133,15 @@ public sealed class PlayniteLibraryViewsTests
         {
             new GameEntry("older", "Portal 2", "Steam", IsInstalled: true, Platform: "PC", LastActivity: now.AddDays(-2)),
             new GameEntry("newer", "Portal Stories", "Steam", IsInstalled: true, Platform: "PC", LastActivity: now.AddDays(-1)),
-            new GameEntry("filtered", "Portal 3", "Epic", IsInstalled: true, Platform: "PC", LastActivity: now),
+            new GameEntry("source-filtered", "Portal 3", "Epic", IsInstalled: true, Platform: "PC", LastActivity: now),
+            new GameEntry("platform-filtered", "Portal 4", "Steam", IsInstalled: true, Platform: "Linux", LastActivity: now.AddHours(1)),
         };
 
         var results = PlayniteLibraryViews.Search(
             games,
             PlayniteLibraryViewMode.RecentlyPlayed,
             "portal",
-            filters: new GameSearchFilters(IsInstalled: true, Sources: ["Steam"]));
+            filters: new GameSearchFilters(IsInstalled: true, Sources: ["Steam"], Platforms: ["PC"]));
 
         Assert.Collection(results,
             game => Assert.Equal("newer", game.GameId),
