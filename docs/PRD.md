@@ -100,6 +100,7 @@ Exact title ranks first; prefix/substring results are deterministic; duplicate t
 ## Installed-game fallback result (WERD-86)
 
 - Expose exactly one **Playnite** top-level command. Its single page provides in-page Search games, Recently played, and Favorites views; do not register the three views as separate root commands or register every Playnite game as a root command.
+- Share installed-status, source, and platform filter selections across all three views; apply them consistently and persist them locally so they survive closing/reopening the page and restarting Command Palette.
 - Expose a single query-reactive `FallbackCommandItem` through `FallbackCommands()`. It can show one direct-launch row when the query is an exact, case-insensitive match (after trimming surrounding query whitespace) to exactly one installed game title. Partial, unknown, and ambiguous installed-title matches produce no row.
 - Exclude uninstalled and installation-unknown games from this global direct-launch fallback. The unified library page retains its existing browsing/filter behavior.
 - Show the matched saved title, the subtitle/action **Open with Playnite**, and the saved Playnite game icon; use the neutral symbol while loading or when saved artwork is missing/invalid. Do not append PC, platform, source, installation-state, or other metadata labels to the fallback row.
