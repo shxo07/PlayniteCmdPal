@@ -373,18 +373,15 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
                 Title = game.Title,
                 Subtitle = string.Join(" · ", metadata),
                 Icon = ArtworkIconLoader.FallbackIcon,
+                Tags = mode == PlayniteLibraryViewMode.RecentlyPlayed && game.LastActivity.HasValue
+                    ? [new Tag(RecentlyPlayedGames.FormatRelativeLastPlayed(game.LastActivity.Value, DateTimeOffset.UtcNow))]
+                    : [],
                 MoreCommands =
                 [
                     new CommandContextItem(new ShowGameDetailsCommand(game.GameId)),
                     new CommandContextItem(new ToggleFavoriteCommand(_favorites, game.GameId)),
                 ],
             };
-            if (mode == PlayniteLibraryViewMode.RecentlyPlayed && game.LastActivity.HasValue)
-            {
-                item.Tags = [new Tag(RecentlyPlayedGames.FormatRelativeLastPlayed(
-                    game.LastActivity.Value,
-                    DateTimeOffset.UtcNow))];
-            }
 
             items.Add(item);
             artworkItems.Add((item, game));
