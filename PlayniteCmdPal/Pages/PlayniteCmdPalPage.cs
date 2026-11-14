@@ -29,6 +29,8 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
     private readonly System.Timers.Timer _recentRefreshTimer;
     private int _requestVersion;
     private readonly object _requestGate = new();
+    private static readonly object PreferencesSaveGate = new();
+    private static long _preferencesWriteVersion;
     private bool _disposed;
 
     public PlayniteCmdPalPage()
@@ -531,8 +533,22 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
         };
     }
 
-    private void OnFilterSelectionsChanged(object? sender, EventArgs e) =>
-        CatalogFilterPreferences.Save(_filterState.CaptureSelections());
+    private void OnFilterSelectionsChanged(object? sender, EventArgs e)
+    {
+        // Catalog metadata can prune stale selections while LoadItemsAsync holds the page
+        // request gate. Never perform filesystem I/O synchronously from this event: capture
+        // an immutable snapshot and serialize only the newest pending write on the thread pool.
+        var selection = _filterState.CaptureSelections();
+        var version = Interlocked.Increment(ref _preferencesWriteVersion);
+        _ = Task.Run(() =>
+        {
+            lock (PreferencesSaveGate)
+            {
+                if (version == Volatile.Read(ref _preferencesWriteVersion))
+                    CatalogFilterPreferences.Save(selection);
+            }
+        });
+    }
 
     private ListItem CreateFiltersItem()
     {
