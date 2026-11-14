@@ -29,6 +29,34 @@ public sealed class CatalogFilterPreferencesTests
     }
 
     [Fact]
+    public void SavedSelectionsRestoreIntoANewFilterStateAfterCatalogLoad()
+    {
+        var directory = CreateTemporaryDirectory();
+        try
+        {
+            var store = new CatalogFilterPreferencesStore(Path.Combine(directory, "filters.json"));
+            var expected = new CatalogFilterSelection([false], ["Steam"], ["PC"]);
+            Assert.True(store.Save(expected));
+
+            var restored = new CatalogFilterState();
+            restored.RestoreSelections(store.Load());
+            restored.UpdateCatalog(
+            [
+                new GameEntry("steam", "Example", "Steam", false, Platform: "PC"),
+                new GameEntry("epic", "Other", "Epic", true, Platform: "Linux"),
+            ]);
+
+            Assert.False(restored.ToSearchFilters().IsInstalled);
+            Assert.Equal(new[] { "Steam" }, restored.SelectedSources);
+            Assert.Equal(new[] { "PC" }, restored.SelectedPlatforms);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
     public void MissingFileReturnsFirstRunInstalledDefault()
     {
         var directory = CreateTemporaryDirectory();
