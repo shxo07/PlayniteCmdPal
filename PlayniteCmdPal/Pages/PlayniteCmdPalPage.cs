@@ -524,32 +524,14 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
         var isActive = _viewMode == mode;
         return new ListItem(new SwitchViewCommand(this, mode))
         {
-            // ListItem exposes plain-text titles rather than font-weight/inline styling.
-            // Mathematical bold glyphs provide a stronger active label, while the heavy
-            // rule on its right is an in-row state marker (not the host's focus outline).
-            Title = isActive ? ToBoldLabel(title) : title,
+            // Keep the title in the host's normal typeface. The native Command Palette
+            // selection rail is the only accent indicator; invoking a view switch keeps
+            // this row selected, so the host draws its standard left-side accent.
+            Title = title,
             Subtitle = isActive ? "Current view" : "Switch view",
             Icon = icon,
-            // Tags render at the trailing edge of the list row. Keep the marker there
-            // rather than appending a fake horizontal rule to the title text, so it
-            // remains visually separate from the host's left-side keyboard-focus rail.
-            Tags = isActive
-                ? [new Tag("▎")
-                {
-                    Foreground = ColorHelpers.FromRgb(76, 132, 255),
-                    ToolTip = "Current view",
-                }]
-                : [],
         };
     }
-
-    private static string ToBoldLabel(string value) =>
-        string.Concat(value.Select(character => character switch
-        {
-            >= 'A' and <= 'Z' => char.ConvertFromUtf32(0x1D400 + character - 'A'),
-            >= 'a' and <= 'z' => char.ConvertFromUtf32(0x1D41A + character - 'a'),
-            _ => character.ToString(),
-        }));
 
     private void OnFilterSelectionsChanged(object? sender, EventArgs e) =>
         CatalogFilterPreferences.Save(_filterState.CaptureSelections());
