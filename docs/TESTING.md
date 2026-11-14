@@ -83,6 +83,8 @@ Run with a local Playnite library and the PowerToys Command Palette extension:
 2. In **Search games**, open a game's More actions and choose **Pin to favorites**. Confirm the toast appears, the palette stays on the same page with the same query, and the game remains launchable.
 3. Switch to **Favorites** using the in-page selector. Confirm the newly pinned game appears immediately. Unpin it and confirm the toast appears while the unified page remains open and the game disappears immediately; switch back to Search games and pin it again.
 4. Search Favorites for a non-matching title and confirm the no-match state; clear the query and confirm the pinned game returns.
+5. Use only the keyboard to move between all three view selectors and press Enter. Confirm each view changes in place, the page remains open, and game selection/launch still works.
+6. In Search games, verify Installed/source/platform filters still apply immediately; in Recently played, verify newest-first ordering and relative-time badges; in Favorites, verify pin/unpin changes the visible list without leaving the page.
 5. Restart the Command Palette extension and Playnite, then confirm the favorite remains.
 6. Remove a favorited game from the current Playnite library (or test with a known missing ID) and confirm it is hidden from Favorites without deleting its saved preference.
 7. With an unsupported future-schema or unreadable preferences file, confirm normal Search results still appear and can still launch; the Favorites action should report that preferences are unavailable rather than breaking the result list. Confirm its error toast also leaves the current page/query open.

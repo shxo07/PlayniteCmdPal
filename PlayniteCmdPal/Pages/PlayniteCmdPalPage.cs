@@ -108,7 +108,7 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
     internal IContextItem CreateRefreshContextItem() =>
         new CommandContextItem(new RefreshCatalogCommand(this));
 
-    private void SetPlayniteLibraryViewMode(PlayniteLibraryViewMode mode)
+    private void SetViewMode(PlayniteLibraryViewMode mode)
     {
         lock (_requestGate)
         {
@@ -525,13 +525,6 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
         _filtersPage.Dispose();
     }
 
-    private enum PlayniteLibraryViewMode
-    {
-        Search,
-        RecentlyPlayed,
-        Favorites,
-    }
-
     private sealed partial class SwitchViewCommand : InvokableCommand
     {
         private readonly PlayniteCmdPalPage _page;
@@ -553,7 +546,7 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
 
         public override CommandResult Invoke()
         {
-            _page.SetPlayniteLibraryViewMode(_mode);
+            _page.SetViewMode(_mode);
             return CommandResult.KeepOpen();
         }
     }
