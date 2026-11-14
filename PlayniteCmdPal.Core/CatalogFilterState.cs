@@ -8,11 +8,12 @@ public sealed record CatalogFilterSelection(
 
 /// <summary>
 /// Tracks available catalog metadata and independent multi-select filter selections.
-/// A fresh state defaults to installed games; restored or cleared states remain unrestricted
-/// or retain the user's explicit choice.
+/// All mutable state is protected by a private lock. Public collection properties return
+/// snapshots, and notifications are always raised after releasing the lock.
 /// </summary>
 public sealed class CatalogFilterState
 {
+    private readonly object _gate = new();
     private string[] _sources = [];
     private string[] _platforms = [];
     private readonly HashSet<bool> _installedStatuses = [true];
@@ -22,19 +23,54 @@ public sealed class CatalogFilterState
     public event EventHandler? FilterOptionsChanged;
     public event EventHandler? FilterSelectionsChanged;
 
-    public IReadOnlyList<string> Sources => _sources;
-    public IReadOnlyList<string> Platforms => _platforms;
-    public IReadOnlyCollection<bool> InstalledStatuses => _installedStatuses;
-    public IReadOnlyCollection<string> SelectedSources => _selectedSources.OrderBy(value => value, StringComparer.OrdinalIgnoreCase).ToArray();
-    public IReadOnlyCollection<string> SelectedPlatforms => _selectedPlatforms.OrderBy(value => value, StringComparer.OrdinalIgnoreCase).ToArray();
+    public IReadOnlyList<string> Sources
+    {
+        get { lock (_gate) return _sources.ToArray(); }
+    }
 
-    public int ActiveFilterCount =>
-        (_installedStatuses.Count == 1 ? 1 : 0) + _selectedSources.Count + _selectedPlatforms.Count;
+    public IReadOnlyList<string> Platforms
+    {
+        get { lock (_gate) return _platforms.ToArray(); }
+    }
 
-    public CatalogFilterSelection CaptureSelections() => new(
-        _installedStatuses.OrderBy(value => value).ToArray(),
-        SelectedSources.ToArray(),
-        SelectedPlatforms.ToArray());
+    public IReadOnlyCollection<bool> InstalledStatuses
+    {
+        get { lock (_gate) return _installedStatuses.OrderBy(value => value).ToArray(); }
+    }
+
+    public IReadOnlyCollection<string> SelectedSources
+    {
+        get { lock (_gate) return Sort(_selectedSources); }
+    }
+
+    public IReadOnlyCollection<string> SelectedPlatforms
+    {
+        get { lock (_gate) return Sort(_selectedPlatforms); }
+    }
+
+    public int ActiveFilterCount
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return (_installedStatuses.Count == 1 ? 1 : 0)
+                    + _selectedSources.Count
+                    + _selectedPlatforms.Count;
+            }
+        }
+    }
+
+    public CatalogFilterSelection CaptureSelections()
+    {
+        lock (_gate)
+        {
+            return new CatalogFilterSelection(
+                _installedStatuses.OrderBy(value => value).ToArray(),
+                Sort(_selectedSources),
+                Sort(_selectedPlatforms));
+        }
+    }
 
     /// <summary>
     /// Restores selections before catalog metadata is available. UpdateCatalog subsequently
@@ -45,22 +81,25 @@ public sealed class CatalogFilterState
         if (selection is null)
             return;
 
-        _installedStatuses.Clear();
-        foreach (var status in selection.InstalledStatuses ?? [])
-            _installedStatuses.Add(status);
-
-        _selectedSources.Clear();
-        foreach (var source in selection.Sources ?? [])
+        lock (_gate)
         {
-            if (!string.IsNullOrWhiteSpace(source))
-                _selectedSources.Add(source.Trim());
-        }
+            _installedStatuses.Clear();
+            foreach (var status in selection.InstalledStatuses ?? [])
+                _installedStatuses.Add(status);
 
-        _selectedPlatforms.Clear();
-        foreach (var platform in selection.Platforms ?? [])
-        {
-            if (!string.IsNullOrWhiteSpace(platform))
-                _selectedPlatforms.Add(platform.Trim());
+            _selectedSources.Clear();
+            foreach (var source in selection.Sources ?? [])
+            {
+                if (!string.IsNullOrWhiteSpace(source))
+                    _selectedSources.Add(source.Trim());
+            }
+
+            _selectedPlatforms.Clear();
+            foreach (var platform in selection.Platforms ?? [])
+            {
+                if (!string.IsNullOrWhiteSpace(platform))
+                    _selectedPlatforms.Add(platform.Trim());
+            }
         }
     }
 
@@ -68,20 +107,29 @@ public sealed class CatalogFilterState
     {
         ArgumentNullException.ThrowIfNull(games);
 
+        // Enumerate caller-owned input before entering the state lock.
         var entries = games.ToArray();
         var sources = GetValues(entries, game => game.Source);
         var platforms = GetValues(entries, game => game.Platform);
-        var optionsChanged =
-            !_sources.SequenceEqual(sources, StringComparer.Ordinal) ||
-            !_platforms.SequenceEqual(platforms, StringComparer.Ordinal);
+        bool optionsChanged;
+        bool selectionsChanged;
 
-        _sources = sources;
-        _platforms = platforms;
+        lock (_gate)
+        {
+            optionsChanged =
+                !_sources.SequenceEqual(sources, StringComparer.Ordinal) ||
+                !_platforms.SequenceEqual(platforms, StringComparer.Ordinal);
 
-        var selectionsChanged =
-            RetainAvailable(_selectedSources, _sources) |
-            RetainAvailable(_selectedPlatforms, _platforms);
+            _sources = sources;
+            _platforms = platforms;
 
+            selectionsChanged =
+                RetainAvailable(_selectedSources, _sources) |
+                RetainAvailable(_selectedPlatforms, _platforms);
+        }
+
+        // Never call external subscribers while holding _gate: subscribers may refresh
+        // pages, persist preferences, or read state and must not participate in lock order.
         if (optionsChanged || selectionsChanged)
             FilterOptionsChanged?.Invoke(this, EventArgs.Empty);
         if (selectionsChanged)
@@ -93,19 +141,26 @@ public sealed class CatalogFilterState
     public void SetInstalledStatuses(IEnumerable<bool>? statuses)
     {
         var next = statuses?.ToHashSet() ?? [];
-        if (_installedStatuses.SetEquals(next))
-            return;
+        bool changed;
+        lock (_gate)
+        {
+            changed = !_installedStatuses.SetEquals(next);
+            if (changed)
+            {
+                _installedStatuses.Clear();
+                _installedStatuses.UnionWith(next);
+            }
+        }
 
-        _installedStatuses.Clear();
-        _installedStatuses.UnionWith(next);
-        FilterSelectionsChanged?.Invoke(this, EventArgs.Empty);
+        if (changed)
+            FilterSelectionsChanged?.Invoke(this, EventArgs.Empty);
     }
 
     public void SetSources(IEnumerable<string>? sources) =>
-        SetValues(_selectedSources, sources, _sources);
+        SetValues(_selectedSources, sources, isSource: true);
 
     public void SetPlatforms(IEnumerable<string>? platforms) =>
-        SetValues(_selectedPlatforms, platforms, _platforms);
+        SetValues(_selectedPlatforms, platforms, isSource: false);
 
     public void ClearInstalledStatuses() => SetInstalledStatuses([]);
     public void ClearSources() => SetSources([]);
@@ -113,22 +168,37 @@ public sealed class CatalogFilterState
 
     public void ClearAll()
     {
-        var changed = _installedStatuses.Count > 0 || _selectedSources.Count > 0 || _selectedPlatforms.Count > 0;
-        _installedStatuses.Clear();
-        _selectedSources.Clear();
-        _selectedPlatforms.Clear();
+        bool changed;
+        lock (_gate)
+        {
+            changed = _installedStatuses.Count > 0
+                || _selectedSources.Count > 0
+                || _selectedPlatforms.Count > 0;
+            _installedStatuses.Clear();
+            _selectedSources.Clear();
+            _selectedPlatforms.Clear();
+        }
+
         if (changed)
             FilterSelectionsChanged?.Invoke(this, EventArgs.Empty);
     }
 
     public GameSearchFilters ToSearchFilters()
     {
-        bool? installed = _installedStatuses.Count == 1 ? _installedStatuses.Single() : null;
-        return new GameSearchFilters(
-            IsInstalled: installed,
-            Sources: _selectedSources.Count == 0 ? null : SelectedSources,
-            Platforms: _selectedPlatforms.Count == 0 ? null : SelectedPlatforms);
+        lock (_gate)
+        {
+            bool? installed = _installedStatuses.Count == 1 ? _installedStatuses.Single() : null;
+            return new GameSearchFilters(
+                IsInstalled: installed,
+                Sources: _selectedSources.Count == 0 ? null : Sort(_selectedSources),
+                Platforms: _selectedPlatforms.Count == 0 ? null : Sort(_selectedPlatforms));
+        }
     }
+
+    private static string[] Sort(IEnumerable<string> values) =>
+        values.OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(value => value, StringComparer.Ordinal)
+            .ToArray();
 
     private static string[] GetValues(IEnumerable<GameEntry> games, Func<GameEntry, string?> selector) =>
         games.Select(game => selector(game)?.Trim())
@@ -147,26 +217,35 @@ public sealed class CatalogFilterState
         return stale.Length > 0;
     }
 
-    private void SetValues(HashSet<string> target, IEnumerable<string>? values, IReadOnlyCollection<string> available)
+    private void SetValues(HashSet<string> target, IEnumerable<string>? values, bool isSource)
     {
-        var next = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        if (values is not null)
+        // Materialize caller input before taking the lock; it may be a lazy enumerable
+        // backed by UI or application state that itself reads this object.
+        var requested = values?.Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(value => value.Trim()).ToArray() ?? [];
+        bool changed;
+
+        lock (_gate)
         {
-            foreach (var value in values)
+            var available = isSource ? _sources : _platforms;
+            var next = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var value in requested)
             {
-                if (string.IsNullOrWhiteSpace(value))
-                    continue;
                 var canonical = available.FirstOrDefault(option =>
-                    string.Equals(option, value.Trim(), StringComparison.OrdinalIgnoreCase));
+                    string.Equals(option, value, StringComparison.OrdinalIgnoreCase));
                 if (canonical is not null)
                     next.Add(canonical);
             }
+
+            changed = !target.SetEquals(next);
+            if (changed)
+            {
+                target.Clear();
+                target.UnionWith(next);
+            }
         }
 
-        if (target.SetEquals(next))
-            return;
-        target.Clear();
-        target.UnionWith(next);
-        FilterSelectionsChanged?.Invoke(this, EventArgs.Empty);
+        if (changed)
+            FilterSelectionsChanged?.Invoke(this, EventArgs.Empty);
     }
 }
