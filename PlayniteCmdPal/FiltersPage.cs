@@ -154,38 +154,29 @@ internal sealed partial class FiltersPage : ListPage
 
     private void ToggleStatus(bool status)
     {
-        var selected = _state.InstalledStatuses.ToHashSet();
-        if (!selected.Add(status))
+        if (_state.ToggleInstalledStatus(status))
         {
-            selected.Remove(status);
+            SynchronizeFilterItems();
+            ScheduleResultsRefresh();
         }
-        _state.SetInstalledStatuses(selected);
-        SynchronizeFilterItems();
-        ScheduleResultsRefresh();
     }
 
     private void ToggleSource(string source)
     {
-        var selected = _state.SelectedSources.ToHashSet(StringComparer.OrdinalIgnoreCase);
-        if (!selected.Add(source))
+        if (_state.ToggleSource(source))
         {
-            selected.Remove(source);
+            SynchronizeFilterItems();
+            ScheduleResultsRefresh();
         }
-        _state.SetSources(selected);
-        SynchronizeFilterItems();
-        ScheduleResultsRefresh();
     }
 
     private void TogglePlatform(string platform)
     {
-        var selected = _state.SelectedPlatforms.ToHashSet(StringComparer.OrdinalIgnoreCase);
-        if (!selected.Add(platform))
+        if (_state.TogglePlatform(platform))
         {
-            selected.Remove(platform);
+            SynchronizeFilterItems();
+            ScheduleResultsRefresh();
         }
-        _state.SetPlatforms(selected);
-        SynchronizeFilterItems();
-        ScheduleResultsRefresh();
     }
 
     private void ClearStatuses()
