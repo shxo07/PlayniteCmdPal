@@ -94,9 +94,9 @@ internal sealed partial class FiltersPage : ListPage
 
             var items = new List<IListItem>
             {
-                GetFilterItem("status:installed", "Installed status", "Installed", installed.Contains(true),
+                GetFilterItem("status:installed", "Installed status", "Installed", () => installed.Contains(true),
                     () => ToggleStatus(true)),
-                GetFilterItem("status:not-installed", "Installed status", "Not installed", installed.Contains(false),
+                GetFilterItem("status:not-installed", "Installed status", "Not installed", () => installed.Contains(false),
                     () => ToggleStatus(false)),
             };
 
@@ -104,7 +104,7 @@ internal sealed partial class FiltersPage : ListPage
             {
                 var value = source;
                 items.Add(GetFilterItem(Key("source", value), "Source", value,
-                    selectedSources.Contains(value, StringComparer.OrdinalIgnoreCase),
+                    () => selectedSources.Contains(value, StringComparer.OrdinalIgnoreCase),
                     () => ToggleSource(value)));
             }
 
@@ -112,7 +112,7 @@ internal sealed partial class FiltersPage : ListPage
             {
                 var value = platform;
                 items.Add(GetFilterItem(Key("platform", value), "Platform", value,
-                    selectedPlatforms.Contains(value, StringComparer.OrdinalIgnoreCase),
+                    () => selectedPlatforms.Contains(value, StringComparer.OrdinalIgnoreCase),
                     () => TogglePlatform(value)));
             }
 
