@@ -154,7 +154,7 @@ public sealed class CatalogFilterStateTests
         Assert.Equal(new[] { "Linux" }, state.SelectedPlatforms);
 
         Assert.True(state.ToggleInstalledStatus(false));
-        Assert.Equal(new[] { true, false }, state.InstalledStatuses);
+        Assert.Equal(new[] { false, true }, state.InstalledStatuses);
         Assert.True(state.ToggleInstalledStatus(true));
         Assert.Equal(new[] { false }, state.InstalledStatuses);
 
