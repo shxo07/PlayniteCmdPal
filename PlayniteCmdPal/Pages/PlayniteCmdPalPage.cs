@@ -161,7 +161,9 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
             mode = _viewMode;
             cancellationToken = _searchCancellation.Token;
 
-            _items = [CreateFiltersItem(), CreateStatusItem("Searching your Playnite library…")];
+            var loadingItems = CreateViewItems(mode);
+            loadingItems.Add(CreateStatusItem("Searching your Playnite library…"));
+            _items = loadingItems.ToArray();
             count = _items.Length;
         }
 
@@ -229,14 +231,7 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
                     return;
                 }
 
-                var failureItems = new List<IListItem>
-                {
-                    CreateViewModeItem(PlayniteLibraryViewMode.Search),
-                    CreateViewModeItem(PlayniteLibraryViewMode.RecentlyPlayed),
-                    CreateViewModeItem(PlayniteLibraryViewMode.Favorites),
-                };
-                if (mode == PlayniteLibraryViewMode.Search)
-                    failureItems.Add(CreateFiltersItem());
+                var failureItems = CreateViewItems(mode);
                 failureItems.Add(CreateStatusItem(mode == PlayniteLibraryViewMode.Favorites
                     ? "Couldn't load Favorites. Check the local preferences file and Playnite catalog, then use Refresh Playnite catalog."
                     : "Couldn't read the Playnite catalog. Check the companion plugin and snapshot permissions, then use Refresh Playnite catalog."));
@@ -253,14 +248,7 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
         string query,
         PlayniteLibraryViewMode mode)
     {
-        var items = new List<IListItem>
-        {
-            CreatePlayniteLibraryViewModeItem(PlayniteLibraryViewMode.Search),
-            CreatePlayniteLibraryViewModeItem(PlayniteLibraryViewMode.RecentlyPlayed),
-            CreatePlayniteLibraryViewModeItem(PlayniteLibraryViewMode.Favorites),
-        };
-        if (mode == PlayniteLibraryViewMode.Search)
-            items.Add(CreateFiltersItem());
+        var items = CreateViewItems(mode);
         if (!catalog.IsAvailable)
         {
             var message = catalog.Issue?.Message
@@ -460,6 +448,19 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
         {
             // A newer query replaced this result set.
         }
+    }
+
+    private List<IListItem> CreateViewItems(PlayniteLibraryViewMode mode)
+    {
+        var items = new List<IListItem>
+        {
+            CreatePlayniteLibraryViewModeItem(PlayniteLibraryViewMode.Search),
+            CreatePlayniteLibraryViewModeItem(PlayniteLibraryViewMode.RecentlyPlayed),
+            CreatePlayniteLibraryViewModeItem(PlayniteLibraryViewMode.Favorites),
+        };
+        if (mode == PlayniteLibraryViewMode.Search)
+            items.Add(CreateFiltersItem());
+        return items;
     }
 
     private ListItem CreatePlayniteLibraryViewModeItem(PlayniteLibraryViewMode mode)
