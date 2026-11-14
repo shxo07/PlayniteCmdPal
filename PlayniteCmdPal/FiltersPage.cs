@@ -52,7 +52,10 @@ internal sealed partial class FiltersPage : ListPage
         }
         else
         {
-            refresh();
+            // Without a captured UI context, defer the host notification as well. This
+            // prevents catalog updates from nesting a FiltersPage notification inside the
+            // parent page's catalog-publication/request critical section.
+            _ = Task.Run(refresh);
         }
     }
 
