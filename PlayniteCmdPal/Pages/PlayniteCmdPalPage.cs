@@ -526,11 +526,8 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
         var isActive = _viewMode == mode;
         return new ListItem(new SwitchViewCommand(this, mode))
         {
-            // Keep the title in the host's normal typeface. The native Command Palette
-            // selection rail is the only accent indicator; invoking a view switch keeps
-            // this row selected, so the host draws its standard left-side accent.
             Title = title,
-            Subtitle = isActive ? "Current view" : "Switch view",
+            Subtitle = isActive ? "Current view" : string.Empty,
             Icon = icon,
         };
     }
