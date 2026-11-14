@@ -362,7 +362,9 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
                 metadata.Add(game.Platform);
             }
 
-            if (game.IsInstalled.HasValue)
+            // Recently Played historically shows source/platform and duplicate-title
+            // identity only; keep installation status exclusive to Search and Favorites.
+            if (mode != PlayniteLibraryViewMode.RecentlyPlayed && game.IsInstalled.HasValue)
             {
                 metadata.Add(game.IsInstalled.Value ? "Installed" : "Not installed");
             }
