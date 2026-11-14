@@ -21,7 +21,7 @@ public sealed class PlayniteLibraryViewsTests
             "portal",
             filters: new GameSearchFilters(IsInstalled: true));
 
-        Assert.Equal(new[] { "a" }, results.Select(game => game.GameId));
+        Assert.Equal("a", Assert.Single(results).GameId);
     }
 
     [Fact]
@@ -38,9 +38,9 @@ public sealed class PlayniteLibraryViewsTests
             games,
             PlayniteLibraryViewMode.Favorites,
             "portal",
-            new[] { "b", "c" });
+            new List<string> { "b", "c" });
 
-        Assert.Equal(new[] { "b" }, results.Select(game => game.GameId));
+        Assert.Equal("b", Assert.Single(results).GameId);
     }
 
     [Fact]
@@ -71,7 +71,9 @@ public sealed class PlayniteLibraryViewsTests
             PlayniteLibraryViewMode.RecentlyPlayed,
             "  portal  ");
 
-        Assert.Equal(new[] { "newer", "older" }, results.Select(game => game.GameId));
+        Assert.Collection(results,
+            game => Assert.Equal("newer", game.GameId),
+            game => Assert.Equal("older", game.GameId));
     }
 
     [Fact]
