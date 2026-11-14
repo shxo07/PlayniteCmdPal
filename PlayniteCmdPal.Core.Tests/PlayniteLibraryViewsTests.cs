@@ -104,4 +104,46 @@ public sealed class PlayniteLibraryViewsTests
             (PlayniteLibraryViewMode)999,
             query: null));
     }
+
+    [Fact]
+    public void SharedFiltersApplyToFavoritesWithoutChangingFavoriteSearchRanking()
+    {
+        var games = new[]
+        {
+            new GameEntry("a", "Portal Stories", "Steam", IsInstalled: true, Platform: "PC"),
+            new GameEntry("b", "Portal 2", "Epic", IsInstalled: true, Platform: "PC"),
+            new GameEntry("c", "Portal 3", "Steam", IsInstalled: false, Platform: "PC"),
+        };
+
+        var results = PlayniteLibraryViews.Search(
+            games,
+            PlayniteLibraryViewMode.Favorites,
+            "portal",
+            new List<string> { "a", "b", "c" },
+            new GameSearchFilters(IsInstalled: true, Sources: ["Steam"]));
+
+        Assert.Equal("a", Assert.Single(results).GameId);
+    }
+
+    [Fact]
+    public void SharedFiltersApplyToRecentlyPlayedWithoutChangingActivityOrdering()
+    {
+        var now = new DateTime(2026, 11, 14, 12, 0, 0, DateTimeKind.Utc);
+        var games = new[]
+        {
+            new GameEntry("older", "Portal 2", "Steam", IsInstalled: true, Platform: "PC", LastActivity: now.AddDays(-2)),
+            new GameEntry("newer", "Portal Stories", "Steam", IsInstalled: true, Platform: "PC", LastActivity: now.AddDays(-1)),
+            new GameEntry("filtered", "Portal 3", "Epic", IsInstalled: true, Platform: "PC", LastActivity: now),
+        };
+
+        var results = PlayniteLibraryViews.Search(
+            games,
+            PlayniteLibraryViewMode.RecentlyPlayed,
+            "portal",
+            filters: new GameSearchFilters(IsInstalled: true, Sources: ["Steam"]));
+
+        Assert.Collection(results,
+            game => Assert.Equal("newer", game.GameId),
+            game => Assert.Equal("older", game.GameId));
+    }
 }
