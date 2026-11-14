@@ -271,15 +271,27 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
             items.Add(CreateStatusItem($"{catalog.SkippedRecordCount} invalid catalog entr{(catalog.SkippedRecordCount == 1 ? "y was" : "ies were")} skipped."));
         }
 
-        if (catalog.Games.Count == 0)
-        {
-            items.Add(CreateStatusItem("Your Playnite library is empty. Add games in Playnite, then use Refresh Playnite catalog."));
-            return (items.ToArray(), Array.Empty<(ListItem Item, GameEntry Game)>());
-        }
-
         var favoriteIds = mode == PlayniteLibraryViewMode.Favorites
             ? _favorites.GetFavoriteIds()
             : Array.Empty<string>();
+
+        if (catalog.Games.Count == 0)
+        {
+            var emptyMessage = mode switch
+            {
+                PlayniteLibraryViewMode.Favorites => favoriteIds.Count == 0
+                    ? "No favorites yet. Pin a game from its search result actions."
+                    : "No saved favorites match this search in the current Playnite library.",
+                PlayniteLibraryViewMode.RecentlyPlayed => RecentlyPlayedGames.GetEmptyState(
+                    catalog.Games.Count,
+                    catalog.SkippedRecordCount) == RecentlyPlayedEmptyState.NoUsableRecords
+                    ? "No usable game records were found. Check the companion plugin and refresh the catalog."
+                    : "Your Playnite library is empty. Add games in Playnite.",
+                _ => "Your Playnite library is empty. Add games in Playnite, then use Refresh Playnite catalog.",
+            };
+            items.Add(CreateStatusItem(emptyMessage));
+            return (items.ToArray(), Array.Empty<(ListItem Item, GameEntry Game)>());
+        }
         var matches = PlayniteLibraryViews.Search(
             catalog.Games,
             mode,
