@@ -49,7 +49,7 @@ internal sealed class CatalogFilterPreferencesStore
                 selection.Sources ?? [],
                 selection.Platforms ?? []);
         }
-        catch (Exception) when (File.Exists(_path) || !Directory.Exists(Path.GetDirectoryName(_path)))
+        catch (Exception)
         {
             // A damaged or temporarily inaccessible preferences file must not prevent
             // the library page from opening.
