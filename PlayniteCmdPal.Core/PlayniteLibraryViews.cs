@@ -11,6 +11,7 @@ public enum PlayniteLibraryViewMode
 /// <summary>
 /// Selects catalog entries for the unified Playnite discovery views while keeping
 /// ranking, favorites identity, and recent-activity ordering in the core layer.
+/// Shared metadata filters are applied consistently after each view's own selection.
 /// </summary>
 public static class PlayniteLibraryViews
 {
@@ -27,8 +28,8 @@ public static class PlayniteLibraryViews
         return mode switch
         {
             PlayniteLibraryViewMode.Search => GameSearch.Search(catalog, query, filters),
-            PlayniteLibraryViewMode.Favorites => SearchFavorites(catalog, query, favoriteGameIds),
-            PlayniteLibraryViewMode.RecentlyPlayed => SearchRecentlyPlayed(catalog, query),
+            PlayniteLibraryViewMode.Favorites => SearchFavorites(catalog, query, favoriteGameIds, filters),
+            PlayniteLibraryViewMode.RecentlyPlayed => SearchRecentlyPlayed(catalog, query, filters),
             _ => throw new ArgumentOutOfRangeException(nameof(mode)),
         };
     }
@@ -36,26 +37,27 @@ public static class PlayniteLibraryViews
     private static IReadOnlyList<GameEntry> SearchFavorites(
         IEnumerable<GameEntry> games,
         string? query,
-        IReadOnlyCollection<string>? favoriteGameIds)
+        IReadOnlyCollection<string>? favoriteGameIds,
+        GameSearchFilters? filters)
     {
         if (favoriteGameIds is null || favoriteGameIds.Count == 0)
             return Array.Empty<GameEntry>();
 
         var ids = favoriteGameIds.ToHashSet(StringComparer.Ordinal);
-        return GameSearch.Search(games.Where(game => ids.Contains(game.GameId)), query);
+        return GameSearch.Search(games.Where(game => ids.Contains(game.GameId)), query, filters);
     }
 
-    private static IReadOnlyList<GameEntry> SearchRecentlyPlayed(IEnumerable<GameEntry> games, string? query)
+    private static IReadOnlyList<GameEntry> SearchRecentlyPlayed(
+        IEnumerable<GameEntry> games,
+        string? query,
+        GameSearchFilters? filters)
     {
         var ordered = RecentlyPlayedGames.Sort(games);
         var normalizedQuery = query?.Trim();
-        if (string.IsNullOrEmpty(normalizedQuery))
-            return ordered;
-
-        // Preserve LastActivity ordering; search narrows the ordered sequence rather than
-        // applying title relevance ranking that would change the recent-first contract.
         return ordered
-            .Where(game => game.Title.Contains(normalizedQuery, StringComparison.OrdinalIgnoreCase))
+            .Where(game => (filters is null || filters.Matches(game)) &&
+                (string.IsNullOrEmpty(normalizedQuery) ||
+                 game.Title.Contains(normalizedQuery, StringComparison.OrdinalIgnoreCase)))
             .ToArray();
     }
 }
