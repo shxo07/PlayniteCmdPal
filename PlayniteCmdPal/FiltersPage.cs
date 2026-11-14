@@ -18,6 +18,7 @@ internal sealed partial class FiltersPage : ListPage
     private readonly CatalogFilterState _state;
     private readonly Action _filtersChanged;
     private readonly SynchronizationContext? _uiContext;
+    private readonly object _itemsGate = new();
     private readonly Dictionary<string, FilterItem> _filterItems = new(StringComparer.OrdinalIgnoreCase);
     private IListItem[] _items = [];
     private bool _disposed;
@@ -34,7 +35,11 @@ internal sealed partial class FiltersPage : ListPage
         RefreshOptions();
     }
 
-    public override IListItem[] GetItems() => _items;
+    public override IListItem[] GetItems()
+    {
+        lock (_itemsGate)
+            return _items.ToArray();
+    }
 
     private void OnFilterOptionsChanged(object? sender, EventArgs e)
     {
@@ -58,63 +63,70 @@ internal sealed partial class FiltersPage : ListPage
     /// </summary>
     private void RefreshOptions()
     {
-        if (_disposed)
+        // Take independent snapshots before entering the page-item lock. CatalogFilterState
+        // never calls subscribers while holding its own lock, so this keeps lock ordering simple.
+        var sources = _state.Sources;
+        var platforms = _state.Platforms;
+        var installed = _state.InstalledStatuses;
+        var selectedSources = _state.SelectedSources;
+        var selectedPlatforms = _state.SelectedPlatforms;
+        int count;
+
+        lock (_itemsGate)
         {
-            return;
+            if (_disposed)
+                return;
+
+            var liveKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                "status:installed", "status:not-installed",
+            };
+            foreach (var source in sources)
+                liveKeys.Add(Key("source", source));
+            foreach (var platform in platforms)
+                liveKeys.Add(Key("platform", platform));
+
+            foreach (var stale in _filterItems.Keys.Where(key => !liveKeys.Contains(key)).ToArray())
+                _filterItems.Remove(stale);
+
+            var items = new List<IListItem>
+            {
+                GetFilterItem("status:installed", "Installed status", "Installed", installed.Contains(true),
+                    () => ToggleStatus(true)),
+                GetFilterItem("status:not-installed", "Installed status", "Not installed", installed.Contains(false),
+                    () => ToggleStatus(false)),
+            };
+
+            foreach (var source in sources)
+            {
+                var value = source;
+                items.Add(GetFilterItem(Key("source", value), "Source", value,
+                    selectedSources.Contains(value, StringComparer.OrdinalIgnoreCase),
+                    () => ToggleSource(value)));
+            }
+
+            foreach (var platform in platforms)
+            {
+                var value = platform;
+                items.Add(GetFilterItem(Key("platform", value), "Platform", value,
+                    selectedPlatforms.Contains(value, StringComparer.OrdinalIgnoreCase),
+                    () => TogglePlatform(value)));
+            }
+
+            items.Add(CreateActionItem("Clear installed status", "Clear the status restriction", ClearStatuses));
+            items.Add(CreateActionItem("Clear sources", "Clear all source selections", ClearSources));
+            items.Add(CreateActionItem("Clear platforms", "Clear all platform selections", ClearPlatforms));
+            items.Add(CreateActionItem("Clear all", "Remove every filter restriction", ClearAll));
+            var notifyHost = _items.Length > 0;
+            _items = items.ToArray();
+            count = _items.Length;
+
+            if (!notifyHost)
+                return;
         }
 
-        var liveKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-        {
-            "status:installed", "status:not-installed",
-        };
-        foreach (var source in _state.Sources)
-        {
-            liveKeys.Add(Key("source", source));
-        }
-        foreach (var platform in _state.Platforms)
-        {
-            liveKeys.Add(Key("platform", platform));
-        }
-
-        foreach (var stale in _filterItems.Keys.Where(key => !liveKeys.Contains(key)).ToArray())
-        {
-            _filterItems.Remove(stale);
-        }
-
-        var items = new List<IListItem>
-        {
-            GetFilterItem("status:installed", "Installed status", "Installed", () => _state.InstalledStatuses.Contains(true),
-                () => ToggleStatus(true)),
-            GetFilterItem("status:not-installed", "Installed status", "Not installed", () => _state.InstalledStatuses.Contains(false),
-                () => ToggleStatus(false)),
-        };
-
-        foreach (var source in _state.Sources)
-        {
-            var value = source;
-            items.Add(GetFilterItem(Key("source", value), "Source", value,
-                () => _state.SelectedSources.Contains(value, StringComparer.OrdinalIgnoreCase),
-                () => ToggleSource(value)));
-        }
-
-        foreach (var platform in _state.Platforms)
-        {
-            var value = platform;
-            items.Add(GetFilterItem(Key("platform", value), "Platform", value,
-                () => _state.SelectedPlatforms.Contains(value, StringComparer.OrdinalIgnoreCase),
-                () => TogglePlatform(value)));
-        }
-
-        items.Add(CreateActionItem("Clear installed status", "Clear the status restriction", ClearStatuses));
-        items.Add(CreateActionItem("Clear sources", "Clear all source selections", ClearSources));
-        items.Add(CreateActionItem("Clear platforms", "Clear all platform selections", ClearPlatforms));
-        items.Add(CreateActionItem("Clear all", "Remove every filter restriction", ClearAll));
-        var notifyHost = _items.Length > 0;
-        _items = items.ToArray();
-        if (notifyHost)
-        {
-            RaiseItemsChanged(_items.Length);
-        }
+        // Host callbacks are deliberately outside _itemsGate because GetItems can re-enter.
+        RaiseItemsChanged(count);
     }
 
     private FilterItem GetFilterItem(string key, string dimension, string value, Func<bool> isChecked, Action toggle)
@@ -206,15 +218,21 @@ internal sealed partial class FiltersPage : ListPage
 
     private void SynchronizeFilterItems()
     {
-        foreach (var item in _filterItems.Values)
+        var installed = _state.InstalledStatuses;
+        var sources = _state.SelectedSources;
+        var platforms = _state.SelectedPlatforms;
+        lock (_itemsGate)
         {
-            item.Synchronize(item.Dimension switch
+            foreach (var item in _filterItems.Values)
             {
-                "Installed status" => _state.InstalledStatuses.Contains(item.Value == "Installed"),
-                "Source" => _state.SelectedSources.Contains(item.Value, StringComparer.OrdinalIgnoreCase),
-                "Platform" => _state.SelectedPlatforms.Contains(item.Value, StringComparer.OrdinalIgnoreCase),
-                _ => false,
-            });
+                item.Synchronize(item.Dimension switch
+                {
+                    "Installed status" => installed.Contains(item.Value == "Installed"),
+                    "Source" => sources.Contains(item.Value, StringComparer.OrdinalIgnoreCase),
+                    "Platform" => platforms.Contains(item.Value, StringComparer.OrdinalIgnoreCase),
+                    _ => false,
+                });
+            }
         }
     }
 
@@ -225,22 +243,23 @@ internal sealed partial class FiltersPage : ListPage
     private async void ScheduleResultsRefresh()
     {
         await Task.Yield();
-        if (!_disposed)
-        {
+        bool shouldRefresh;
+        lock (_itemsGate)
+            shouldRefresh = !_disposed;
+        if (shouldRefresh)
             _filtersChanged();
-        }
     }
 
     private static string Key(string dimension, string value) => $"{dimension}:{value}";
 
     public void Dispose()
     {
-        if (_disposed)
+        lock (_itemsGate)
         {
-            return;
+            if (_disposed)
+                return;
+            _disposed = true;
         }
-
-        _disposed = true;
         _state.FilterOptionsChanged -= OnFilterOptionsChanged;
     }
 
