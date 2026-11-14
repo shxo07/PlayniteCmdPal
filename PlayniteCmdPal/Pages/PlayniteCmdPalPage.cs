@@ -24,10 +24,9 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
     private readonly SynchronizationContext? _uiContext;
     private readonly FiltersPage _filtersPage;
     private IListItem[] _items = [CreateStatusItem("Loading your Playnite library…")];
-    private CancellationTokenSource? _searchCancellation;
     private readonly PlayniteLibraryNavigationState _navigation = new();
+    private readonly PlayniteLibraryRequestCoordinator _requests = new();
     private readonly System.Timers.Timer _recentRefreshTimer;
-    private int _requestVersion;
     private readonly object _requestGate = new();
     private static readonly object PreferencesSaveGate = new();
     private static long _preferencesWriteVersion;
@@ -160,15 +159,12 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
                 _navigation.SetSearchText(searchText);
             }
 
-            _searchCancellation?.Cancel();
-            _searchCancellation?.Dispose();
-            _searchCancellation = new CancellationTokenSource();
-
-            version = ++_requestVersion;
+            var request = _requests.BeginRequest();
+            version = request.Version;
             var navigation = _navigation.Capture();
             query = navigation.SearchText;
             mode = navigation.ViewMode;
-            cancellationToken = _searchCancellation.Token;
+            cancellationToken = request.CancellationToken;
 
             if (!preserveItems)
             {
@@ -222,7 +218,7 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
             (IListItem[] Items, IReadOnlyList<(ListItem Item, GameEntry Game)> ArtworkItems) built;
             lock (_requestGate)
             {
-                if (version != _requestVersion || cancellationToken.IsCancellationRequested)
+                if (!_requests.IsCurrent(version) || cancellationToken.IsCancellationRequested)
                 {
                     return;
                 }
@@ -250,7 +246,7 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
         {
             lock (_requestGate)
             {
-                if (version != _requestVersion || cancellationToken.IsCancellationRequested)
+                if (!_requests.IsCurrent(version) || cancellationToken.IsCancellationRequested)
                 {
                     return;
                 }
@@ -462,7 +458,7 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
                         lock (_requestGate)
                         {
                             // Do not mutate objects belonging to an obsolete search request.
-                            if (version != _requestVersion || token.IsCancellationRequested)
+                            if (!_requests.IsCurrent(version) || token.IsCancellationRequested)
                             {
                                 return;
                             }
@@ -575,10 +571,7 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
                 return;
 
             _disposed = true;
-            _requestVersion++;
-            _searchCancellation?.Cancel();
-            _searchCancellation?.Dispose();
-            _searchCancellation = null;
+            _requests.Dispose();
         }
 
         _recentRefreshTimer.Dispose();
