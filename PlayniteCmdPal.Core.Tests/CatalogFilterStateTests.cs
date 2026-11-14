@@ -138,6 +138,31 @@ public sealed class CatalogFilterStateTests
     }
 
     [Fact]
+    public void AtomicTogglesAddAndRemoveSelectionsWithoutLosingOtherValues()
+    {
+        var state = CreateState();
+
+        Assert.True(state.ToggleSource("Steam"));
+        Assert.True(state.ToggleSource("Epic"));
+        Assert.Equal(new[] { "Epic", "Steam" }, state.SelectedSources);
+        Assert.True(state.ToggleSource("steam"));
+        Assert.Equal(new[] { "Epic" }, state.SelectedSources);
+
+        Assert.True(state.TogglePlatform("PC"));
+        Assert.True(state.TogglePlatform("Linux"));
+        Assert.True(state.TogglePlatform("pc"));
+        Assert.Equal(new[] { "Linux" }, state.SelectedPlatforms);
+
+        Assert.True(state.ToggleInstalledStatus(false));
+        Assert.Equal(new[] { true, false }, state.InstalledStatuses);
+        Assert.True(state.ToggleInstalledStatus(true));
+        Assert.Equal(new[] { false }, state.InstalledStatuses);
+
+        Assert.False(state.ToggleSource("Missing"));
+        Assert.False(state.TogglePlatform("Missing"));
+    }
+
+    [Fact]
     public void SelectionNotificationsAreRaisedOutsideTheStateLock()
     {
         var state = CreateState();
