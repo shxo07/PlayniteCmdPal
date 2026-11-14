@@ -84,12 +84,13 @@ Run with a local Playnite library and the PowerToys Command Palette extension:
 3. Switch to **Favorites** using the in-page selector. Confirm the newly pinned game appears immediately. Unpin it and confirm the toast appears while the unified page remains open and the game disappears immediately; switch back to Search games and pin it again.
 4. Search Favorites for a non-matching title and confirm the no-match state; clear the query and confirm the pinned game returns.
 5. Use only the keyboard to move between all three view selectors and press Enter. Confirm each view changes in place, the page remains open, and game selection/launch still works.
-6. In Search games, verify Installed/source/platform filters still apply immediately; in Recently played, verify newest-first ordering and relative-time badges; in Favorites, verify pin/unpin changes the visible list without leaving the page.
-7. Restart the Command Palette extension and Playnite, then confirm the favorite remains.
-8. Remove a favorited game from the current Playnite library (or test with a known missing ID) and confirm it is hidden from Favorites without deleting its saved preference.
-9. With an unsupported future-schema or unreadable preferences file, confirm normal Search results still appear and can still launch; the Favorites view should report that preferences are unavailable rather than breaking the result list. Confirm the error state leaves the unified page/query open.
-10. Rapidly change the Favorites query and pin/unpin several games while artwork is loading. Confirm obsolete requests are cancelled, the page never remains stuck on its loading status, and current favorite artwork appears.
-11. Open and close the unified page repeatedly, then pin/unpin a game. Confirm retired page instances do not refresh or retain active work.
+6. In each of Search games, Recently played, and Favorites, open Filters and verify the same installed/source/platform selections are shown and applied immediately. Change selections in one view, switch to both other views, and confirm the selections remain active. Confirm Recently played still preserves newest-first ordering and relative-time badges, and Favorites still responds to pin/unpin without leaving the page.
+7. Close and reopen the Playnite page (and separately restart Command Palette); confirm the installed/source/platform selections are restored and applied in all three views.
+8. Restart the Command Palette extension and Playnite, then confirm the favorite remains.
+9. Remove a favorited game from the current Playnite library (or test with a known missing ID) and confirm it is hidden from Favorites without deleting its saved preference.
+10. With an unsupported future-schema or unreadable preferences file, confirm normal Search results still appear and can still launch; the Favorites view should report that preferences are unavailable rather than breaking the result list. Confirm the error state leaves the unified page/query open.
+11. Rapidly change the Favorites query and pin/unpin several games while artwork is loading. Confirm obsolete requests are cancelled, the page never remains stuck on its loading status, and current favorite artwork appears.
+12. Open and close the unified page repeatedly, then pin/unpin a game. Confirm retired page instances do not refresh or retain active work.
 
 Capture screenshots of Search actions, populated Favorites, and empty/no-match states. A short before/after capture of pinning and unpinning without editing the query is useful evidence.
 
