@@ -26,7 +26,7 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
     private IListItem[] _items = [CreateStatusItem("Loading your Playnite library…")];
     private CancellationTokenSource? _searchCancellation;
     private string _searchText = string.Empty;
-    private ViewMode _viewMode = ViewMode.Search;
+    private PlayniteLibraryViewMode _viewMode = PlayniteLibraryViewMode.Search;
     private readonly Timer _recentRefreshTimer;
     private int _requestVersion;
     private readonly object _requestGate = new();
@@ -108,7 +108,7 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
     internal IContextItem CreateRefreshContextItem() =>
         new CommandContextItem(new RefreshCatalogCommand(this));
 
-    private void SetViewMode(ViewMode mode)
+    private void SetPlayniteLibraryViewMode(PlayniteLibraryViewMode mode)
     {
         lock (_requestGate)
         {
@@ -127,7 +127,7 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
 
         lock (_requestGate)
         {
-            if (_viewMode != ViewMode.RecentlyPlayed)
+            if (_viewMode != PlayniteLibraryViewMode.RecentlyPlayed)
                 return;
         }
 
@@ -138,7 +138,7 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
     {
         int version;
         string query;
-        ViewMode mode;
+        PlayniteLibraryViewMode mode;
         CancellationToken cancellationToken;
         int count;
 
@@ -173,7 +173,7 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
     private async Task LoadItemsAsync(
         int version,
         string query,
-        ViewMode mode,
+        PlayniteLibraryViewMode mode,
         bool forceRefresh,
         CancellationToken cancellationToken)
     {
@@ -229,11 +229,18 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
                     return;
                 }
 
-                _items =
-                [
-                    CreateFiltersItem(),
-                    CreateStatusItem("Couldn't read the Playnite catalog. Check the companion plugin and snapshot permissions, then refresh."),
-                ];
+                var failureItems = new List<IListItem>
+                {
+                    CreateViewModeItem(PlayniteLibraryViewMode.Search),
+                    CreateViewModeItem(PlayniteLibraryViewMode.RecentlyPlayed),
+                    CreateViewModeItem(PlayniteLibraryViewMode.Favorites),
+                };
+                if (mode == PlayniteLibraryViewMode.Search)
+                    failureItems.Add(CreateFiltersItem());
+                failureItems.Add(CreateStatusItem(mode == PlayniteLibraryViewMode.Favorites
+                    ? "Couldn't load Favorites. Check the local preferences file and Playnite catalog, then use Refresh Playnite catalog."
+                    : "Couldn't read the Playnite catalog. Check the companion plugin and snapshot permissions, then use Refresh Playnite catalog."));
+                _items = failureItems.ToArray();
             }
 
             count = _items.Length;
@@ -244,15 +251,15 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
     private (IListItem[] Items, IReadOnlyList<(ListItem Item, GameEntry Game)> ArtworkItems) BuildItems(
         CatalogReadResult catalog,
         string query,
-        ViewMode mode)
+        PlayniteLibraryViewMode mode)
     {
         var items = new List<IListItem>
         {
-            CreateViewModeItem(ViewMode.Search),
-            CreateViewModeItem(ViewMode.RecentlyPlayed),
-            CreateViewModeItem(ViewMode.Favorites),
+            CreatePlayniteLibraryViewModeItem(PlayniteLibraryViewMode.Search),
+            CreatePlayniteLibraryViewModeItem(PlayniteLibraryViewMode.RecentlyPlayed),
+            CreatePlayniteLibraryViewModeItem(PlayniteLibraryViewMode.Favorites),
         };
-        if (mode == ViewMode.Search)
+        if (mode == PlayniteLibraryViewMode.Search)
             items.Add(CreateFiltersItem());
         if (!catalog.IsAvailable)
         {
@@ -282,37 +289,26 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
             return (items.ToArray(), Array.Empty<(ListItem Item, GameEntry Game)>());
         }
 
-        IReadOnlyList<GameEntry> matches;
-        var favoriteIds = mode == ViewMode.Favorites
-            ? _favorites.GetFavoriteIds().ToHashSet(StringComparer.Ordinal)
-            : new HashSet<string>(StringComparer.Ordinal);
-        switch (mode)
-        {
-            case ViewMode.Favorites:
-                matches = GameSearch.Search(catalog.Games.Where(game => favoriteIds.Contains(game.GameId)), query);
-                break;
-            case ViewMode.RecentlyPlayed:
-                var recentGames = RecentlyPlayedGames.Sort(catalog.Games);
-                var recentQuery = query.Trim();
-                matches = string.IsNullOrEmpty(recentQuery)
-                    ? recentGames
-                    : recentGames.Where(game => game.Title.Contains(recentQuery, StringComparison.OrdinalIgnoreCase)).ToArray();
-                break;
-            default:
-                matches = GameSearch.Search(catalog.Games, query, _filterState.ToSearchFilters());
-                break;
-        }
+        var favoriteIds = mode == PlayniteLibraryViewMode.Favorites
+            ? _favorites.GetFavoriteIds()
+            : Array.Empty<string>();
+        var matches = PlayniteLibraryViews.Search(
+            catalog.Games,
+            mode,
+            query,
+            favoriteIds,
+            mode == PlayniteLibraryViewMode.Search ? _filterState.ToSearchFilters() : null);
 
         if (matches.Count == 0)
         {
             string message;
-            if (mode == ViewMode.Favorites)
+            if (mode == PlayniteLibraryViewMode.Favorites)
             {
                 message = favoriteIds.Count == 0
                     ? "No favorites yet. Pin a game from its search result actions."
                     : "No saved favorites match this search in the current Playnite library.";
             }
-            else if (mode == ViewMode.RecentlyPlayed)
+            else if (mode == PlayniteLibraryViewMode.RecentlyPlayed)
             {
                 var recentEmptyState = RecentlyPlayedGames.GetEmptyState(catalog.Games.Count, catalog.SkippedRecordCount);
                 message = recentEmptyState switch
@@ -383,7 +379,7 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
                     new CommandContextItem(new ToggleFavoriteCommand(_favorites, game.GameId)),
                 ],
             };
-            if (mode == ViewMode.RecentlyPlayed && game.LastActivity.HasValue)
+            if (mode == PlayniteLibraryViewMode.RecentlyPlayed && game.LastActivity.HasValue)
             {
                 item.Tags = [new Tag(RecentlyPlayedGames.FormatRelativeLastPlayed(
                     game.LastActivity.Value,
@@ -469,20 +465,20 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
         }
     }
 
-    private ListItem CreateViewModeItem(ViewMode mode)
+    private ListItem CreatePlayniteLibraryViewModeItem(PlayniteLibraryViewMode mode)
     {
         var title = mode switch
         {
-            ViewMode.Search => "Search games",
-            ViewMode.RecentlyPlayed => "Recently played",
-            ViewMode.Favorites => "Favorites",
+            PlayniteLibraryViewMode.Search => "Search games",
+            PlayniteLibraryViewMode.RecentlyPlayed => "Recently played",
+            PlayniteLibraryViewMode.Favorites => "Favorites",
             _ => throw new ArgumentOutOfRangeException(nameof(mode)),
         };
         var icon = mode switch
         {
-            ViewMode.Search => new IconInfo("\uE721"),
-            ViewMode.RecentlyPlayed => new IconInfo("\uE823"),
-            ViewMode.Favorites => new IconInfo("\uE734"),
+            PlayniteLibraryViewMode.Search => new IconInfo("\uE721"),
+            PlayniteLibraryViewMode.RecentlyPlayed => new IconInfo("\uE823"),
+            PlayniteLibraryViewMode.Favorites => new IconInfo("\uE734"),
             _ => ArtworkIconLoader.FallbackIcon,
         };
 
@@ -529,7 +525,7 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
         _filtersPage.Dispose();
     }
 
-    private enum ViewMode
+    private enum PlayniteLibraryViewMode
     {
         Search,
         RecentlyPlayed,
@@ -539,9 +535,9 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
     private sealed partial class SwitchViewCommand : InvokableCommand
     {
         private readonly PlayniteCmdPalPage _page;
-        private readonly ViewMode _mode;
+        private readonly PlayniteLibraryViewMode _mode;
 
-        public SwitchViewCommand(PlayniteCmdPalPage page, ViewMode mode)
+        public SwitchViewCommand(PlayniteCmdPalPage page, PlayniteLibraryViewMode mode)
         {
             _page = page;
             _mode = mode;
@@ -549,15 +545,15 @@ internal sealed partial class PlayniteCmdPalPage : DynamicListPage, IDisposable
 
         public override string Name => _mode switch
         {
-            ViewMode.Search => "Show search games",
-            ViewMode.RecentlyPlayed => "Show recently played games",
-            ViewMode.Favorites => "Show favorites",
+            PlayniteLibraryViewMode.Search => "Show search games",
+            PlayniteLibraryViewMode.RecentlyPlayed => "Show recently played games",
+            PlayniteLibraryViewMode.Favorites => "Show favorites",
             _ => "Switch Playnite view",
         };
 
         public override CommandResult Invoke()
         {
-            _page.SetViewMode(_mode);
+            _page.SetPlayniteLibraryViewMode(_mode);
             return CommandResult.KeepOpen();
         }
     }
