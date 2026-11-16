@@ -10,7 +10,7 @@ The current repository contains `PlayniteCmdPal.sln` and `PlayniteCmdPal/Playnit
 Observed from checked-in project files:
 - Target framework: `net10.0-windows10.0.26100.0`.
 - Minimum/supported Windows platform: `10.0.19041.0`.
-- Windows SDK package property: `10.0.26100.68-preview`.
+- Windows SDK package property: `10.0.26100.87` (stable; selected centrally by `WindowsSdkPackageVersion` in `Directory.Build.props`).
 - Runtime identifiers: `win-x64;win-arm64`.
 - Build platforms: `x64;ARM64`.
 - Central package management is enabled.
@@ -24,7 +24,7 @@ Sources: [project](../PlayniteCmdPal/PlayniteCmdPal.csproj), [package versions](
 
 ## Template validation update (2026-10-27)
 
-The generated project was inspected without regeneration. Its current source pins `net10.0-windows10.0.26100.0`, Windows SDK package property `10.0.26100.68-preview`, minimum/supported platform `10.0.19041.0`, and RIDs `win-x64;win-arm64`. Shared build platforms are `x64;ARM64`. Central package versions are recorded in `Directory.Packages.props`; the primary extension packages are `Microsoft.CommandPalette.Extensions` 0.9.260303001, `Microsoft.Windows.CsWinRT` 2.2.0, `Shmuelie.WinRTServer` 2.1.1, and `Microsoft.Windows.SDK.BuildTools.MSIX` 1.7.20250829.1. Maintainer-reported SDK: .NET SDK 10.0.403. The solution metadata reports VS 17.13.35507.96 as generator environment, not as a verified minimum.
+Historical note (2026-10-27, before WERD-77): the generated project was inspected without regeneration and at that time pinned `net10.0-windows10.0.26100.0`, Windows SDK package property `10.0.26100.68-preview`, minimum/supported platform `10.0.19041.0`, and RIDs `win-x64;win-arm64`. The preview property was subsequently replaced by stable `10.0.26100.87`; see the WERD-77 decision record below. The remaining template/package observations in this dated note describe that earlier inspection. Shared build platforms are `x64;ARM64`. Central package versions are recorded in `Directory.Packages.props`; the primary extension packages are `Microsoft.CommandPalette.Extensions` 0.9.260303001, `Microsoft.Windows.CsWinRT` 2.2.0, `Shmuelie.WinRTServer` 2.1.1, and `Microsoft.Windows.SDK.BuildTools.MSIX` 1.7.20250829.1. Maintainer-reported SDK: .NET SDK 10.0.403. The solution metadata reports VS 17.13.35507.96 as generator environment, not as a verified minimum.
 
 The initial build failure was `APPX1685` because `x-generate` selected default language `en-AE`. The source manifest now explicitly declares `<Resource Language="en-US"/>`; this valid language tag avoids dependence on the build machine locale while keeping manifest validation enabled. On the maintainer's Windows 10.0.19044 machine with .NET SDK 10.0.403, restore succeeded and x64/ARM64 builds succeeded both with and without `-p:DefaultLanguage=en-US` (all build commands exit code 0). Visual Studio package deployment succeeded; Command Palette was reloaded, the extension opened, and the placeholder page was confirmed. Exact Visual Studio version/workloads and PowerToys version were not recorded. See [developer setup](DEVELOPER-SETUP.md) for commands and detailed results.
 
