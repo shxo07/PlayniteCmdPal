@@ -116,8 +116,8 @@
            or Windows SDK reference packs that may also appear in ResolvedRuntimePack. -->
       <!-- Use the runtime pack selected by framework resolution; local NuGet caches can contain multiple versions. -->
       <_DotNetRuntimePack Include="@(ResolvedRuntimePack)"
-                          Condition="'%(ResolvedRuntimePack.NuGetPackageId)' == 'Microsoft.NETCore.App.Runtime.$(RuntimeIdentifier)' and '%(ResolvedRuntimePack.RuntimeIdentifier)' == '$(RuntimeIdentifier)'" />
-      <_DotNetRuntimeNoticeFiles Include="@(_DotNetRuntimePack->'%(PackageDirectory)\THIRD-PARTY-NOTICES.TXT')" />
+                          Condition="'%(ResolvedRuntimePack.NuGetPackageId)' == 'Microsoft.NETCore.App.Runtime.$(RuntimeIdentifier)' and '%(ResolvedRuntimePack.RuntimeIdentifier)' == '$(RuntimeIdentifier)'"/>
+      <_DotNetRuntimeNoticeFiles Include="@(_DotNetRuntimePack->'%(PackageDirectory)\THIRD-PARTY-NOTICES.TXT')"/>
     </ItemGroup>
 
     <Error Condition="'@(_DotNetRuntimeNoticeFiles)' == ''"
@@ -131,15 +131,17 @@
 
   <!-- The runtime notice is created during Publish, after the MSIX packaging pipeline
        has already collected its normal payload. Add the exact restored runtime-pack
-       notice directly to AppxPackagePayload immediately before MakeAppx consumes it. -->
+       notice directly before the MSIX generation target consumes AppxPackagePayload.
+       Do not gate this on AppxPackage: single-project MSIX tooling does not consistently
+       set that legacy property even when _GenerateAppxPackageFile is in the build graph. -->
   <Target Name="AddDotNetRuntimeThirdPartyNoticesToMsixPayload"
           BeforeTargets="_GenerateAppxPackageFile"
-          Condition="'$(AppxPackage)' == 'true' and '$(SelfContained)' == 'true' and '$(RuntimeIdentifier)' != ''">
+          Condition="'$(SelfContained)' == 'true' and '$(RuntimeIdentifier)' != ''">
     <ItemGroup>
       <!-- Keep MSIX payload selection aligned with the runtime pack selected by framework resolution. -->
       <_DotNetRuntimeMsixPack Include="@(ResolvedRuntimePack)"
-                              Condition="'%(ResolvedRuntimePack.NuGetPackageId)' == 'Microsoft.NETCore.App.Runtime.$(RuntimeIdentifier)' and '%(ResolvedRuntimePack.RuntimeIdentifier)' == '$(RuntimeIdentifier)'" />
-      <_DotNetRuntimeMsixNoticeFiles Include="@(_DotNetRuntimeMsixPack->'%(PackageDirectory)\THIRD-PARTY-NOTICES.TXT')" />
+                              Condition="'%(ResolvedRuntimePack.NuGetPackageId)' == 'Microsoft.NETCore.App.Runtime.$(RuntimeIdentifier)' and '%(ResolvedRuntimePack.RuntimeIdentifier)' == '$(RuntimeIdentifier)'"/>
+      <_DotNetRuntimeMsixNoticeFiles Include="@(_DotNetRuntimeMsixPack->'%(PackageDirectory)\THIRD-PARTY-NOTICES.TXT')"/>
     </ItemGroup>
 
     <Error Condition="'@(_DotNetRuntimeMsixNoticeFiles)' == ''"
