@@ -114,8 +114,10 @@
     <ItemGroup>
       <!-- Match only Microsoft.NETCore.App.Runtime, not the Windows Desktop, ASP.NET Core,
            or Windows SDK reference packs that may also appear in ResolvedRuntimePack. -->
-      <!-- Select the runtime pack for this target framework, not every version cached locally. -->
-      <_DotNetRuntimeNoticeFiles Include="$(NuGetPackageRoot)microsoft.netcore.app.runtime.$(RuntimeIdentifier)\$(RuntimeFrameworkVersion)\THIRD-PARTY-NOTICES.TXT" />
+      <!-- Use the runtime pack selected by framework resolution; local NuGet caches can contain multiple versions. -->
+      <_DotNetRuntimePack Include="@(ResolvedRuntimePack)"
+                          Condition="'%(ResolvedRuntimePack.NuGetPackageId)' == 'Microsoft.NETCore.App.Runtime.$(RuntimeIdentifier)' and '%(ResolvedRuntimePack.RuntimeIdentifier)' == '$(RuntimeIdentifier)'" />
+      <_DotNetRuntimeNoticeFiles Include="@(_DotNetRuntimePack->'%(PackageDirectory)\THIRD-PARTY-NOTICES.TXT')" />
     </ItemGroup>
 
     <Error Condition="'@(_DotNetRuntimeNoticeFiles)' == ''"
@@ -134,8 +136,10 @@
           BeforeTargets="_GenerateAppxPackageFile"
           Condition="'$(AppxPackage)' == 'true' and '$(SelfContained)' == 'true' and '$(RuntimeIdentifier)' != ''">
     <ItemGroup>
-      <!-- Keep MSIX payload selection aligned with the runtime used by this publish. -->
-      <_DotNetRuntimeMsixNoticeFiles Include="$(NuGetPackageRoot)microsoft.netcore.app.runtime.$(RuntimeIdentifier)\$(RuntimeFrameworkVersion)\THIRD-PARTY-NOTICES.TXT" />
+      <!-- Keep MSIX payload selection aligned with the runtime pack selected by framework resolution. -->
+      <_DotNetRuntimeMsixPack Include="@(ResolvedRuntimePack)"
+                              Condition="'%(ResolvedRuntimePack.NuGetPackageId)' == 'Microsoft.NETCore.App.Runtime.$(RuntimeIdentifier)' and '%(ResolvedRuntimePack.RuntimeIdentifier)' == '$(RuntimeIdentifier)'" />
+      <_DotNetRuntimeMsixNoticeFiles Include="@(_DotNetRuntimeMsixPack->'%(PackageDirectory)\THIRD-PARTY-NOTICES.TXT')" />
     </ItemGroup>
 
     <Error Condition="'@(_DotNetRuntimeMsixNoticeFiles)' == ''"
