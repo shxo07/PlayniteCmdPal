@@ -6,7 +6,7 @@ namespace PlayniteCmdPal.Snapshot;
 /// <summary>Validation for Playnite's database-managed relative artwork references.</summary>
 public static class ArtworkReferenceValidator
 {
-    private static readonly string[] AllowedExtensions = { ".png", ".jpg", ".jpeg", ".gif", ".webp" };
+    private static readonly string[] AllowedExtensions = { ".png", ".jpg", ".jpeg", ".gif", ".webp", ".ico" };
 
     public static bool TryValidate(string gameId, string? reference, out string fileName)
     {
@@ -84,6 +84,39 @@ public static class ArtworkFileSignature
         {
             extension = ".webp";
             return true;
+        }
+
+        // ICO is a bounded directory of embedded images. Validate all entry dimensions
+        // and byte ranges; the Windows producer performs the actual decode and PNG conversion.
+        if (data.Length >= 22 && data[0] == 0 && data[1] == 0 && data[2] == 1 && data[3] == 0)
+        {
+            var count = data[4] | (data[5] << 8);
+            var directoryLength = 6 + (count * 16);
+            if (count is > 0 and <= 256 && directoryLength <= data.Length)
+            {
+                var valid = true;
+                for (var index = 0; index < count; index++)
+                {
+                    var offset = 6 + (index * 16);
+                    var width = data[offset] == 0 ? 256 : data[offset];
+                    var height = data[offset + 1] == 0 ? 256 : data[offset + 1];
+                    var imageLength = BitConverter.ToUInt32(data, offset + 8);
+                    var imageOffset = BitConverter.ToUInt32(data, offset + 12);
+                    if (width <= 0 || height <= 0 || imageLength == 0 ||
+                        imageOffset < directoryLength || imageOffset > data.Length ||
+                        imageLength > data.Length - imageOffset)
+                    {
+                        valid = false;
+                        break;
+                    }
+                }
+
+                if (valid)
+                {
+                    extension = ".ico";
+                    return true;
+                }
+            }
         }
 
         return false;

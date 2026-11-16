@@ -68,6 +68,16 @@ public sealed class PlayniteCatalogAdapterTests : IDisposable
     }
 
     [Fact]
+    public async Task LastActivitySurvivesSnapshotAdapterMapping()
+    {
+        var activity = new DateTime(2026, 10, 30, 14, 25, 0, DateTimeKind.Unspecified);
+        await SnapshotFilePublisher.PublishAsync(_path, new CatalogSnapshot(_time.GetUtcNow(), new[] { new SnapshotGame(GameA, "Halo", true, lastActivity: activity) }), CancellationToken.None, schemaVersion: 2, includeLastActivity: true);
+        var result = await new PlayniteCatalogAdapter(_path, _time).GetAsync();
+        Assert.Equal(activity, Assert.Single(result.Games).LastActivity);
+        Assert.Equal(DateTimeKind.Unspecified, result.Games[0].LastActivity!.Value.Kind);
+    }
+
+    [Fact]
     public async Task EmptyValidSnapshotIsAnAvailableEmptyLibrary()
     {
         await PublishAsync(new CatalogSnapshot(_time.GetUtcNow(), Array.Empty<SnapshotGame>()));
@@ -343,8 +353,162 @@ public sealed class PlayniteCatalogAdapterTests : IDisposable
         Assert.Equal(image, PlayniteCatalogAdapter.ResolveArtworkPath(digest, cacheRoot + Path.DirectorySeparatorChar));
     }
 
+    [Fact]
+    public async Task ReadsLegacyV1WhenNoEnrichedSnapshotExists()
+    {
+        var enrichedPath = Path.Combine(_directory, "catalog-v2.json");
+        var legacyPath = Path.Combine(_directory, "catalog-v1.json");
+        await SnapshotFilePublisher.PublishAsync(legacyPath, NewSnapshot(("Legacy game", true, null, null)));
+        var result = await new PlayniteCatalogAdapter(enrichedPath, _time, legacyPath).GetAsync();
+        Assert.True(result.IsAvailable);
+        Assert.Equal("Legacy game", Assert.Single(result.Games).Title);
+        Assert.Null(result.Games[0].LastActivity);
+    }
+
+    [Fact]
+    public async Task PrefersNewerV2SnapshotAndPreservesLastActivity()
+    {
+        var enrichedPath = Path.Combine(_directory, "catalog-v2.json");
+        var legacyPath = Path.Combine(_directory, "catalog-v1.json");
+        var activity = new DateTime(2026, 10, 30, 14, 25, 0, DateTimeKind.Unspecified);
+        var older = new CatalogSnapshot(_time.GetUtcNow() - TimeSpan.FromMinutes(1), new[] { new SnapshotGame(GameA, "Old legacy", true) });
+        var newer = new CatalogSnapshot(_time.GetUtcNow(), new[] { new SnapshotGame(GameA, "New enriched", true, lastActivity: activity) });
+        await SnapshotFilePublisher.PublishAsync(legacyPath, older);
+        await SnapshotFilePublisher.PublishAsync(enrichedPath, newer, CancellationToken.None, schemaVersion: 2, includeLastActivity: true);
+
+        var result = await new PlayniteCatalogAdapter(enrichedPath, _time, legacyPath).GetAsync();
+        Assert.Equal("New enriched", Assert.Single(result.Games).Title);
+        Assert.Equal(activity, result.Games[0].LastActivity);
+    }
+
+    [Fact]
+    public async Task PrefersNewerLegacyV1AfterRollbackEvenWhenOldV2Remains()
+    {
+        var enrichedPath = Path.Combine(_directory, "catalog-v2.json");
+        var legacyPath = Path.Combine(_directory, "catalog-v1.json");
+        var staleV2 = new CatalogSnapshot(_time.GetUtcNow() - TimeSpan.FromMinutes(2), new[] { new SnapshotGame(GameA, "Before rollback", true, lastActivity: new DateTime(2026, 10, 29, 8, 0, 0)) });
+        var updatedV1 = new CatalogSnapshot(_time.GetUtcNow(), new[] { new SnapshotGame(GameA, "After rollback", false) });
+        await SnapshotFilePublisher.PublishAsync(enrichedPath, staleV2, CancellationToken.None, schemaVersion: 2, includeLastActivity: true);
+        await SnapshotFilePublisher.PublishAsync(legacyPath, updatedV1);
+
+        var result = await new PlayniteCatalogAdapter(enrichedPath, _time, legacyPath).GetAsync();
+        Assert.Equal("After rollback", Assert.Single(result.Games).Title);
+        Assert.False(result.Games[0].IsInstalled);
+        Assert.Null(result.Games[0].LastActivity);
+    }
+
+
+    [Fact]
+    public async Task RevalidatesV2AfterReadingANewerV1DuringPublication()
+    {
+        var enrichedPath = Path.Combine(_directory, "catalog-v2.json");
+        var legacyPath = Path.Combine(_directory, "catalog-v1.json");
+        var oldV2 = await ParseSnapshotAsync(new CatalogSnapshot(
+            _time.GetUtcNow() - TimeSpan.FromMinutes(1),
+            new[] { new SnapshotGame(GameA, "Old enriched", true, lastActivity: new DateTime(2026, 10, 29, 8, 0, 0)) }),
+            schemaVersion: 2, includeLastActivity: true);
+        var newV1 = await ParseSnapshotAsync(new CatalogSnapshot(
+            _time.GetUtcNow(),
+            new[] { new SnapshotGame(GameA, "New export", true) }));
+        var newV2 = await ParseSnapshotAsync(new CatalogSnapshot(
+            _time.GetUtcNow(),
+            new[] { new SnapshotGame(GameA, "New export", true, lastActivity: new DateTime(2026, 10, 30, 10, 0, 0, DateTimeKind.Utc)) }),
+            schemaVersion: 2, includeLastActivity: true);
+        var enrichedReads = 0;
+
+        Task<CatalogSnapshotParseResult> ReadPathAsync(string path)
+        {
+            if (path == enrichedPath)
+                return Task.FromResult(Interlocked.Increment(ref enrichedReads) == 1 ? oldV2 : newV2);
+            return Task.FromResult(newV1);
+        }
+
+        var adapter = new PlayniteCatalogAdapter(enrichedPath, legacyPath, _time, ReadPathAsync);
+        var result = await adapter.GetAsync();
+
+        Assert.Equal(2, enrichedReads);
+        Assert.Equal("New export", Assert.Single(result.Games).Title);
+        Assert.NotNull(result.Games[0].LastActivity);
+    }
+
+    [Fact]
+    public async Task RetriesV2RevalidationWhenPublicationFinishesAfterTheFirstRetry()
+    {
+        var enrichedPath = Path.Combine(_directory, "catalog-v2.json");
+        var legacyPath = Path.Combine(_directory, "catalog-v1.json");
+        var oldV2 = await ParseSnapshotAsync(new CatalogSnapshot(
+            _time.GetUtcNow() - TimeSpan.FromMinutes(1),
+            new[] { new SnapshotGame(GameA, "Old enriched", true, lastActivity: new DateTime(2026, 10, 29, 8, 0, 0)) }),
+            schemaVersion: 2, includeLastActivity: true);
+        var newV1 = await ParseSnapshotAsync(new CatalogSnapshot(
+            _time.GetUtcNow(),
+            new[] { new SnapshotGame(GameA, "New export", true) }));
+        var newV2 = await ParseSnapshotAsync(new CatalogSnapshot(
+            _time.GetUtcNow(),
+            new[] { new SnapshotGame(GameA, "New export", true, lastActivity: new DateTime(2026, 10, 30, 10, 0, 0, DateTimeKind.Utc)) }),
+            schemaVersion: 2, includeLastActivity: true);
+        var enrichedReads = 0;
+
+        Task<CatalogSnapshotParseResult> ReadPathAsync(string path)
+        {
+            if (path == enrichedPath)
+                return Task.FromResult(Interlocked.Increment(ref enrichedReads) < 3 ? oldV2 : newV2);
+            return Task.FromResult(newV1);
+        }
+
+        var adapter = new PlayniteCatalogAdapter(enrichedPath, legacyPath, _time, ReadPathAsync);
+        var result = await adapter.GetAsync();
+
+        Assert.Equal(3, enrichedReads);
+        Assert.Equal("New export", Assert.Single(result.Games).Title);
+        Assert.NotNull(result.Games[0].LastActivity);
+    }
+
+    [Fact]
+    public async Task RevalidatesInitiallyMissingV2BeforeFallingBackToLegacy()
+    {
+        var enrichedPath = Path.Combine(_directory, "catalog-v2.json");
+        var legacyPath = Path.Combine(_directory, "catalog-v1.json");
+        var missing = CatalogSnapshotParseResult.Failure(
+            CatalogErrorCode.Missing, "The enriched snapshot is not published yet.");
+        var newV1 = await ParseSnapshotAsync(new CatalogSnapshot(
+            _time.GetUtcNow(),
+            new[] { new SnapshotGame(GameA, "New export", true) }));
+        var newV2 = await ParseSnapshotAsync(new CatalogSnapshot(
+            _time.GetUtcNow(),
+            new[] { new SnapshotGame(GameA, "New export", true, lastActivity: new DateTime(2026, 10, 30, 10, 0, 0, DateTimeKind.Utc)) }),
+            schemaVersion: 2, includeLastActivity: true);
+        var enrichedReads = 0;
+
+        Task<CatalogSnapshotParseResult> ReadPathAsync(string path)
+        {
+            if (path == enrichedPath)
+                return Task.FromResult(Interlocked.Increment(ref enrichedReads) == 1 ? missing : newV2);
+            return Task.FromResult(newV1);
+        }
+
+        var adapter = new PlayniteCatalogAdapter(enrichedPath, legacyPath, _time, ReadPathAsync);
+        var result = await adapter.GetAsync();
+
+        Assert.Equal(2, enrichedReads);
+        Assert.Equal("New export", Assert.Single(result.Games).Title);
+        Assert.NotNull(result.Games[0].LastActivity);
+    }
+
     private CatalogSnapshot NewSnapshot(params (string Name, bool Installed, string? Source, string? Platform)[] games) =>
         new(_time.GetUtcNow(), games.Select((game, index) => new SnapshotGame(index == 0 ? GameA : GameB, game.Name, game.Installed, game.Source, game.Platform)).ToArray());
+
+
+    private static async Task<CatalogSnapshotParseResult> ParseSnapshotAsync(
+        CatalogSnapshot snapshot,
+        int schemaVersion = 1,
+        bool includeLastActivity = false)
+    {
+        using var stream = new MemoryStream();
+        await CatalogSnapshotSerializer.SerializeAsync(
+            stream, snapshot, schemaVersion: schemaVersion, includeLastActivity: includeLastActivity);
+        return CatalogSnapshotParser.Parse(stream.ToArray());
+    }
 
     private Task PublishAsync(CatalogSnapshot snapshot) => SnapshotFilePublisher.PublishAsync(_path, snapshot);
 

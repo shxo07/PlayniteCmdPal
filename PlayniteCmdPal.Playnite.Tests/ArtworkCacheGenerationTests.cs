@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using PlayniteCmdPal.Playnite;
 using PlayniteCmdPal.Snapshot;
 using Xunit;
 
@@ -38,6 +39,103 @@ public sealed class ArtworkCacheGenerationTests : IDisposable
         Assert.Single(Directory.GetFiles(_cacheRoot));
     }
 
+
+    [Fact]
+    public void IcoArtworkIsConvertedToPngBeforeItEntersTheContentAddressedCache()
+    {
+        var ico = new byte[26];
+        ico[2] = 1;
+        ico[4] = 1;
+        ico[6] = 16;
+        ico[7] = 16;
+        ico[10] = 1;
+        ico[12] = 32;
+        ico[14] = 4;
+        ico[18] = 22;
+        ico[22] = 1; ico[23] = 2; ico[24] = 3; ico[25] = 4;
+
+        var png = new byte[24];
+        byte[] signature = { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A };
+        Array.Copy(signature, png, signature.Length);
+        png[16] = 0x49; png[17] = 0x45; png[18] = 0x4E; png[19] = 0x44;
+        var source = Path.Combine(_filesRoot, GameId, FileIdA + ".ico");
+        File.WriteAllBytes(source, ico);
+
+        using var cache = new ArtworkCacheGeneration(
+            _cacheRoot, SnapshotLimits.MaxArtworkCacheBytes, SnapshotLimits.MaxArtworkBytes,
+            null, File.Move, _ => { }, _ => png);
+        var id = cache.TryImport(GameId, GameId + "\\" + FileIdA + ".ico", source, _filesRoot);
+
+        Assert.Equal(Digest(png), id);
+        cache.Activate(); cache.MarkPublished(); cache.Complete();
+        Assert.True(File.Exists(Path.Combine(_cacheRoot, id + ".png")));
+    }
+
+    [Fact]
+    public void IcoConversionFailureReportsTheExactStageAndException()
+    {
+        var ico = new byte[26];
+        ico[2] = 1;
+        ico[4] = 1;
+        ico[6] = 16;
+        ico[7] = 16;
+        ico[10] = 1;
+        ico[12] = 32;
+        ico[14] = 4;
+        ico[18] = 22;
+        ico[22] = 1; ico[23] = 2; ico[24] = 3; ico[25] = 4;
+        var source = Path.Combine(_filesRoot, GameId, FileIdA + ".ico");
+        File.WriteAllBytes(source, ico);
+
+        using var cache = new ArtworkCacheGeneration(
+            _cacheRoot,
+            convertIcoToPng: _ => throw new InvalidDataException("Injected ICO decoder failure."));
+        string? diagnostic = null;
+
+        var id = cache.TryImport(
+            GameId,
+            GameId + "\\" + FileIdA + ".ico",
+            source,
+            _filesRoot,
+            message => diagnostic = message);
+
+        Assert.Null(id);
+        Assert.NotNull(diagnostic);
+        Assert.Contains("stage=ico-conversion", diagnostic);
+        Assert.Contains("Injected ICO decoder failure", diagnostic);
+        Assert.Contains(source, diagnostic);
+        Assert.Empty(Directory.GetFiles(GetStagingDirectory()));
+    }
+
+    [Fact]
+    public void MissingIcoConverterReportsThatConversionIsNotConfigured()
+    {
+        var ico = new byte[26];
+        ico[2] = 1;
+        ico[4] = 1;
+        ico[6] = 16;
+        ico[7] = 16;
+        ico[10] = 1;
+        ico[12] = 32;
+        ico[14] = 4;
+        ico[18] = 22;
+        ico[22] = 1; ico[23] = 2; ico[24] = 3; ico[25] = 4;
+        var source = Path.Combine(_filesRoot, GameId, FileIdA + ".ico");
+        File.WriteAllBytes(source, ico);
+
+        using var cache = new ArtworkCacheGeneration(_cacheRoot);
+        string? diagnostic = null;
+        var id = cache.TryImport(
+            GameId,
+            GameId + "\\" + FileIdA + ".ico",
+            source,
+            _filesRoot,
+            message => diagnostic = message);
+
+        Assert.Null(id);
+        Assert.Contains("stage=ico-conversion", diagnostic);
+        Assert.Contains("not configured", diagnostic);
+    }
 
     [Fact]
     public void MissingArtworkFileProducesNoIdentifierAndDoesNotFailTheCatalogExport()
@@ -360,6 +458,29 @@ public sealed class ArtworkCacheGenerationTests : IDisposable
     }
 
     [Fact]
+    public async Task ProductionPublisherWritesSchemaV2AndPreservesLastActivity()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+
+        var snapshotPath = Path.Combine(_directory, "catalog-v2.json");
+        var activity = new DateTime(2026, 11, 4, 11, 45, 0, DateTimeKind.Utc);
+        var snapshot = new CatalogSnapshot(
+            DateTimeOffset.Parse("2026-11-04T12:00:00Z", System.Globalization.CultureInfo.InvariantCulture),
+            new[] { new SnapshotGame(GameId, "Recently played game", true, lastActivity: activity) },
+            SnapshotLimits.SchemaVersion);
+
+        using var cache = new ArtworkCacheGeneration(_cacheRoot, snapshotPath: snapshotPath);
+        cache.Activate(snapshot.GeneratedAtUtc.UtcDateTime.ToString("O", System.Globalization.CultureInfo.InvariantCulture));
+
+        await ArtworkSnapshotPublisher.PublishAsync(snapshotPath, snapshot, cache);
+
+        var parsed = CatalogSnapshotParser.Parse(await File.ReadAllBytesAsync(snapshotPath));
+        Assert.Null(parsed.Issue);
+        Assert.Equal(SnapshotLimits.SchemaVersion, parsed.Snapshot!.SchemaVersion);
+        Assert.Equal(activity, Assert.Single(parsed.Snapshot.Games).LastActivity);
+    }
+
+    [Fact]
     public async Task MetadataOnlyFallbackPublicationCleanupFailurePreservesGenerationForRecovery()
     {
         if (!OperatingSystem.IsWindows()) return;
@@ -385,12 +506,23 @@ public sealed class ArtworkCacheGenerationTests : IDisposable
                     throw new InvalidDataException("Injected artwork-bearing snapshot size failure.");
 
                 // The production fallback snapshot is passed to the real atomic publisher.
-                await SnapshotFilePublisher.PublishAsync(path, candidate, cancellationToken);
+                await SnapshotFilePublisher.PublishAsync(
+                    path,
+                    candidate,
+                    cancellationToken,
+                    schemaVersion: SnapshotLimits.SchemaVersion,
+                    includeLastActivity: true);
             }
 
             var oversizedArtworkSnapshot = new CatalogSnapshot(
                 DateTimeOffset.Parse(token, null, System.Globalization.DateTimeStyles.RoundtripKind),
-                new[] { new SnapshotGame(GameId, "Game", true, coverArtworkId: artworkId, iconArtworkId: artworkId) },
+                new[] { new SnapshotGame(
+                    GameId,
+                    "Game",
+                    true,
+                    coverArtworkId: artworkId,
+                    iconArtworkId: artworkId,
+                    lastActivity: new DateTime(2026, 11, 4, 11, 45, 0, DateTimeKind.Utc)) },
                 SnapshotLimits.SchemaVersion);
 
             await Assert.ThrowsAsync<IOException>(() => ArtworkSnapshotPublisher.PublishAsync(
@@ -399,7 +531,9 @@ public sealed class ArtworkCacheGenerationTests : IDisposable
             Assert.Equal(2, publishAttempts);
             var parsed = CatalogSnapshotParser.Parse(await File.ReadAllBytesAsync(snapshotPath));
             Assert.True(parsed.Snapshot is not null);
-            var publishedGame = Assert.Single(parsed.Snapshot!.Games);
+            Assert.Equal(SnapshotLimits.SchemaVersion, parsed.Snapshot!.SchemaVersion);
+            var publishedGame = Assert.Single(parsed.Snapshot.Games);
+            Assert.Equal(new DateTime(2026, 11, 4, 11, 45, 0, DateTimeKind.Utc), publishedGame.LastActivity);
             Assert.Null(publishedGame.CoverArtworkId);
             Assert.Null(publishedGame.IconArtworkId);
             Assert.True(File.Exists(_cacheRoot + ".transaction"));

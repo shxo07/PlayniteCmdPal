@@ -35,9 +35,15 @@ The canonical file is `%LOCALAPPDATA%\PlayniteCmdPal\catalog-v2.json`. The older
 
 The parser rejects input over 32 MiB, JSON deeper than 16 levels, unsupported schema versions, malformed envelopes, and arrays over 100,000 records. Invalid individual records and later duplicate IDs are skipped and counted; the first valid record for an ID wins. In v2, malformed optional artwork identifiers are nulled individually; valid game identity and metadata are retained. An empty `games` array is a valid empty library.
 
+## Schema v2 enrichment: recently played
+
+Schema v2 retains the optional `coverArtworkId` and `iconArtworkId` fields described in [Artwork transport](ARTWORK-TRANSPORT.md), and adds optional `lastActivity`. The value is serialized with the round-trip .NET `DateTime` format (`O`) and preserves its `DateTime.Kind`; v1 remains frozen and never contains it. Missing play history is represented by an omitted or null value. The reader interprets `Unspecified` values as local machine time when converting them to UTC instants for ordering and relative-time calculation. The Recently Played UI displays only a relative-time badge (for example, `5 minutes ago`); it does not expose an absolute timestamp, timezone, or hover tooltip. It does not use `Modified` as a substitute.
+
+The Recently played page sorts by descending UTC instant, then title using `OrdinalIgnoreCase`, title using `Ordinal`, and stable Playnite game ID using `Ordinal`. Search filters game rows only; status and warning rows remain visible. Refresh is exposed once on the top-level Recently played command's More commands menu (Ctrl+K), not on individual result or status rows. The adapter re-reads v2 up to three times at 25 ms intervals when v1 appears newer, covering the normal v1-then-v2 publication window before accepting a v1 rollback.
+
 ## Publication and refresh
 
-The plugin requests an export on application start, database open, `OnLibraryUpdated`, game install/uninstall lifecycle events, game collection changes, relevant game updates, and source/platform metadata changes. Requests are debounced by 750 ms and serialized. A request arriving during an export schedules one follow-up export, so the final state is not lost. Each export re-enumerates the database; it does not patch an old snapshot from event payloads.
+The plugin requests an export on application start, database open, `OnLibraryUpdated`, game install/uninstall lifecycle events, game collection changes, relevant game updates (including `LastActivity` and artwork-reference changes), and source/platform metadata changes. Requests are debounced by 750 ms and serialized. A request arriving during an export schedules one follow-up export, so the final state is not lost. Each export re-enumerates the database; it does not patch an old snapshot from event payloads.
 
 Projection runs on Playnite's `IMainViewAPI.UIDispatcher` because SDK database objects are affinity-sensitive. Serialization, flush, and file replacement run in the background. The exporter uses .NET Framework's built-in JSON writer and does not reference `System.Text.Json`; the `net10.0` adapter uses its framework's `System.Text.Json` for parsing. Publication is limited to 32 MiB while bytes are written. The publisher writes a complete same-directory temporary file, flushes it to disk, closes it, then uses `File.Replace` (or `File.Move` on first creation). A failed or canceled export leaves the previous snapshot intact and removes only its own temporary file. If the library exceeds 100,000 records, the plugin refuses to publish a truncated catalog.
 
@@ -45,7 +51,7 @@ Projection runs on Playnite's `IMainViewAPI.UIDispatcher` because SDK database o
 
 - First `GetAsync` loads the file. Later `GetAsync` calls revalidate at most once per 30 seconds; between attempts they return the current in-memory result without file I/O.
 - `RefreshAsync` bypasses the interval and is the explicit reconnect/retry trigger. Concurrent callers share one in-flight read.
-- A valid snapshot replaces the cache, including a valid empty library.
+- A valid snapshot replaces the cache, including a valid empty library. The adapter prefers the newer generated timestamp across v1/v2; ties prefer v2.
 - A missing, unreadable, malformed, unsupported, oversized, or over-limit later file never replaces last-known-good data. The result remains available if a valid snapshot was previously loaded and carries the current `Issue`.
 - With no previous valid snapshot, missing/malformed input is `IsAvailable == false`, not an empty library.
 - A snapshot at least 24 hours old is `IsStale == true` but remains searchable. Staleness is recomputed from `generatedAtUtc` on every result, including cached results.
@@ -68,9 +74,9 @@ The packaging script first runs a synthetic .NET Framework smoke test against th
 
 ## Validation status
 
-**Automated verification:** Run Windows CI against the final pull-request head before merge. Do not treat earlier workflow results as verification of subsequent commits.
+**Automated verification:** WERD-74 adds deterministic tests for the v1/v2 publication interleaving, initially missing v2, timestamp-kind handling, search/status composition, empty-state classification, and the combined v1/v2 .NET Framework smoke path. Run Windows CI against the final merged pull-request head before merge; earlier green runs do not validate subsequent commits.
 
-**Manual Playnite verification remains:** CI does not run inside a live Playnite host or inspect a user's library. Install the updated companion plugin in the user's Playnite environment and verify that real cover/icon references are copied into the bridge-owned cache, the v2 snapshot is refreshed after artwork changes, missing artwork remains non-fatal, and the previous cache remains usable if publication is interrupted. Do not share or commit personal game names, IDs, or library exports.
+**Manual Playnite verification remains:** CI does not run inside a live Playnite host or inspect a user's library. Install the updated companion plugin in the user's Playnite environment and verify that real cover/icon references are copied into the bridge-owned cache, v2 `lastActivity` is populated and the Recently played page displays relative-time badges only, with no absolute timestamp, timezone suffix, or hover tooltip, the snapshot is refreshed after game/artwork changes, missing artwork remains non-fatal, and the previous cache remains usable if publication is interrupted. Do not share or commit personal game names, IDs, or library exports.
 
 ## Troubleshooting a missing snapshot
 
@@ -99,3 +105,8 @@ Remaining real-library verification:
 7. Record the Playnite/Windows versions and observed outcomes without committing game IDs, titles, or library exports.
 
 The existing launch-by-ID URI smoke test is separate from catalog bridge verification and does not verify this bridge.
+
+
+### Recently Played freshness
+
+The companion plugin periodically re-exports the catalog every 30 seconds. This is intentional: Playnite can update a game's `LastActivity` when a game exits without delivering a corresponding game-update event to every plugin subscriber. The periodic export ensures the schema-v2 snapshot eventually reflects that activity. The Recently Played page exposes one **Refresh Playnite catalog** action in its top-level More commands menu (Ctrl+K); individual game and status rows do not add duplicate refresh actions. While open, the page polls the adapter cache every 10 seconds; the adapter performs disk revalidation at most once per 30 seconds. The explicit menu action bypasses that interval.

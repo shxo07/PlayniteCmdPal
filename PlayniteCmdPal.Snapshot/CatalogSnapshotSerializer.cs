@@ -5,7 +5,7 @@ using System.Xml;
 
 namespace PlayniteCmdPal.Snapshot;
 
-/// <summary>Writes the versioned allowlisted catalog fields without depending on System.Text.Json in the Playnite host.</summary>
+/// <summary>Writes allowlisted catalog fields for the requested snapshot schema without depending on System.Text.Json in the Playnite host.</summary>
 public static class CatalogSnapshotSerializer
 {
     public static async Task SerializeAsync(Stream destination, CatalogSnapshot snapshot, CancellationToken cancellationToken = default)
@@ -39,6 +39,8 @@ public static class CatalogSnapshotSerializer
                 {
                     if (game.CoverArtworkId is not null) WriteString(writer, "coverArtworkId", game.CoverArtworkId, cancellationToken);
                     if (game.IconArtworkId is not null) WriteString(writer, "iconArtworkId", game.IconArtworkId, cancellationToken);
+                    if (game.LastActivity is { } lastActivity)
+                        WriteString(writer, "lastActivity", lastActivity.ToString("O", CultureInfo.InvariantCulture), cancellationToken);
                 }
                 writer.WriteEndElement();
             }
@@ -53,6 +55,39 @@ public static class CatalogSnapshotSerializer
         }
         writer.Dispose();
         await destination.FlushAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    public static Task SerializeAsync(
+        Stream destination,
+        CatalogSnapshot snapshot,
+        int schemaVersion,
+        bool includeLastActivity,
+        CancellationToken cancellationToken = default) =>
+        SerializeVersionedAsync(destination, snapshot, cancellationToken, schemaVersion, includeLastActivity);
+
+    public static Task SerializeAsync(
+        Stream destination,
+        CatalogSnapshot snapshot,
+        CancellationToken cancellationToken,
+        int schemaVersion,
+        bool includeLastActivity) =>
+        SerializeVersionedAsync(destination, snapshot, cancellationToken, schemaVersion, includeLastActivity);
+
+    private static Task SerializeVersionedAsync(
+        Stream destination,
+        CatalogSnapshot snapshot,
+        CancellationToken cancellationToken,
+        int schemaVersion,
+        bool includeLastActivity)
+    {
+        if (snapshot is null) throw new ArgumentNullException(nameof(snapshot));
+        var games = snapshot.Games.Select(game => new SnapshotGame(
+            game.Id, game.Name, game.IsInstalled, game.Source, game.Platform,
+            schemaVersion >= SnapshotLimits.SchemaVersion ? game.CoverArtworkId : null,
+            schemaVersion >= SnapshotLimits.SchemaVersion ? game.IconArtworkId : null,
+            includeLastActivity && schemaVersion >= SnapshotLimits.SchemaVersion ? game.LastActivity : null)).ToArray();
+        var versioned = new CatalogSnapshot(snapshot.GeneratedAtUtc, games, schemaVersion);
+        return SerializeAsync(destination, versioned, cancellationToken);
     }
 
     private static void WriteString(XmlDictionaryWriter writer, string name, string value, CancellationToken cancellationToken)

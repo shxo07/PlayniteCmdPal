@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Drawing;
+using System.Drawing.Imaging;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Threading;
@@ -19,7 +21,7 @@ public sealed class PlayniteCmdPalPlugin : GenericPlugin
 {
     public static readonly Guid PluginId = Guid.Parse("9E4CF37F-EF29-495F-9E83-4EA1A389ABD8");
     private static readonly TimeSpan Debounce = TimeSpan.FromMilliseconds(750);
-    private static readonly TimeSpan ArtworkRevalidationInterval = TimeSpan.FromMinutes(30);
+    private static readonly TimeSpan PeriodicExportInterval = TimeSpan.FromSeconds(30);
     private static readonly ILogger Logger = LogManager.GetLogger();
     private readonly CatalogExportCoordinator _coordinator;
     private readonly Dispatcher _dispatcher;
@@ -51,17 +53,26 @@ public sealed class PlayniteCmdPalPlugin : GenericPlugin
         if (Interlocked.CompareExchange(ref _coordinatorStarted, 1, 0) == 0)
         {
             _ = RunCoordinatorAsync();
-            // Playnite may update bytes behind an unchanged database reference. Re-exporting
-            // periodically re-reads the source and lets its content hash detect that change.
+            // Playnite does not reliably raise a game-update event for every LastActivity
+            // change (for example, when a game exits). Poll the database so the snapshot used
+            // by Recently Played catches up even when no relevant event was delivered. This
+            // also retains periodic artwork revalidation for files updated in place.
             _artworkRevalidationTimer = new Timer(
                 _ => _coordinator.RequestExport(),
                 null,
-                ArtworkRevalidationInterval,
-                ArtworkRevalidationInterval);
+                PeriodicExportInterval,
+                PeriodicExportInterval);
         }
     }
 
     public override void OnLibraryUpdated(OnLibraryUpdatedEventArgs args) => _coordinator.RequestExport();
+
+    // Playnite records the latest activity as part of game-session lifecycle handling.
+    // Request exports at both boundaries rather than depending only on database collection
+    // notifications, which can be delayed or omitted for LastActivity-only changes.
+    public override void OnGameStarted(OnGameStartedEventArgs args) => _coordinator.RequestExport();
+
+    public override void OnGameStopped(OnGameStoppedEventArgs args) => _coordinator.RequestExport();
 
     public override void OnGameInstalled(OnGameInstalledEventArgs args) => _coordinator.RequestExport();
 
@@ -164,6 +175,7 @@ public sealed class PlayniteCmdPalPlugin : GenericPlugin
                oldGame.IsInstalled != newGame.IsInstalled ||
                oldGame.SourceId != newGame.SourceId ||
                !SameIds(oldGame.PlatformIds, newGame.PlatformIds) ||
+               oldGame.LastActivity != newGame.LastActivity ||
                !string.Equals(oldGame.CoverImage, newGame.CoverImage, StringComparison.Ordinal) ||
                !string.Equals(oldGame.Icon, newGame.Icon, StringComparison.Ordinal);
     }
@@ -182,7 +194,10 @@ public sealed class PlayniteCmdPalPlugin : GenericPlugin
 
         // Playnite's database objects are affinity-sensitive. Project on its dispatcher,
         // then serialize/flush/replace the file on a background thread.
-        using (var artwork = new ArtworkCacheGeneration(_artworkCacheRoot, snapshotPath: _snapshotPath))
+        using (var artwork = new ArtworkCacheGeneration(
+            _artworkCacheRoot,
+            snapshotPath: _snapshotPath,
+            convertIcoToPng: ConvertIcoToPng))
         {
             var projection = await _dispatcher.InvokeAsync(
                 () => CreateProjection(cancellationToken),
@@ -235,8 +250,8 @@ public sealed class PlayniteCmdPalPlugin : GenericPlugin
             {
                 var id = game.Id.ToString("D", CultureInfo.InvariantCulture);
                 games.Add(new GameProjection(id, game.Name, game.IsInstalled, GetSourceName(game.SourceId),
-                    GetPlatformNames(game.PlatformIds), game.CoverImage, ResolveArtworkPath(id, game.CoverImage),
-                    game.Icon, ResolveArtworkPath(id, game.Icon)));
+                    GetPlatformNames(game.PlatformIds), game.LastActivity, game.CoverImage, ResolveArtworkPath(id, game.CoverImage),
+                    game.Icon, ResolveArtworkPath(id, game.Icon, "icon")));
             }
             catch (ArgumentException) { }
         }
@@ -250,23 +265,69 @@ public sealed class PlayniteCmdPalPlugin : GenericPlugin
         {
             cancellationToken.ThrowIfCancellationRequested();
             var cover = artwork.TryImport(game.Id, game.CoverReference, game.CoverPath, projection.FilesRoot);
-            var icon = artwork.TryImport(game.Id, game.IconReference, game.IconPath, projection.FilesRoot);
+            var icon = artwork.TryImport(
+                game.Id,
+                game.IconReference,
+                game.IconPath,
+                projection.FilesRoot,
+                diagnostic => Logger.Warn(
+                    $"PlayniteCmdPal icon import diagnostic for '{game.Name}' ({game.Id}), " +
+                    $"reference='{game.IconReference}', resolvedPath='{game.IconPath}', filesRoot='{projection.FilesRoot}': {diagnostic}"));
             try
             {
-                games.Add(new SnapshotGame(game.Id, game.Name, game.IsInstalled, game.Source, game.Platform, cover, icon));
+                games.Add(new SnapshotGame(game.Id, game.Name, game.IsInstalled, game.Source, game.Platform, cover, icon, game.LastActivity));
             }
             catch (ArgumentException) { }
         }
         return new CatalogSnapshot(DateTimeOffset.UtcNow, games, SnapshotLimits.SchemaVersion);
     }
 
-    private string? ResolveArtworkPath(string gameId, string? reference)
+    private static byte[] ConvertIcoToPng(byte[] bytes)
     {
-        if (!ArtworkCacheGeneration.TryValidateReference(gameId, reference, out _)) return null;
-        try { return PlayniteApi.Database.GetFullFilePath(reference!); }
+        // The ICO directory is validated before conversion. Bound the selected image
+        // before asking GDI+ to allocate the decoded bitmap.
+        using var input = new MemoryStream(bytes, writable: false);
+        using var icon = new Icon(input);
+        if (icon.Width is <= 0 or > 256 || icon.Height is <= 0 or > 256 ||
+            (long)icon.Width * icon.Height > 65_536)
+            throw new InvalidDataException("The ICO dimensions exceed the supported limit.");
+
+        using var bitmap = icon.ToBitmap();
+        if (bitmap.Width is <= 0 or > 256 || bitmap.Height is <= 0 or > 256 ||
+            (long)bitmap.Width * bitmap.Height > 65_536)
+            throw new InvalidDataException("The decoded ICO dimensions exceed the supported limit.");
+
+        using var output = new MemoryStream();
+        bitmap.Save(output, ImageFormat.Png);
+        if (output.Length <= 0 || output.Length > SnapshotLimits.MaxArtworkBytes)
+            throw new InvalidDataException("The converted PNG exceeds the artwork size limit.");
+        return output.ToArray();
+    }
+
+    private string? ResolveArtworkPath(string gameId, string? reference, string artworkKind = "artwork")
+    {
+        if (!ArtworkCacheGeneration.TryValidateReference(gameId, reference, out _))
+        {
+            if (string.Equals(artworkKind, "icon", StringComparison.Ordinal))
+                Logger.Warn($"PlayniteCmdPal could not resolve icon path: invalid reference. gameId='{gameId}', reference='{reference ?? "<null>"}'.");
+            return null;
+        }
+
+        try
+        {
+            var path = PlayniteApi.Database.GetFullFilePath(reference!);
+            if (string.Equals(artworkKind, "icon", StringComparison.Ordinal))
+                Logger.Info($"PlayniteCmdPal resolved icon path. gameId='{gameId}', reference='{reference}', path='{path ?? "<null>"}'.");
+            return path;
+        }
         catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException ||
                                    ex is ArgumentException || ex is NotSupportedException ||
-                                   ex is System.Security.SecurityException) { return null; }
+                                   ex is System.Security.SecurityException)
+        {
+            if (string.Equals(artworkKind, "icon", StringComparison.Ordinal))
+                Logger.Warn($"PlayniteCmdPal failed to resolve icon path. gameId='{gameId}', reference='{reference}', exception={ex}.");
+            return null;
+        }
     }
 
     private sealed class CatalogProjection
@@ -278,10 +339,10 @@ public sealed class PlayniteCmdPalPlugin : GenericPlugin
 
     private sealed class GameProjection
     {
-        public GameProjection(string id, string name, bool installed, string? source, string? platform,
+        public GameProjection(string id, string name, bool installed, string? source, string? platform, DateTime? lastActivity,
             string? coverReference, string? coverPath, string? iconReference, string? iconPath)
         {
-            Id = id; Name = name; IsInstalled = installed; Source = source; Platform = platform;
+            Id = id; Name = name; IsInstalled = installed; Source = source; Platform = platform; LastActivity = lastActivity;
             CoverReference = coverReference; CoverPath = coverPath; IconReference = iconReference; IconPath = iconPath;
         }
         public string Id { get; }
@@ -289,6 +350,7 @@ public sealed class PlayniteCmdPalPlugin : GenericPlugin
         public bool IsInstalled { get; }
         public string? Source { get; }
         public string? Platform { get; }
+        public DateTime? LastActivity { get; }
         public string? CoverReference { get; }
         public string? CoverPath { get; }
         public string? IconReference { get; }

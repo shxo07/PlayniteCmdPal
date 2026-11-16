@@ -1,3 +1,4 @@
+using System.Threading.Tasks;
 using System.Text.Json;
 using PlayniteCmdPal.Core;
 using Xunit;
@@ -50,6 +51,33 @@ public sealed class FavoritesStoreTests : IDisposable
         Assert.True(store.Toggle("game-id"));
         Assert.True(store.IsFavorite("game-id"));
         Assert.True(new FavoritesStore(FilePath).IsFavorite("game-id"));
+    }
+
+    [Fact]
+    public void ExistingStoreInstancesObserveChangesWrittenByAnotherStore()
+    {
+        var first = new FavoritesStore(FilePath);
+        Assert.Empty(first.GetFavoriteIds()); // Prime the first instance before the write.
+
+        var second = new FavoritesStore(FilePath);
+        Assert.True(second.Toggle("game-a"));
+
+        Assert.Equal(new[] { "game-a" }, first.GetFavoriteIds());
+        Assert.True(first.Toggle("game-b"));
+        Assert.Equal(new[] { "game-a", "game-b" }, second.GetFavoriteIds());
+    }
+
+    [Fact]
+    public async Task SeparateStoreInstancesSerializeConcurrentMutations()
+    {
+        var first = new FavoritesStore(FilePath);
+        var second = new FavoritesStore(FilePath);
+
+        await Task.WhenAll(
+            Task.Run(() => first.Toggle("game-a")),
+            Task.Run(() => second.Toggle("game-b")));
+
+        Assert.Equal(new[] { "game-a", "game-b" }, new FavoritesStore(FilePath).GetFavoriteIds());
     }
 
     [Fact]

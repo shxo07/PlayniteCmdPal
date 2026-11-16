@@ -186,7 +186,7 @@ public sealed class CatalogSnapshotParserProtocolTests
     [InlineData("""{"schemaVersion":0,"generatedAtUtc":"2026-10-30T00:00:00Z","games":[]}""")]
     [InlineData("""{"schemaVersion":-1,"generatedAtUtc":"2026-10-30T00:00:00Z","games":[]}""")]
     [InlineData("""{"schemaVersion":99,"generatedAtUtc":"2026-10-30T00:00:00Z","games":[]}""")]
-    public void AnySchemaVersionOtherThanOneIsReportedAsUnsupported(string json)
+    public void UnsupportedSchemaVersionsAreReportedAsUnsupported(string json)
     {
         Assert.Equal(CatalogErrorCode.UnsupportedSchema, CatalogSnapshotParser.Parse(Json(json)).Issue!.Code);
     }

@@ -28,7 +28,7 @@ Microsoft Store handles production signing for Store-distributed MSIX packages a
 ## 3. Release version and package identity
 
 - Keep the public version in Semantic Versioning form and map it to the four-part MSIX version. For example, SemVer `0.0.3` maps to MSIX `0.0.3.0`.
-- The current manifest is `0.0.3.0`; do not increment it merely for this documentation change.
+- The current WERD-74 development package version is `0.0.5.0` in both the manifest and project. Keep those declarations synchronized; public release versions must still follow the maintainer-approved release process.
 - The Partner Center identity supplied by the maintainer is applied in `PlayniteCmdPal/Package.appxmanifest`: Name `werdscopez7347.PlayniteforCommandPalette`, Publisher `CN=B5EE8A57-B227-4726-A4E9-AF40E9D47E70`, and PublisherDisplayName `werdscopez7347`.
 - Keep the manifest version, evaluated package version, Store submission version, and release tag aligned.
 - Microsoft Store performs production signing for Store-distributed packages. Follow [Microsoft Store package identity and MSIX signing](MSIX-SIGNING.md) for the identity record, Store-managed signing model, package validation, and submission evidence.
@@ -90,7 +90,8 @@ The current audit in [Licensing and release readiness](LICENSING-AND-RELEASE.md)
 
 5. **Store identity and signing.** Partner Center identity values have been supplied and applied to the manifest. Confirm them against the Partner Center product dashboard, then complete the Store packaging, validation, and certification workflow. No publisher-managed signing certificate is required for Store distribution. Direct GitHub/WinGet downloads need a separately evaluated trust model.
 
-6. **Stable Windows SDK targeting pack — WERD-77.** Stable `Microsoft.Windows.SDK.NET.Ref 10.0.26100.87` has been selected in the WERD-77 branch, replacing the previous preview targeting-pack override. This is a separate targeting-pack migration from WERD-76's redistribution implementation, which was validated against `10.0.26100.84`. Do not treat WERD-76's validation evidence as validation of `10.0.26100.87`. WERD-77 remains pending clean Windows restore, Release build, automated tests, Visual Studio deployment, and x64/ARM64 publish and package verification. Record the results in PR #24 before merging.
+6. **Stable Windows SDK targeting pack — WERD-77.** Stable `Microsoft.Windows.SDK.NET.Ref 10.0.26100.87` replaces the previous preview targeting-pack override. Windows restore, Release solution build, automated tests, the .NET Framework smoke test, Visual Studio x64 deployment and activation, and x64/ARM64 Release publishing have succeeded. The evaluated MSBuild properties confirm the stable version, unchanged application target, and unchanged minimum OS version. Both publish outputs contain matching runtime-notice files. The installed x64 MSIX payload was verified to contain the notice. The ARM64 packaging recipe references the correct ARM64 runtime notice, but a final ARM64 MSIX archive has not yet been generated and inspected. See the WERD-77 validation record below and PR #40.
+
 6. **Clean-machine acceptance:** replay install, first launch, update, uninstall, and rollback on a clean supported Windows environment. The Developer Setup page explicitly says the independent clean-machine walkthrough has not yet been completed.
 
 A successful CI build does not clear the separate public-release obligations above. Do not publish a binary or submit a Gallery listing until the release checklist is satisfied.
@@ -179,13 +180,20 @@ The targeting pack is a development-time compile reference. Its use is governed 
 
 ### Migration validation checklist
 
-- [ ] Clean Windows restore resolves `Microsoft.Windows.SDK.NET.Ref 10.0.26100.87` and no preview version.
-- [ ] Release solution build succeeds.
-- [ ] All automated tests and the .NET Framework smoke test pass.
-- [ ] Visual Studio **Build > Deploy** registers the MSIX and Command Palette reload/activation succeeds.
-- [ ] x64 Release package/publish succeeds.
-- [ ] ARM64 Release package/publish succeeds.
-- [ ] Inspect evaluated MSBuild properties and restore assets to confirm no preview targeting pack remains.
-- [ ] Compare x64/ARM64 runtime notices and package contents; record API/behavior differences.
+- [x] Clean Windows restore succeeds; evaluated properties select `10.0.26100.87` and no preview targeting pack remains.
+- [x] Release solution build succeeds.
+- [x] Automated tests and the .NET Framework smoke test pass.
+- [x] Visual Studio Build > Deploy registers the x64 MSIX and Command Palette activation succeeds.
+- [x] x64 Release publish succeeds.
+- [x] ARM64 Release publish succeeds.
+- [x] Evaluated MSBuild properties confirm the expected target framework, minimum OS, runtime identifiers, and stable targeting-pack version.
+- [x] Both publish outputs contain matching runtime-notice files.
+- [x] The installed x64 MSIX payload contains the runtime notice.
+- [x] The ARM64 packaging recipe references the ARM64 runtime notice source and expected package path.
+- [ ] Generate and inspect the final ARM64 MSIX archive, confirming the runtime notice is present.
+- [ ] Complete any remaining architecture-specific package-content comparison after ARM64 archive generation.
+
+The migration validation above was performed on Windows 11 build 26200 with .NET SDK 10.0.403 and MSBuild 18.9.15. The ARM64 publish and recipe checks do not establish that the final ARM64 MSIX archive contains the notice. ARM64 archive inspection remains outstanding. The separate clean-machine installation/update/uninstall/rollback walkthrough and public-release licensing obligations also remain independent release gates.
+
 
 Run `.\scripts\ci.ps1` for the repository's automated baseline, then perform the Visual Studio and package checks above on Windows. Do not mark WERD-77 complete until evidence is attached. The existing maintainer-reported Windows 10 validation and CI results predate this targeting-pack migration and do not validate the new package version. Windows 11 clean-machine validation remains separately deferred as documented in [Developer Setup](DEVELOPER-SETUP.md).

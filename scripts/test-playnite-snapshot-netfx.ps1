@@ -28,7 +28,7 @@ foreach ($assembly in @($snapshotAssemblyObject, $pluginMetadata)) {
 $gameType = $snapshotAssemblyObject.GetType('PlayniteCmdPal.Snapshot.SnapshotGame', $true)
 $snapshotType = $snapshotAssemblyObject.GetType('PlayniteCmdPal.Snapshot.CatalogSnapshot', $true)
 $publisherType = $snapshotAssemblyObject.GetType('PlayniteCmdPal.Snapshot.SnapshotFilePublisher', $true)
-$gameConstructor = $gameType.GetConstructor([type[]]@([string], [string], [bool], [string], [string], [string], [string]))
+$gameConstructor = $gameType.GetConstructor([type[]]@([string], [string], [bool], [string], [string], [string], [string], [Nullable[DateTime]]))
 $snapshotConstructor = @($snapshotType.GetConstructors() | Where-Object { $_.GetParameters().Count -eq 3 })[0]
 
 # Purely synthetic data exercises JSON escaping, non-ASCII characters, optional
@@ -36,8 +36,8 @@ $snapshotConstructor = @($snapshotType.GetConstructors() | Where-Object { $_.Get
 $prefix = 'Example "quoted" \ path ' + [char]10 + [char]0x00e9 + [char]::ConvertFromUtf32(0x1f3ae)
 $name = $prefix + [char]0xd800 + ' end'
 $expectedName = $prefix + [char]0xfffd + ' end'
-$firstGame = $gameConstructor.Invoke([object[]]@('11111111-1111-4111-8111-111111111111', $name, $true, 'Source', 'PC', $null, $null))
-$secondGame = $gameConstructor.Invoke([object[]]@('22222222-2222-4222-8222-222222222222', 'Second', $false, $null, $null, $null, $null))
+$firstGame = $gameConstructor.Invoke([object[]]@('11111111-1111-4111-8111-111111111111', $name, $true, 'Source', 'PC', $null, $null, $null))
+$secondGame = $gameConstructor.Invoke([object[]]@('22222222-2222-4222-8222-222222222222', 'Second', $false, $null, $null, $null, $null, $null))
 $listType = [type]::GetType('System.Collections.Generic.List`1').MakeGenericType($gameType)
 $games = [Activator]::CreateInstance($listType)
 [void]$games.Add($firstGame)
@@ -61,7 +61,7 @@ try {
     $firstPublication = [Text.Encoding]::UTF8.GetString([IO.File]::ReadAllBytes($path)) | ConvertFrom-Json
     if ($firstPublication.games[1].name -ne 'Second') { throw 'First publication was invalid.' }
 
-    $games[1] = $gameConstructor.Invoke([object[]]@('22222222-2222-4222-8222-222222222222', 'Second updated', $false, $null, $null, $null, $null))
+    $games[1] = $gameConstructor.Invoke([object[]]@('22222222-2222-4222-8222-222222222222', 'Second updated', $false, $null, $null, $null, $null, $null))
     $snapshotArguments[1] = $games
     $replacement = $snapshotConstructor.Invoke($snapshotArguments)
     $publisherType::PublishAsync([string]$path, $replacement, [Threading.CancellationToken]::None).GetAwaiter().GetResult()
@@ -100,7 +100,8 @@ try {
 
     # Exercise the v2 artwork contract through the actual net462 serializer/publisher.
     $artworkId = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
-    $v2Game = $gameConstructor.Invoke([object[]]@('11111111-1111-4111-8111-111111111111', 'Artwork game', $true, 'Source', 'PC', $artworkId, $artworkId))
+    $lastActivity = [DateTime]::SpecifyKind([DateTime]::Parse('2026-10-29T18:45:00', [Globalization.CultureInfo]::InvariantCulture), [DateTimeKind]::Unspecified)
+    $v2Game = $gameConstructor.Invoke([object[]]@('11111111-1111-4111-8111-111111111111', 'Artwork game', $true, 'Source', 'PC', $artworkId, $artworkId, $lastActivity))
     $v2Games = [Activator]::CreateInstance($listType)
     [void]$v2Games.Add($v2Game)
     $v2Arguments = [object[]]::new(3)
@@ -109,15 +110,27 @@ try {
     $v2Arguments[2] = 2
     $v2Snapshot = $snapshotConstructor.Invoke($v2Arguments)
     $v2Path = Join-Path $directory 'catalog-v2.json'
-    $publisherType::PublishAsync([string]$v2Path, $v2Snapshot, [Threading.CancellationToken]::None).GetAwaiter().GetResult()
-    $v2Json = [Text.Encoding]::UTF8.GetString([IO.File]::ReadAllBytes($v2Path)) | ConvertFrom-Json
+    # The three-argument compatibility overload intentionally publishes schema v1.
+    # Exercise the explicit v2 contract so artwork IDs and LastActivity are included.
+    $publisherType::PublishAsync([string]$v2Path, $v2Snapshot, [Threading.CancellationToken]::None, 2, $true).GetAwaiter().GetResult()
+    $v2Text = [Text.Encoding]::UTF8.GetString([IO.File]::ReadAllBytes($v2Path))
+    $v2Json = $v2Text | ConvertFrom-Json
+    # Windows PowerShell 5.1 automatically coerces ISO-8601 JSON strings to
+    # DateTime objects. Compare the wire representation in the raw JSON so
+    # the assertion checks the serializer's exact DateTime "O" output rather
+    # than PowerShell's culture/time-zone conversion behavior.
+    $lastActivityPattern = '"lastActivity"\s*:\s*"2026-10-29T18:45:00\.0000000"'
     if ($v2Json.schemaVersion -ne 2 -or @($v2Json.games).Count -ne 1 -or
         $v2Json.games[0].coverArtworkId -ne $artworkId -or
-        $v2Json.games[0].iconArtworkId -ne $artworkId) {
-        throw 'The schema v2 artwork snapshot did not round-trip through the .NET Framework publisher.'
+        $v2Json.games[0].iconArtworkId -ne $artworkId -or
+        $null -eq $v2Json.games[0].PSObject.Properties['lastActivity'] -or
+        $v2Text -notmatch $lastActivityPattern) {
+        $lastActivityProperty = if (@($v2Json.games).Count -gt 0) { $v2Json.games[0].PSObject.Properties['lastActivity'] } else { $null }
+        $actualLastActivity = if ($null -ne $lastActivityProperty) { $lastActivityProperty.Value } else { '<missing property>' }
+        throw "The schema v2 artwork snapshot did not round-trip through the .NET Framework publisher. Actual lastActivity: '$actualLastActivity'. Raw JSON: $v2Text"
     }
 
-    Write-Host 'Playnite bridge .NET Framework v1/v2 snapshot smoke passed (synthetic data, no System.Text.Json reference).'
+    Write-Host 'Playnite bridge .NET Framework v1/v2 artwork + LastActivity smoke passed (synthetic data, no System.Text.Json reference).'
 } finally {
     if (Test-Path -LiteralPath $directory) {
         Remove-Item -LiteralPath $directory -Recurse -Force -ErrorAction SilentlyContinue

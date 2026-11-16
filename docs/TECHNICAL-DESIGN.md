@@ -1,7 +1,7 @@
 # Technical Design
 
 **Status:** Generated CmdPal template build and local deployment validated on Windows. The running- and closed-instance launch URI smoke tests passed. The catalog adapter/bridge implementation is present. Windows CI and CodeQL passed, and the maintainer reports successful packaging and real Playnite library checks; see [Catalog Bridge](CATALOG-BRIDGE.md) for the evidence and remaining gaps.
-**Last reviewed:** 2026-10-30.
+**Last reviewed:** 2026-11-12.
 
 ## Current generated-template baseline
 
@@ -61,6 +61,16 @@ Playnite remains the source of truth for game identity, library metadata, and la
 - Handle duplicate display names and empty query/catalog explicitly.
 - Keep search logic independently unit-testable.
 
+### Installed-game fallback result (WERD-86)
+
+The provider's `TopLevelCommands()` contains exactly one **Playnite** command. That command opens one `DynamicListPage` with in-page Search games, Recently played, and Favorites view selectors. The page owns one catalog reader, favorites store, artwork loader, and refresh action; changing views reuses those shared services rather than creating sibling pages. The provider still returns one stable `FallbackCommandItem` from `FallbackCommands()` and updates that item's title, command, and icon for the current query. The pinned SDK has a query callback on fallback items, but no provider-level method for injecting query-aware root results. The implementation does not put per-game commands in the root list or copy every game into separate fallback registrations.
+
+The fallback uses `InstalledGameMatch` to scan the healthy catalog and find one unique case-insensitive exact title after trimming the query. Only `IsInstalled == true` is eligible. Uninstalled or unknown-installation entries are excluded; they do not make a same-title installed entry ambiguous. Two installed IDs with the same exact title are ambiguous and produce no direct-launch row. Invalid IDs, conflicting duplicate records, partial/unhealthy catalogs, and stale data fail closed. The unified page retains full-catalog search, local Favorites filtering/pin/unpin refresh, and Recently Played's authoritative newest-first `LastActivity` ordering, duplicate-title disambiguation, relative-time badges, and 10-second visible-page refresh polling. Installed-status, source, and platform filters are shared across Search, Recently Played, and Favorites. `CatalogFilterState` protects mutable options and selections with an internal lock, exposes atomic toggle operations, returns detached snapshots to readers, and raises notifications only after releasing that lock. The filter picker separately synchronizes its cached list-item collection and raises host notifications outside its item lock. `CatalogFilterPreferencesStore` persists the selection in a versioned LocalAppData JSON file using a same-directory temporary file and atomic replacement; loading tolerates missing, corrupt, and partially populated files. Preference writes are coalesced off the page request lock so filesystem I/O cannot block list navigation. `PlayniteLibraryNavigationState` owns the active view and shared query, ensuring view switches preserve the search text. `PlayniteLibraryRequestCoordinator` issues versioned cancellation leases for searches, view changes, favorites refreshes, and artwork; only the latest lease can publish results, and disposal cancels the active lease. Only the active view row displays the `Current view` subtitle; no custom active-view accent is drawn. One page-level **Refresh Playnite catalog** context action force-refreshes the shared catalog and invalidates artwork; unavailable/empty-state messages point to that action rather than adding per-row refresh commands.
+
+The fallback's visible title is the saved game title, its subtitle is only **Open with Playnite**, and its icon is the saved Playnite game icon or neutral fallback. No source, platform, install-state, or `PC` label is appended. `ArtworkIconLoader` resolves the icon reference asynchronously, outside the synchronous host query callback. Icon failure does not disable a valid result; a query change, launch, or disposal cancels/version-guards obsolete image work. Repeated or overlapping query callbacks cannot publish stale titles/icons, and SDK property notifications run outside the state lock so a host listener can re-enter safely.
+
+Before launching, force-refresh the snapshot and require that the same canonical ID is still the unique exact-title match among installed games. Invocation cannot retarget another same-title ID. Dispatch reuses `LaunchGameCommand` and the stable `playnite://playnite/start/{id}` URI. The host owns placement: by default the result appears in the separate **Fallbacks** section, while an Apps match may remain in regular Results above it. The extension does not promote fallbacks, modify other providers, or promise adjacency. See [the global-search design and installed-host checklist](CMDPAL-GLOBAL-SEARCH.md).
+
 ## Playnite launch integration
 
 Playnite documents `--start <gameId>` and `playnite://playnite/start/<gameId>`, as well as `showgame` and `search` URI commands:
@@ -98,7 +108,7 @@ Rejected for production:
 
 ## Current logical structure
 
-The generated CmdPal project remains intact. The Command Palette presentation layer will consume the catalog adapter; the bridge does not implement search/launch UI.
+The generated CmdPal project remains intact. The Command Palette presentation layer consumes the catalog adapter; the bridge does not implement search/launch UI.
 - `PlayniteCmdPal/`: generated CmdPal presentation/hosting template.
 - `PlayniteCmdPal.Core/`: SDK-independent game model and deterministic search.
 - `PlayniteCmdPal.Snapshot/`: shared v1 snapshot contract, allowlisted serializer, atomic publisher, and debounced export coordinator.
@@ -149,6 +159,7 @@ See [DEVELOPER-SETUP.md](DEVELOPER-SETUP.md). Key loop:
 - Repository license.
 
 
+
 ## Stable Windows SDK targeting-pack decision (WERD-77, 2026-11-01)
 
 The earlier preview property recorded in the historical template-validation notes above has been superseded. The project now selects stable `Microsoft.Windows.SDK.NET.Ref 10.0.26100.87` through the shared `WindowsSdkPackageVersion` property in [Directory.Build.props](../Directory.Build.props); the project file no longer pins `10.0.26100.68-preview`.
@@ -157,4 +168,39 @@ The candidate is a Microsoft-published stable servicing release in the same 2610
 
 Official references: [NuGet package](https://www.nuget.org/packages/Microsoft.Windows.SDK.NET.Ref/10.0.26100.87), [Windows SDK downloads](https://learn.microsoft.com/en-us/windows/apps/windows-sdk/downloads), [Windows SDK versioning](https://learn.microsoft.com/en-us/windows/apps/get-started/versioning-overview), and [Microsoft Windows SDK license terms](https://github.com/microsoft/win32metadata/blob/main/licenses/sdk_license.txt). The SDK/targeting pack is a development-time dependency, not an app payload to redistribute; applicable Microsoft SDK license terms govern its use.
 
-This decision establishes a stable candidate and removes the preview pin. It does not complete WERD-77 validation: Windows restore, Release build/tests, Visual Studio deployment, x64/ARM64 package/publish, evaluated MSBuild property/restore-asset inspection, and runtime-notice comparison remain required. See [Release Packaging](RELEASE-PACKAGING.md).
+The stable targeting-pack migration has passed Windows restore, Release solution build, the repository CI baseline, x64 and ARM64 Release publishing, and evaluated MSBuild property checks. The evaluated targeting-pack version is 10.0.26100.87, the application target remains net10.0-windows10.0.26100.0, and the minimum OS remains 10.0.19041.0.
+
+Both architecture publish outputs contain dotnet-runtime-THIRD-PARTY-NOTICES.txt with matching SHA-256 hashes. The x64 MSIX was deployed through Visual Studio, activated successfully in Command Palette, and its installed payload was verified to contain the runtime notice. The ARM64 publish output and packaging recipe were verified, including the ARM64 runtime notice source and package path; however, a final ARM64 MSIX archive was not generated and inspected on the x64 development machine.
+
+No application API or behavior change was identified as part of this targeting-pack-only migration. ARM64 archive inspection remains outstanding. See [Release Packaging](RELEASE-PACKAGING.md) for the detailed evidence and limitations.
+
+## WERD-80: Playnite-managed game icons
+
+**Status (2026-11-11):** Implemented on the WERD-80 PR branch and verified by automated Windows CI/CodeQL plus one maintainer-reported real-library ICO case. Broader manual coverage (including uninstalled entries and high-DPI scaling) remains outstanding.
+
+### Data flow
+
+1. The companion plugin reads the saved Game.Icon reference from Playnite game metadata and resolves it with Playnite's database API. It does not inspect install directories or executables.
+2. The producer validates the game-owned database reference and resolved path against the WERD-71 trust boundary. Raw paths, URLs, traversal, mismatched game directories, reparse points, unsupported extensions, and invalid file sizes are rejected.
+3. Supported raster files are validated by signature and copied into the bridge-owned content-addressed cache. ICO is source-only: the producer validates the ICO directory and entry ranges, converts a bounded icon to PNG, validates the PNG output, and hashes/caches the converted bytes.
+4. The v2 snapshot carries an optional iconArtworkId digest. It does not carry the original Playnite reference, source path, or resolved path.
+5. The read-only catalog adapter maps the digest into the game model. The Command Palette artwork loader resolves only the icon digest; it does not read coverArtworkId as a fallback candidate.
+6. The UI displays the neutral game symbol immediately, then asynchronously resolves and decodes the saved icon. Missing or failed artwork leaves the neutral symbol in place and does not affect search or launch.
+
+### Consumer behavior
+
+- Saved Playnite per-game icon is the sole artwork source for Search and Favorites results.
+- Cover, background, promotional, storefront, and launcher/application artwork are not substitutes.
+- Loading uses bounded concurrency and a bounded successful-result cache. Concurrent requests for the same icon share in-flight work; cancellation of one waiter must not cancel work still required by another waiter.
+- Explicit catalog refresh invalidates prior artwork resolution so new content hashes can be loaded. Transient resolver/decoder failures are retryable rather than permanently cached as missing.
+- Image work remains outside the synchronous search/ranking path.
+
+### Resource and trust boundaries
+
+The producer's documented source-file, ICO dimension, and active-generation cache limits remain authoritative in [Artwork Transport](ARTWORK-TRANSPORT.md). The consumer accepts only canonical lowercase SHA-256 identifiers and resolves files beneath the fixed cache root (or the matching producer rollback directory during publication). It validates local cache candidates before decoding. The adapter remains read-only; Playnite's database is never modified.
+
+### Verification evidence and limits
+
+On 2026-11-11, one installed Steam game with an ICO-backed saved Playnite icon was used for real-library verification. The plugin log showed the resolved icon path; the snapshot contained the converted PNG's digest; the corresponding PNG existed in the cache; and the maintainer confirmed the icon displayed in Command Palette after the updated extension/catalog was loaded. This demonstrates the end-to-end path for that one ICO-backed entry, not universal library coverage.
+
+Automated tests cover icon-only selection, no-cover-fallback behavior, fallback on missing/invalid artwork, opaque identifier validation, async loading, bounded caching, cancellation/coalescing, refresh invalidation, producer validation, and diagnostic reporting. CI results are recorded in [Testing](TESTING.md). Real-library tests for uninstalled entries, icon replacement, additional formats, and normal/high-DPI layouts remain manual follow-ups.
