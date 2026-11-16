@@ -114,7 +114,8 @@
     <ItemGroup>
       <!-- Match only Microsoft.NETCore.App.Runtime, not the Windows Desktop, ASP.NET Core,
            or Windows SDK reference packs that may also appear in ResolvedRuntimePack. -->
-      <_DotNetRuntimeNoticeFiles Include="$(NuGetPackageRoot)microsoft.netcore.app.runtime.$(RuntimeIdentifier)\*\THIRD-PARTY-NOTICES.TXT" />
+      <!-- Select the runtime pack for this target framework, not every version cached locally. -->
+      <_DotNetRuntimeNoticeFiles Include="$(NuGetPackageRoot)microsoft.netcore.app.runtime.$(RuntimeIdentifier)\$(RuntimeFrameworkVersion)\THIRD-PARTY-NOTICES.TXT" />
     </ItemGroup>
 
     <Error Condition="'@(_DotNetRuntimeNoticeFiles)' == ''"
@@ -133,7 +134,8 @@
           BeforeTargets="_GenerateAppxPackageFile"
           Condition="'$(AppxPackage)' == 'true' and '$(SelfContained)' == 'true' and '$(RuntimeIdentifier)' != ''">
     <ItemGroup>
-      <_DotNetRuntimeMsixNoticeFiles Include="$(NuGetPackageRoot)microsoft.netcore.app.runtime.$(RuntimeIdentifier)\*\THIRD-PARTY-NOTICES.TXT" />
+      <!-- Keep MSIX payload selection aligned with the runtime used by this publish. -->
+      <_DotNetRuntimeMsixNoticeFiles Include="$(NuGetPackageRoot)microsoft.netcore.app.runtime.$(RuntimeIdentifier)\$(RuntimeFrameworkVersion)\THIRD-PARTY-NOTICES.TXT" />
     </ItemGroup>
 
     <Error Condition="'@(_DotNetRuntimeMsixNoticeFiles)' == ''"
