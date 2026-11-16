@@ -129,13 +129,15 @@
           DestinationFiles="$(PublishDir)dotnet-runtime-THIRD-PARTY-NOTICES.txt" />
   </Target>
 
-  <!-- The runtime notice is created during Publish, after the MSIX packaging pipeline
-       has already collected its normal payload. Add the exact restored runtime-pack
-       notice directly before the MSIX generation target consumes AppxPackagePayload.
-       Do not gate this on AppxPackage: single-project MSIX tooling does not consistently
-       set that legacy property even when _GenerateAppxPackageFile is in the build graph. -->
+  <!--
+    _ComputeAppxPackagePayload rebuilds AppxPackagePayload from packaging outputs and
+    the existing AppxPackagePayload items. Add the runtime notice immediately before
+    that collection step so it is included in the deduplicated payload consumed by
+    _GenerateAppxPackageFile. Adding it before generation is too late because the
+    collection step has already reset/rebuilt the item list.
+  -->
   <Target Name="AddDotNetRuntimeThirdPartyNoticesToMsixPayload"
-          BeforeTargets="_GenerateAppxPackageFile"
+          BeforeTargets="_ComputeAppxPackagePayload"
           Condition="'$(SelfContained)' == 'true' and '$(RuntimeIdentifier)' != ''">
     <ItemGroup>
       <!-- Keep MSIX payload selection aligned with the runtime pack selected by framework resolution. -->
