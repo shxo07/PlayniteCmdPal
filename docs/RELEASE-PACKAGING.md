@@ -96,9 +96,9 @@ The current audit in [Licensing and release readiness](LICENSING-AND-RELEASE.md)
 
 A successful CI build does not clear the separate public-release obligations above. Do not publish a binary or submit a Gallery listing until the release checklist is satisfied.
 
-### WERD-76 implementation update — 2026-11-08
+### Historical WERD-76 implementation update — 2026-11-08
 
-The WERD-76 branch now pins `Microsoft.Windows.SDK.NET.Ref 10.0.26100.84`, retains the `net10.0-windows10.0.26100.0` application target, and disables `PublishTrimmed` and `PublishReadyToRun` in both x64 and ARM64 Release profiles. The package's `lib/net8.0` assets are explicitly enumerated by the REDIST list, and the isolated Windows builds preserved both shipped SDK DLLs byte-for-byte. NuGet signature verification succeeded and the filtered solution tests passed 341 tests; see [Licensing and release readiness](LICENSING-AND-RELEASE.md) for exact evidence.
+The WERD-76 branch pinned `Microsoft.Windows.SDK.NET.Ref 10.0.26100.84`, retains the `net10.0-windows10.0.26100.0` application target, and disables `PublishTrimmed` and `PublishReadyToRun` in both x64 and ARM64 Release profiles. The package's `lib/net8.0` assets are explicitly enumerated by the REDIST list, and the isolated Windows builds preserved both shipped SDK DLLs byte-for-byte. NuGet signature verification succeeded and the filtered solution tests passed 341 tests; see [Licensing and release readiness](LICENSING-AND-RELEASE.md) for exact evidence.
 
 Individual written Microsoft confirmation is not an engineering prerequisite for this selected package path. The SDK licence's downstream terms and indemnification conditions remain part of the public-release review. The unsigned candidate MSIX packages were not installed or runtime-tested. Windows restore/build/test CI and C# analysis passed on PR #23 head `13a3e94022e69788e6d667ed4f92cf934b935c30` on 2026-11-08. The unsigned MSIX candidates have not yet been installed or runtime-tested. No changes were made to WERD-77, its branch, PR or source files.
 ## 7. Installation, update, uninstall, and rollback
@@ -190,10 +190,10 @@ The targeting pack is a development-time compile reference. Its use is governed 
 - [x] Both publish outputs contain matching runtime-notice files.
 - [x] The installed x64 MSIX payload contains the runtime notice.
 - [x] The ARM64 packaging recipe references the ARM64 runtime notice source and expected package path.
-- [ ] Generate and inspect the final ARM64 MSIX archive, confirming the runtime notice is present.
+- [ ] Generate the actual ARM64 MSIX/MSIX bundle with the existing ARM64 packaging pipeline on the available x64 Windows machine. Extract/inspect it with MakeAppx or an archive tool and verify that the manifest declares ARM64, `dotnet-runtime-THIRD-PARTY-NOTICES.txt` is in the payload, and the expected `LICENSE`, `THIRD-PARTY-NOTICES.md`, and `Microsoft-PowerToys-LICENSE.txt` files are present. Record the exact package filename, SHA-256, inspection method, and results in the PR.
 - [ ] Complete any remaining architecture-specific package-content comparison after ARM64 archive generation.
 
-The migration validation above was performed on Windows 11 build 26200 with .NET SDK 10.0.403 and MSBuild 18.9.15. The ARM64 publish and recipe checks do not establish that the final ARM64 MSIX archive contains the notice. ARM64 archive inspection remains intentionally deferred because no ARM64-capable machine is available; keep the archive-inspection checklist items unchecked until that environment is available. The separate clean-machine installation/update/uninstall/rollback walkthrough and public-release licensing obligations also remain independent release gates.
+The migration validation above was performed on Windows 11 build 26200 with .NET SDK 10.0.403 and MSBuild 18.9.15. The ARM64 publish and packaging-recipe checks do not establish the contents of the final ARM64 MSIX archive. **Archive inspection is still outstanding, but it can be performed on this x64 Windows machine; ARM64 hardware is not required.** A separate ARM64 install/launch/runtime-activation test does require ARM64 hardware and has not been performed. The clean-machine installation/update/uninstall/rollback walkthrough and public-release licensing obligations remain independent release gates.
 
-
+Run `.\scripts\ci.ps1` for the repository's automated baseline, then perform the Visual Studio and package checks above on Windows. Do not mark WERD-77 complete until evidence is attached. Windows 11 build 26200 validation for WERD-77 is recorded above; the independent clean-machine validation remains outstanding as documented in [Developer Setup](DEVELOPER-SETUP.md).
 Run `.\scripts\ci.ps1` for the repository's automated baseline, then perform the Visual Studio and package checks above on Windows. Do not mark WERD-77 complete until evidence is attached. The existing maintainer-reported Windows 10 validation and CI results predate this targeting-pack migration and do not validate the new package version. Windows 11 clean-machine validation remains separately deferred as documented in [Developer Setup](DEVELOPER-SETUP.md).
